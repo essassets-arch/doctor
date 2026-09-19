@@ -1,0 +1,2298 @@
+// src/store/index.ts
+// Zustand stores for MedFlow OPD Receptionist Panel
+
+import { create } from 'zustand';
+
+// ============================================================
+// Types
+// ============================================================
+
+export type Gender = 'M' | 'F' | 'Other';
+export type QueueStatus = 'WAITING' | 'CALLING' | 'IN_SESSION' | 'ON_HOLD' | 'BILLING_PENDING' | 'COMPLETED' | 'CANCELLED' | 'MISSED';
+export type BillingStatus = 'PAID' | 'PARTIAL' | 'PENDING' | 'FOC';
+export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'BANK_TRANSFER';
+export type VisitType = 'Consultation' | 'Follow-Up' | 'Procedure' | 'Emergency' | 'MR Visit';
+export type AppointmentStatus = 'SCHEDULED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED' | 'MISSED' | 'RESCHEDULED';
+
+export interface SSEEvent {
+  type: 'CHECK_IN' | 'STATUS_CHANGED' | 'SESSION_STARTED' | 'SESSION_ENDED' | 'CASE_LOCKED' | 'CASE_UNLOCKED' | 'PAYMENT_RECEIVED' | 'ON_HOLD';
+  id?: string;
+  caseId?: string;
+  token?: string;
+  patientName?: string;
+  status?: QueueStatus;
+  nextStage?: string;
+  lockedByRole?: string;
+  timestamp: number;
+}
+
+export const playChimeTone = (type: 'calling' | 'session_ended' | 'ding') => {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const playTone = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur);
+    };
+
+    if (type === 'session_ended') {
+      // Dual-tone synthesizer audio cue
+      // Tone 1: High C (1046.5 Hz) for 150ms
+      // Tone 2: A5 (880.0 Hz) for 300ms
+      playTone(1046.5, 0.0, 0.15);
+      playTone(880.0, 0.18, 0.35);
+    } else if (type === 'calling') {
+      // 5-tone audible chime sequence
+      playTone(523.25, 0.0, 0.2);
+      playTone(659.25, 0.15, 0.2);
+      playTone(783.99, 0.3, 0.2);
+      playTone(1046.5, 0.45, 0.35);
+      playTone(880.0, 0.65, 0.5);
+    } else {
+      playTone(1046.5, 0.0, 0.2);
+    }
+  } catch {}
+};
+
+export interface Patient {
+  id: string;
+  mrdNumber: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  mobile: string;
+  dob?: string;
+  age: number;
+  ageMonths: number;
+  ageDays: number;
+  gender: Gender;
+  language: 'English' | 'Gujarati' | 'Hindi';
+  bloodGroup?: string;
+  city?: string;
+  address?: string;
+  email?: string;
+  emergencyContact?: string;
+  tags?: string[];
+  specialNotes?: string[];
+  createdAt: string;
+  lastVisit?: string;
+  isNew?: boolean;
+}
+
+export interface Doctor {
+  id: string;
+  name: string;
+  specialization: string;
+  initials: string;
+  avatarColor: string;
+  room: string;
+}
+
+export interface QueueEntry {
+  id: string;
+  caseNumber: string;
+  tokenDisplay: string;
+  patientId: string;
+  patientName: string;
+  doctorId: string;
+  doctorName: string;
+  visitType: VisitType;
+  priority?: 'NORMAL' | 'URGENT' | 'EMERGENCY';
+  appointmentTime: string;
+  checkInTime?: string;
+  age: number;
+  gender: Gender;
+  city: string;
+  billingStatus: BillingStatus;
+  status: QueueStatus;
+  stage?: 'NURSING' | 'DOCTOR' | 'BILLING' | 'COMPLETED';
+  vitalsRecorded: boolean;
+  complaintsRecorded: boolean;
+  isMR?: boolean;
+  mrCompany?: string;
+  isNew?: boolean;
+  isFoc?: boolean;
+  onHoldReason?: string;
+  labReady?: boolean;
+  callCount?: number;
+  vitals?: {
+    height?: number;
+    weight?: number;
+    bmi?: number;
+    temperature: number;
+    pulse: number;
+    bloodPressure: string;
+    spo2: number;
+    recordedAt?: string;
+    recordedBy?: string;
+  };
+}
+
+export interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  doctorId: string;
+  doctorName: string;
+  date: string;
+  time: string;
+  visitType: VisitType;
+  status: AppointmentStatus;
+  remarks?: string;
+}
+
+export interface BillRecord {
+  id: string;
+  invoiceNumber: string;
+  patientId: string;
+  patientName: string;
+  mrdNumber: string;
+  doctorName: string;
+  date: string;
+  netAmount: number;
+  collectedAmount: number;
+  balance: number;
+  status: BillingStatus;
+  paymentMode?: PaymentMode;
+  items: BillItem[];
+}
+
+export interface BillItem {
+  id: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  discount: number;
+  total: number;
+}
+
+export interface Notification {
+  id: string;
+  type: 'info' | 'success' | 'warning' | 'danger';
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+
+export interface LabDocument {
+  id: string;
+  patientId: string;
+  patientName: string;
+  mrdNumber: string;
+  title: string;
+  category: 'Blood Test' | 'Radiology' | 'Pathology' | 'Prescription' | 'Insurance';
+  fileName: string;
+  fileSize: string;
+  uploadedAt: string;
+  status: 'Attached to EHR' | 'Pending Doctor Review' | 'Processing';
+  doctorName: string;
+}
+
+export interface ClinicalRecord {
+  id: string;
+  patientId: string;
+  date: string;
+  doctorName: string;
+  department: string;
+  chiefComplaint: string;
+  diagnosis: string;
+  vitals: { bp: string; pulse: string; temp: string; weight: string; spo2: string };
+  prescription: { medicine: string; dosage: string; duration: string; instructions: string }[];
+  followUpDate?: string;
+}
+
+// ============================================================
+// Mock Data
+// ============================================================
+
+const DOCTORS: Doctor[] = [
+  { id: 'doc-1', name: 'Dr. Raj Valaki', specialization: 'Dermatology', initials: 'RV', avatarColor: 'linear-gradient(135deg,#6366F1,#818CF8)', room: 'Room 1' },
+  { id: 'doc-2', name: 'Dr. Anita Soni', specialization: 'General Medicine', initials: 'AS', avatarColor: 'linear-gradient(135deg,#10B981,#34D399)', room: 'Room 2' },
+  { id: 'doc-3', name: 'Dr. Priya Mehta', specialization: 'Gynecology', initials: 'PM', avatarColor: 'linear-gradient(135deg,#F59E0B,#FCD34D)', room: 'Room 3' },
+  { id: 'doc-4', name: 'Dr. Suresh Kumar', specialization: 'Orthopedics', initials: 'SK', avatarColor: 'linear-gradient(135deg,#EF4444,#FB7185)', room: 'Room 4' },
+];
+
+const PATIENTS: Patient[] = [
+  { id: 'pat-1', mrdNumber: 'MRD-2026-0001', firstName: 'Mahesh', middleName: 'K.', lastName: 'Kumar', mobile: '9825100001', age: 45, ageMonths: 0, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1981-04-13', createdAt: '2024-01-15', lastVisit: '2026-09-10', tags: ['VIP'] },
+  { id: 'pat-2', mrdNumber: 'MRD-2026-0002', firstName: 'Anita', lastName: 'Sharma', mobile: '9825100002', age: 32, ageMonths: 3, ageDays: 5, gender: 'F', language: 'Hindi', bloodGroup: 'A+', city: 'Vadodara', dob: '1994-06-10', createdAt: '2024-03-22', lastVisit: '2026-09-15' },
+  { id: 'pat-3', mrdNumber: 'MRD-2026-0003', firstName: 'Rekha', lastName: 'Patel', mobile: '9825100003', age: 28, ageMonths: 0, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O+', city: 'Surat', dob: '1998-03-20', createdAt: '2025-01-05', lastVisit: '2026-08-28', tags: ['Diabetic'] },
+  { id: 'pat-4', mrdNumber: 'MRD-2026-0004', firstName: 'Amit', lastName: 'Shah', mobile: '9825100004', age: 55, ageMonths: 2, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'AB+', city: 'Navsari', dob: '1971-07-05', createdAt: '2023-11-10', lastVisit: '2026-09-01' },
+  { id: 'pat-5', mrdNumber: 'MRD-2026-0005', firstName: 'Sneha', lastName: 'Joshi', mobile: '9825100005', age: 24, ageMonths: 8, ageDays: 12, gender: 'F', language: 'Hindi', bloodGroup: 'B-', city: 'Surat', dob: '2001-11-25', createdAt: '2026-02-14', lastVisit: '2026-09-18', isNew: true },
+  { id: 'pat-6', mrdNumber: 'MRD-2026-0006', firstName: 'Rahul', lastName: 'Sharma', mobile: '9825100006', age: 38, ageMonths: 0, ageDays: 0, gender: 'M', language: 'English', bloodGroup: 'A-', city: 'Bharuch', dob: '1988-02-12', createdAt: '2025-05-20', lastVisit: '2026-07-30' },
+  { id: 'pat-7', mrdNumber: 'MRD-2026-0007', firstName: 'Priya', lastName: 'Desai', mobile: '9825100007', age: 41, ageMonths: 4, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O-', city: 'Surat', dob: '1985-05-14', createdAt: '2024-08-30', lastVisit: '2026-09-12' },
+  { id: 'pat-8', mrdNumber: 'MRD-2026-0008', firstName: 'Deepak', lastName: 'Trivedi', mobile: '9825100008', age: 62, ageMonths: 1, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1964-08-10', createdAt: '2023-06-01', lastVisit: '2026-09-05', tags: ['VIP', 'Diabetic'] },
+];
+
+const QUEUE_ENTRIES: QueueEntry[] = [
+  { id: 'q-1', caseNumber: 'C001-001-190926', tokenDisplay: 'C001', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '09:30 AM', checkInTime: '09:25 AM', age: 38, gender: 'M', city: 'Bharuch', billingStatus: 'PAID', status: 'COMPLETED', vitalsRecorded: true, complaintsRecorded: true },
+  { id: 'q-2', caseNumber: 'C002-001-190926', tokenDisplay: 'C002', patientId: 'pat-7', patientName: 'Priya Desai', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Follow-Up', appointmentTime: '10:00 AM', checkInTime: '09:58 AM', age: 41, gender: 'F', city: 'Surat', billingStatus: 'PENDING', status: 'BILLING_PENDING', vitalsRecorded: true, complaintsRecorded: true },
+  { id: 'q-3', caseNumber: 'C003-001-190926', tokenDisplay: 'C003', patientId: 'pat-1', patientName: 'Mahesh Kumar', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '10:30 AM', checkInTime: '10:15 AM', age: 45, gender: 'M', city: 'Surat', billingStatus: 'PAID', status: 'IN_SESSION', vitalsRecorded: true, complaintsRecorded: true, isFoc: false },
+  { id: 'q-4', caseNumber: 'C004-001-190926', tokenDisplay: 'C004', patientId: 'pat-3', patientName: 'Rekha Patel', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Procedure', priority: 'EMERGENCY', appointmentTime: '10:45 AM', checkInTime: '10:40 AM', age: 28, gender: 'F', city: 'Surat', billingStatus: 'FOC', status: 'WAITING', vitalsRecorded: true, complaintsRecorded: true, isFoc: true },
+  { id: 'q-5', caseNumber: 'C005-001-190926', tokenDisplay: 'C005', patientId: 'pat-5', patientName: 'Sneha Joshi', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', visitType: 'Consultation', priority: 'NORMAL', appointmentTime: '11:00 AM', checkInTime: '10:55 AM', age: 24, gender: 'F', city: 'Surat', billingStatus: 'PENDING', status: 'WAITING', vitalsRecorded: false, complaintsRecorded: false, isNew: true },
+  { id: 'q-6', caseNumber: 'APP-11:30', tokenDisplay: 'APP-11:30', patientId: 'pat-2', patientName: 'Anita Sharma', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', visitType: 'Follow-Up', priority: 'NORMAL', appointmentTime: '11:30 AM', age: 32, gender: 'F', city: 'Vadodara', billingStatus: 'PENDING', status: 'WAITING', vitalsRecorded: false, complaintsRecorded: false },
+  { id: 'q-7', caseNumber: 'C006-001-190926', tokenDisplay: 'C006', patientId: 'pat-4', patientName: 'Amit Shah', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', priority: 'URGENT', appointmentTime: '11:00 AM', checkInTime: '10:50 AM', age: 55, gender: 'M', city: 'Navsari', billingStatus: 'PARTIAL', status: 'ON_HOLD', onHoldReason: 'Awaiting In-Clinic Blood Sugar & ECG', labReady: false, vitalsRecorded: true, complaintsRecorded: true },
+  { id: 'q-8', caseNumber: 'C007-001-190926', tokenDisplay: 'C007', patientId: 'pat-8', patientName: 'Deepak Trivedi', doctorId: 'doc-4', doctorName: 'Dr. Suresh Kumar', visitType: 'Procedure', priority: 'NORMAL', appointmentTime: '12:00 PM', checkInTime: '11:45 AM', age: 62, gender: 'M', city: 'Surat', billingStatus: 'PAID', status: 'WAITING', vitalsRecorded: true, complaintsRecorded: false },
+  { id: 'q-9', caseNumber: 'MR-001-190926', tokenDisplay: 'MR-001', patientId: 'mr-1', patientName: 'Suresh Patel (Zydus Healthcare)', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'MR Visit', priority: 'NORMAL', appointmentTime: '12:30 PM', checkInTime: '12:15 PM', age: 34, gender: 'M', city: 'Surat', billingStatus: 'FOC', status: 'WAITING', isMR: true, mrCompany: 'Zydus Healthcare', vitalsRecorded: true, complaintsRecorded: true },
+];
+
+const BILLS: BillRecord[] = [
+  { id: 'bill-1', invoiceNumber: 'INV-2026-0087', patientId: 'pat-6', patientName: 'Rahul Sharma', mrdNumber: 'MRD-2026-0006', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'CASH', items: [{ id: 'i1', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
+  { id: 'bill-2', invoiceNumber: 'INV-2026-0088', patientId: 'pat-7', patientName: 'Priya Desai', mrdNumber: 'MRD-2026-0007', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 800, collectedAmount: 500, balance: 300, status: 'PARTIAL', paymentMode: 'UPI', items: [{ id: 'i2', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i3', name: 'PRP Treatment Session', unitPrice: 300, quantity: 1, discount: 0, total: 300 }] },
+  { id: 'bill-3', invoiceNumber: 'INV-2026-0089', patientId: 'pat-4', patientName: 'Amit Shah', mrdNumber: 'MRD-2026-0004', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', netAmount: 2500, collectedAmount: 1500, balance: 1000, status: 'PARTIAL', paymentMode: 'CARD', items: [{ id: 'i4', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i5', name: 'Laser Procedure', unitPrice: 2000, quantity: 1, discount: 0, total: 2000 }] },
+  { id: 'bill-4', invoiceNumber: 'INV-2026-0090', patientId: 'pat-1', patientName: 'Mahesh Kumar', mrdNumber: 'MRD-2026-0001', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'UPI', items: [{ id: 'i6', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
+];
+
+const NOTIFICATIONS: Notification[] = [
+  { id: 'n-1', type: 'danger', message: 'NOW CALLING: Amit Shah (Token C006) — Room 3', timestamp: '10:58 AM', read: false },
+  { id: 'n-2', type: 'success', message: 'Mahesh Kumar is now IN SESSION with Dr. Raj Valaki', timestamp: '10:45 AM', read: false },
+  { id: 'n-3', type: 'info', message: 'New appointment booked: Sneha Joshi — 11:00 AM Dr. Anita Soni', timestamp: '10:30 AM', read: true },
+  { id: 'n-4', type: 'warning', message: 'Lab report pending for Rekha Patel', timestamp: '09:45 AM', read: true },
+];
+
+// ============================================================
+// Patient Store
+// ============================================================
+
+interface PatientState {
+  patients: Patient[];
+  searchResults: Patient[];
+  selectedPatient: Patient | null;
+  nextMrd: string;
+  searchQuery: string;
+  addPatient: (patient: Omit<Patient, 'id' | 'mrdNumber' | 'createdAt'>) => Patient;
+  updatePatient: (id: string, data: Partial<Patient>) => void;
+  setSelectedPatient: (patient: Patient | null) => void;
+  searchPatients: (query: string) => void;
+  getPatientById: (id: string) => Patient | undefined;
+}
+
+export const usePatientStore = create<PatientState>((set, get) => ({
+  patients: PATIENTS,
+  searchResults: PATIENTS,
+  selectedPatient: null,
+  nextMrd: 'MRD-2026-0009',
+  searchQuery: '',
+  addPatient: (data) => {
+    const newPatient: Patient = {
+      ...data,
+      id: `pat-${Date.now()}`,
+      mrdNumber: get().nextMrd,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    set(s => ({
+      patients: [newPatient, ...s.patients],
+      searchResults: [newPatient, ...s.searchResults],
+      nextMrd: `MRD-2026-${String(parseInt(s.nextMrd.split('-')[2]) + 1).padStart(4, '0')}`
+    }));
+    return newPatient;
+  },
+  updatePatient: (id, data) => set(s => ({
+    patients: s.patients.map(p => p.id === id ? { ...p, ...data } : p),
+    searchResults: s.searchResults.map(p => p.id === id ? { ...p, ...data } : p),
+    selectedPatient: s.selectedPatient?.id === id ? { ...s.selectedPatient, ...data } : s.selectedPatient
+  })),
+  setSelectedPatient: (patient) => set({ selectedPatient: patient }),
+  searchPatients: (query) => {
+    const q = query.toLowerCase();
+    set({
+      searchQuery: query,
+      searchResults: query.length === 0
+        ? get().patients
+        : get().patients.filter(p =>
+          p.firstName.toLowerCase().includes(q) ||
+          p.lastName.toLowerCase().includes(q) ||
+          p.mrdNumber.toLowerCase().includes(q) ||
+          p.mobile.includes(q)
+        )
+    });
+  },
+  getPatientById: (id) => get().patients.find(p => p.id === id),
+}));
+
+// ============================================================
+// Queue Store
+// ============================================================
+
+interface QueueState {
+  queue: QueueEntry[];
+  doctors: Doctor[];
+  callingEntry: QueueEntry | null;
+  lastEvent: SSEEvent | null;
+  emitEvent: (event: Omit<SSEEvent, 'timestamp'>) => void;
+  updateStatus: (id: string, status: QueueStatus) => void;
+  addToQueue: (entry: Omit<QueueEntry, 'id'>) => void;
+  updateVitals: (id: string, vitals: boolean) => void;
+  updateComplaints: (id: string, complaints: boolean) => void;
+  updateQueueEntry: (id: string, data: Partial<QueueEntry>) => void;
+  putOnHold: (id: string, reason?: string) => void;
+  resumeFromHold: (id: string) => void;
+  endSessionAndSendToBilling: (caseNumber: string, nextStage?: string) => void;
+  completeCheckout: (id: string) => void;
+  cancelEntry: (id: string, reason: string) => void;
+  setCallingEntry: (entry: QueueEntry | null) => void;
+}
+
+export const useQueueStore = create<QueueState>((set, get) => ({
+  queue: QUEUE_ENTRIES,
+  doctors: DOCTORS,
+  callingEntry: QUEUE_ENTRIES.find(q => q.status === 'CALLING') || null,
+  lastEvent: null,
+  emitEvent: (event) => set({ lastEvent: { ...event, timestamp: Date.now() } }),
+  updateStatus: (id, status) => set(s => {
+    const entry = s.queue.find(q => q.id === id);
+    return {
+      queue: s.queue.map(q => q.id === id ? {
+        ...q,
+        status,
+        callCount: status === 'CALLING' ? (q.callCount || 0) + 1 : q.callCount
+      } : q),
+      callingEntry: status === 'CALLING' ? s.queue.find(q => q.id === id) || null : s.callingEntry,
+      lastEvent: {
+        type: 'STATUS_CHANGED',
+        id,
+        token: entry?.tokenDisplay,
+        patientName: entry?.patientName,
+        status,
+        timestamp: Date.now()
+      }
+    };
+  }),
+  addToQueue: (entry) => set(s => {
+    const newEntry: QueueEntry = { ...entry, id: `q-${Date.now()}` };
+    return {
+      queue: [...s.queue, newEntry],
+      lastEvent: {
+        type: 'CHECK_IN',
+        id: newEntry.id,
+        token: newEntry.tokenDisplay,
+        patientName: newEntry.patientName,
+        status: newEntry.status,
+        timestamp: Date.now()
+      }
+    };
+  }),
+  updateVitals: (id, vitals) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, vitalsRecorded: vitals } : q) })),
+  updateComplaints: (id, complaints) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, complaintsRecorded: complaints } : q) })),
+  updateQueueEntry: (id, data) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, ...data } : q) })),
+  putOnHold: (id, reason) => set(s => {
+    const entry = s.queue.find(q => q.id === id);
+    return {
+      queue: s.queue.map(q => q.id === id ? {
+        ...q,
+        status: 'ON_HOLD' as QueueStatus,
+        onHoldReason: reason || 'Awaiting Diagnostics / Lab Results'
+      } : q),
+      lastEvent: {
+        type: 'ON_HOLD',
+        id,
+        token: entry?.tokenDisplay,
+        patientName: entry?.patientName,
+        status: 'ON_HOLD',
+        timestamp: Date.now()
+      }
+    };
+  }),
+  resumeFromHold: (id) => set(s => {
+    const entry = s.queue.find(q => q.id === id);
+    return {
+      queue: s.queue.map(q => q.id === id ? {
+        ...q,
+        status: 'IN_SESSION' as QueueStatus
+      } : q),
+      lastEvent: {
+        type: 'SESSION_STARTED',
+        id,
+        token: entry?.tokenDisplay,
+        patientName: entry?.patientName,
+        status: 'IN_SESSION',
+        timestamp: Date.now()
+      }
+    };
+  }),
+  endSessionAndSendToBilling: (caseNumber, nextStage = 'BILLING') => set(s => {
+    const entry = s.queue.find(q => q.caseNumber === caseNumber);
+    const targetStatus: QueueStatus = nextStage === 'BILLING' ? 'BILLING_PENDING' : 'COMPLETED';
+    return {
+      queue: s.queue.map(q => q.caseNumber === caseNumber ? {
+        ...q,
+        status: targetStatus
+      } : q),
+      lastEvent: {
+        type: 'SESSION_ENDED',
+        caseId: caseNumber,
+        token: entry?.tokenDisplay,
+        patientName: entry?.patientName,
+        status: targetStatus,
+        nextStage,
+        timestamp: Date.now()
+      }
+    };
+  }),
+  completeCheckout: (id) => set(s => ({
+    queue: s.queue.map(q => q.id === id ? { ...q, status: 'COMPLETED' as QueueStatus, billingStatus: 'PAID' } : q),
+    lastEvent: {
+      type: 'PAYMENT_RECEIVED',
+      id,
+      status: 'COMPLETED',
+      timestamp: Date.now()
+    }
+  })),
+  cancelEntry: (id, _reason) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, status: 'CANCELLED' } : q) })),
+  setCallingEntry: (entry) => set({ callingEntry: entry }),
+}));
+
+// ============================================================
+// Appointment Store
+// ============================================================
+
+const APPOINTMENTS: Appointment[] = [
+  { id: 'apt-1', patientId: 'pat-2', patientName: 'Anita Sharma', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', date: '2026-09-19', time: '11:30', visitType: 'Follow-Up', status: 'SCHEDULED' },
+  { id: 'apt-2', patientId: 'pat-4', patientName: 'Amit Shah', doctorId: 'doc-3', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', time: '11:00', visitType: 'Consultation', status: 'ARRIVED' },
+  { id: 'apt-3', patientId: 'pat-8', patientName: 'Deepak Trivedi', doctorId: 'doc-4', doctorName: 'Dr. Suresh Kumar', date: '2026-09-19', time: '12:00', visitType: 'Procedure', status: 'SCHEDULED' },
+  { id: 'apt-4', patientId: 'pat-3', patientName: 'Rekha Patel', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', time: '09:30', visitType: 'Consultation', status: 'SCHEDULED' },
+  { id: 'apt-5', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', time: '10:00', visitType: 'Follow-Up', status: 'SCHEDULED' },
+];
+
+const SLOTS = ['09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30', '10:45', '11:00', '11:15', '11:30', '11:45', '14:00', '14:15', '14:30', '14:45', '15:00', '15:15', '15:30', '16:00', '16:30', '17:00'];
+
+interface AppointmentState {
+  appointments: Appointment[];
+  availableSlots: string[];
+  addAppointment: (apt: Omit<Appointment, 'id'>) => void;
+  updateAppointment: (id: string, data: Partial<Appointment>) => void;
+  cancelAppointment: (id: string, reason: string) => void;
+  getAvailableSlots: (doctorId: string, date: string) => string[];
+}
+
+export const useAppointmentStore = create<AppointmentState>((set, get) => ({
+  appointments: APPOINTMENTS,
+  availableSlots: SLOTS,
+  addAppointment: (apt) => set(s => ({ appointments: [...s.appointments, { ...apt, id: `apt-${Date.now()}` }] })),
+  updateAppointment: (id, data) => set(s => ({ appointments: s.appointments.map(a => a.id === id ? { ...a, ...data } : a) })),
+  cancelAppointment: (id, _reason) => set(s => ({ appointments: s.appointments.map(a => a.id === id ? { ...a, status: 'CANCELLED' } : a) })),
+  getAvailableSlots: (doctorId, date) => {
+    try {
+      const leaves = useDoctorLeaveStore.getState()?.leaves;
+      if (leaves) {
+        const onLeave = leaves.some(
+          l => l.doctorId === doctorId && l.status === 'APPROVED' && date >= l.startDate && date <= l.endDate
+        );
+        if (onLeave) return [];
+      }
+    } catch {
+      // Fallback
+    }
+
+    const booked = get().appointments
+      .filter(a => a.doctorId === doctorId && a.date === date && a.status !== 'CANCELLED')
+      .map(a => a.time);
+    return SLOTS.filter(s => !booked.includes(s));
+  },
+}));
+
+// ============================================================
+// Doctor Store
+// ============================================================
+
+export const useDoctorStore = create<{ doctors: Doctor[] }>((set) => ({
+  doctors: DOCTORS,
+}));
+
+// ============================================================
+// Billing Store
+// ============================================================
+
+interface BillingState {
+  bills: BillRecord[];
+  addBill: (bill: Omit<BillRecord, 'id' | 'invoiceNumber'>) => void;
+  updateBill: (id: string, data: Partial<BillRecord>) => void;
+  getTodayBills: () => BillRecord[];
+}
+
+export const useBillingStore = create<BillingState>((set, get) => ({
+  bills: BILLS,
+  addBill: (bill) => {
+    const invoiceNumber = `INV-2026-${String(get().bills.length + 91).padStart(4, '0')}`;
+    set(s => ({ bills: [{ ...bill, id: `bill-${Date.now()}`, invoiceNumber }, ...s.bills] }));
+  },
+  updateBill: (id, data) => set(s => ({ bills: s.bills.map(b => b.id === id ? { ...b, ...data } : b) })),
+  getTodayBills: () => get().bills.filter(b => b.date === '2026-09-19'),
+}));
+
+// ============================================================
+// UI Store
+// ============================================================
+
+interface UIState {
+  activeModal: string | null;
+  sidebarOpen: boolean;
+  notifications: Notification[];
+  currentUser: { name: string; role: string; branch: string; initials: string };
+  openModal: (name: string) => void;
+  closeModal: () => void;
+  toggleSidebar: () => void;
+  addNotification: (notif: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
+  markAllRead: () => void;
+}
+
+export const useUIStore = create<UIState>((set) => ({
+  activeModal: null,
+  sidebarOpen: true,
+  notifications: NOTIFICATIONS,
+  currentUser: { name: 'Riya Patel', role: 'reception@flow.com', branch: 'Surat Central Main Branch', initials: 'RP' },
+  openModal: (name) => set({ activeModal: name }),
+  closeModal: () => set({ activeModal: null }),
+  toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
+  addNotification: (notif) => set(s => ({
+    notifications: [{ ...notif, id: `n-${Date.now()}`, timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), read: false }, ...s.notifications]
+  })),
+  markAllRead: () => set(s => ({ notifications: s.notifications.map(n => ({ ...n, read: true })) })),
+}));
+
+// ============================================================
+// Clinical Records & Lab Store
+// ============================================================
+
+export const CLINICAL_RECORDS: ClinicalRecord[] = [
+  {
+    id: 'cr-1',
+    patientId: 'pat-1',
+    date: '2026-09-10',
+    doctorName: 'Dr. Raj Valaki',
+    department: 'Dermatology',
+    chiefComplaint: 'Eczema flare-up with severe itching and dry patches on both arms',
+    diagnosis: 'Atopic Dermatitis (Moderate)',
+    vitals: { bp: '128/82', pulse: '76', temp: '98.4°F', weight: '74 kg', spo2: '99%' },
+    prescription: [
+      { medicine: 'Mometasone Furoate 0.1% Cream', dosage: 'Apply twice daily', duration: '14 days', instructions: 'External use on lesions only' },
+      { medicine: 'Tab. Bilastine 20mg', dosage: '1 tablet at bedtime', duration: '10 days', instructions: 'After food' },
+      { medicine: 'Emollient Moisturizer Lotion', dosage: 'Apply generously', duration: '30 days', instructions: 'Within 3 mins of bathing' }
+    ],
+    followUpDate: '2026-09-24'
+  },
+  {
+    id: 'cr-2',
+    patientId: 'pat-1',
+    date: '2026-08-05',
+    doctorName: 'Dr. Raj Valaki',
+    department: 'Dermatology',
+    chiefComplaint: 'Mild itching on forearms and rash after detergent exposure',
+    diagnosis: 'Contact Irritant Dermatitis',
+    vitals: { bp: '130/80', pulse: '72', temp: '98.6°F', weight: '75 kg', spo2: '98%' },
+    prescription: [
+      { medicine: 'Hydrocortisone 1% Cream', dosage: 'Apply twice daily', duration: '7 days', instructions: 'Avoid soap' },
+      { medicine: 'Tab. Levocetirizine 5mg', dosage: '1 tablet at night', duration: '5 days', instructions: 'Oral' }
+    ],
+    followUpDate: '2026-08-19'
+  },
+  {
+    id: 'cr-3',
+    patientId: 'pat-2',
+    date: '2026-09-15',
+    doctorName: 'Dr. Anita Soni',
+    department: 'General Medicine',
+    chiefComplaint: 'Persistent headache, occasional dizziness, and fatigue for 2 weeks',
+    diagnosis: 'Essential Hypertension Stage 1 & Mild Anemia',
+    vitals: { bp: '144/92', pulse: '84', temp: '98.2°F', weight: '62 kg', spo2: '98%' },
+    prescription: [
+      { medicine: 'Tab. Telmisartan 40mg', dosage: '1 tablet once daily morning', duration: '30 days', instructions: 'After breakfast' },
+      { medicine: 'Tab. Autrin (Iron + Folic Acid)', dosage: '1 tablet daily', duration: '30 days', instructions: 'After lunch' }
+    ],
+    followUpDate: '2026-10-15'
+  },
+  {
+    id: 'cr-4',
+    patientId: 'pat-4',
+    date: '2026-09-01',
+    doctorName: 'Dr. Priya Mehta',
+    department: 'Gynecology',
+    chiefComplaint: 'Lower pelvic discomfort, urinary frequency, and dysuria',
+    diagnosis: 'Acute Cystitis / UTI',
+    vitals: { bp: '122/78', pulse: '80', temp: '99.1°F', weight: '68 kg', spo2: '99%' },
+    prescription: [
+      { medicine: 'Tab. Nitrofurantoin SR 100mg', dosage: '1 tablet twice daily', duration: '7 days', instructions: 'With meals' },
+      { medicine: 'Syp. Citralka 5ml', dosage: '1 tsp in a glass of water TID', duration: '5 days', instructions: 'Drink plenty of water' }
+    ],
+    followUpDate: '2026-09-08'
+  },
+  {
+    id: 'cr-5',
+    patientId: 'pat-8',
+    date: '2026-09-05',
+    doctorName: 'Dr. Suresh Kumar',
+    department: 'Orthopedics',
+    chiefComplaint: 'Bilateral knee pain, crepitus, difficulty climbing stairs for 6 months',
+    diagnosis: 'Osteoarthritis Grade II (Knee)',
+    vitals: { bp: '136/84', pulse: '74', temp: '98.5°F', weight: '82 kg', spo2: '97%' },
+    prescription: [
+      { medicine: 'Tab. Diacerein + Glucosamine', dosage: '1 tablet twice daily', duration: '60 days', instructions: 'After meals' },
+      { medicine: 'Gel Diclofenac 1.16%', dosage: 'Apply gently on knee joints', duration: '15 days', instructions: 'External' }
+    ],
+    followUpDate: '2026-11-05'
+  }
+];
+
+export const LAB_DOCUMENTS: LabDocument[] = [
+  {
+    id: 'lab-1',
+    patientId: 'pat-1',
+    patientName: 'Mahesh Kumar',
+    mrdNumber: 'MRD-2026-0001',
+    title: 'Complete Blood Count (CBC) & IgE Panel',
+    category: 'Blood Test',
+    fileName: 'CBC_IgE_MaheshKumar.pdf',
+    fileSize: '1.4 MB',
+    uploadedAt: '2026-09-10 11:20 AM',
+    status: 'Attached to EHR',
+    doctorName: 'Dr. Raj Valaki'
+  },
+  {
+    id: 'lab-2',
+    patientId: 'pat-2',
+    patientName: 'Anita Sharma',
+    mrdNumber: 'MRD-2026-0002',
+    title: 'Lipid Profile & Serum Iron Studies',
+    category: 'Blood Test',
+    fileName: 'Lipid_Iron_AnitaSharma.pdf',
+    fileSize: '890 KB',
+    uploadedAt: '2026-09-15 02:45 PM',
+    status: 'Pending Doctor Review',
+    doctorName: 'Dr. Anita Soni'
+  },
+  {
+    id: 'lab-3',
+    patientId: 'pat-3',
+    patientName: 'Rekha Patel',
+    mrdNumber: 'MRD-2026-0003',
+    title: 'HbA1c & Fasting Blood Sugar',
+    category: 'Pathology',
+    fileName: 'HbA1c_FBS_RekhaPatel.pdf',
+    fileSize: '740 KB',
+    uploadedAt: '2026-09-19 09:40 AM',
+    status: 'Pending Doctor Review',
+    doctorName: 'Dr. Raj Valaki'
+  },
+  {
+    id: 'lab-4',
+    patientId: 'pat-4',
+    patientName: 'Amit Shah',
+    mrdNumber: 'MRD-2026-0004',
+    title: 'Urine Routine & Microscopic Culture',
+    category: 'Pathology',
+    fileName: 'Urine_Culture_AmitShah.pdf',
+    fileSize: '1.1 MB',
+    uploadedAt: '2026-09-02 10:15 AM',
+    status: 'Attached to EHR',
+    doctorName: 'Dr. Priya Mehta'
+  },
+  {
+    id: 'lab-5',
+    patientId: 'pat-8',
+    patientName: 'Deepak Trivedi',
+    mrdNumber: 'MRD-2026-0008',
+    title: 'X-Ray Both Knees (AP & Lateral Weight-bearing)',
+    category: 'Radiology',
+    fileName: 'XRay_Knee_DeepakTrivedi.dcm',
+    fileSize: '14.2 MB',
+    uploadedAt: '2026-09-05 03:10 PM',
+    status: 'Attached to EHR',
+    doctorName: 'Dr. Suresh Kumar'
+  }
+];
+
+interface LabState {
+  documents: LabDocument[];
+  addDocument: (doc: Omit<LabDocument, 'id' | 'uploadedAt'>) => void;
+  deleteDocument: (id: string) => void;
+  updateStatus: (id: string, status: LabDocument['status']) => void;
+  getPatientDocuments: (patientId: string) => LabDocument[];
+}
+
+export const useLabStore = create<LabState>((set, get) => ({
+  documents: LAB_DOCUMENTS,
+  addDocument: (doc) => {
+    const newDoc: LabDocument = {
+      ...doc,
+      id: `lab-${Date.now()}`,
+      uploadedAt: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
+    };
+    set(s => ({ documents: [newDoc, ...s.documents] }));
+  },
+  deleteDocument: (id) => set(s => ({ documents: s.documents.filter(d => d.id !== id) })),
+  updateStatus: (id, status) => set(s => ({
+    documents: s.documents.map(d => d.id === id ? { ...d, status } : d)
+  })),
+  getPatientDocuments: (patientId) => get().documents.filter(d => d.patientId === patientId),
+}));
+
+interface ClinicalState {
+  records: ClinicalRecord[];
+  addRecord: (record: Omit<ClinicalRecord, 'id'>) => void;
+  getPatientRecords: (patientId: string) => ClinicalRecord[];
+}
+
+export const useClinicalStore = create<ClinicalState>((set, get) => ({
+  records: CLINICAL_RECORDS,
+  addRecord: (rec) => set(s => ({ records: [{ ...rec, id: `cr-${Date.now()}` }, ...s.records] })),
+  getPatientRecords: (patientId) => get().records.filter(r => r.patientId === patientId),
+}));
+
+// ============================================================
+// Doctor Panel Data & Stores
+// ============================================================
+
+export interface DrugInventoryItem {
+  id: string;
+  name: string;
+  genericName: string;
+  formulation: string;
+  stock: number;
+  reorderLevel: number;
+  unitPrice: number;
+  alternatives?: string[];
+}
+
+export interface InvestigationCatalogItem {
+  id: string;
+  name: string;
+  category: 'Hematology' | 'Biochemistry' | 'Pathology' | 'Radiology' | 'Microbiology';
+  price: number;
+  unit?: string;
+  normalRange?: string;
+  instructions?: string;
+}
+
+export interface ProcedureCatalogItem {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  durationMins: number;
+  requiresConsent: boolean;
+}
+
+export interface FollowUpTask {
+  id: string;
+  patientId: string;
+  patientName: string;
+  mrdNumber: string;
+  mobile: string;
+  doctorName: string;
+  originalVisitDate: string;
+  reason: string;
+  dueDate: string;
+  priority: 'High' | 'Medium' | 'Low';
+  status: 'PENDING' | 'CALLED' | 'RESCHEDULED' | 'NO_SHOW';
+  callLogs: { date: string; caller: string; outcome: string; notes: string }[];
+}
+
+export interface ConsultationSession {
+  caseId: string;
+  patientId: string;
+  patientName: string;
+  mrdNumber: string;
+  doctorId: string;
+  doctorName: string;
+  startTime: string;
+  complaints: {
+    presentComplaint: string;
+    durationYears: number;
+    durationMonths: number;
+    durationDays: number;
+    severity: 'MILD' | 'MODERATE' | 'SEVERE';
+    onset: string;
+    aggravatingFactors: string;
+    relievingFactors: string;
+  };
+  vitals: {
+    temperature: string;
+    pulse: string;
+    bpSystolic: string;
+    bpDiastolic: string;
+    spo2: string;
+    weight: string;
+    height: string;
+  };
+  history: {
+    pastMedical: string;
+    pastSurgical: string;
+    allergies: string;
+    currentMedications: string;
+    obstetricHistory?: string;
+  };
+  investigations: {
+    testId: string;
+    testName: string;
+    category: string;
+    price: number;
+    status: 'ORDERED' | 'COMPLETED';
+    resultValue?: string;
+    normalRange?: string;
+  }[];
+  prescriptions: {
+    id: string;
+    drugName: string;
+    dosage: string;
+    frequency: string;
+    durationDays: number;
+    totalQty: number;
+    instructions: string;
+    stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+  }[];
+  procedures: {
+    id: string;
+    procedureName: string;
+    scheduledDate: string;
+    scheduledTime: string;
+    sessionsCount: string;
+    completedInClinic: boolean;
+    notes: string;
+    consentGenerated: boolean;
+    price: number;
+  }[];
+  images: {
+    id: string;
+    url: string;
+    tag: 'BEFORE' | 'AFTER' | 'FOLLOWUP' | 'GENERAL';
+    caption: string;
+    annotations?: string[];
+    uploadedAt: string;
+  }[];
+  diagnosis: {
+    provisional: string;
+    differential: string;
+    finalDiagnosis: string;
+    icd10Code?: string;
+    treatmentPlan: string;
+    patientAdvice: string;
+    followUpDate?: string;
+    followUpPurpose?: string;
+    nursingInstructions?: string;
+  };
+  billing: {
+    consultationFee: number;
+    discountPercent: number;
+    isFoc: boolean;
+    focReason?: string;
+    focPin?: string;
+  };
+  isFinalized: boolean;
+  finalizedAt?: string;
+}
+
+export interface DoctorLeave {
+  id: string;
+  doctorId: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  type: 'Casual' | 'Conference' | 'Medical' | 'Vacation';
+  status: 'APPROVED';
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  senderRole: 'Doctor' | 'Reception' | 'Pharmacy' | 'Nursing';
+  message: string;
+  timestamp: string;
+}
+
+// Initial Mock Inventory
+export const DRUG_INVENTORY: DrugInventoryItem[] = [
+  { id: 'd-1', name: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', formulation: 'Capsule', stock: 8, reorderLevel: 20, unitPrice: 12, alternatives: ['Cefixime 200mg', 'Azithromycin 500mg'] },
+  { id: 'd-2', name: 'Paracetamol 650mg (Dolo)', genericName: 'Paracetamol', formulation: 'Tablet', stock: 12, reorderLevel: 50, unitPrice: 3, alternatives: ['Ibuprofen 400mg'] },
+  { id: 'd-3', name: 'Mometasone 0.1% Cream', genericName: 'Mometasone Furoate', formulation: 'Ointment', stock: 45, reorderLevel: 15, unitPrice: 145 },
+  { id: 'd-4', name: 'Bilastine 20mg (Bilaxten)', genericName: 'Bilastine', formulation: 'Tablet', stock: 35, reorderLevel: 20, unitPrice: 18 },
+  { id: 'd-5', name: 'Levocetirizine 5mg', genericName: 'Levocetirizine Dihydrochloride', formulation: 'Tablet', stock: 80, reorderLevel: 25, unitPrice: 5 },
+  { id: 'd-6', name: 'Telmisartan 40mg', genericName: 'Telmisartan', formulation: 'Tablet', stock: 40, reorderLevel: 20, unitPrice: 9 },
+  { id: 'd-7', name: 'Nitrofurantoin SR 100mg', genericName: 'Nitrofurantoin', formulation: 'Tablet', stock: 0, reorderLevel: 15, unitPrice: 16, alternatives: ['Fosfomycin 3g', 'Ofloxacin 200mg'] },
+  { id: 'd-8', name: 'Diacerein 50mg + Glucosamine', genericName: 'Diacerein + Glucosamine', formulation: 'Tablet', stock: 50, reorderLevel: 20, unitPrice: 22 },
+  { id: 'd-9', name: 'Emollient Moisturizer Lotion', genericName: 'Cetyl Alcohol + Liquid Paraffin', formulation: 'Lotion', stock: 30, reorderLevel: 10, unitPrice: 280 },
+];
+
+export const INVESTIGATION_CATALOG: InvestigationCatalogItem[] = [
+  { id: 'inv-1', name: 'Complete Blood Count (CBC) with ESR', category: 'Hematology', price: 350, unit: 'g/dL', normalRange: '12.0 - 16.5 g/dL', instructions: 'Fasting preferred' },
+  { id: 'inv-2', name: 'HbA1c & Fasting Blood Sugar', category: 'Biochemistry', price: 450, unit: '%', normalRange: '< 5.7 %', instructions: '10 hrs fasting required' },
+  { id: 'inv-3', name: 'Lipid Profile Complete', category: 'Biochemistry', price: 650, unit: 'mg/dL', normalRange: '< 200 mg/dL', instructions: '12 hrs strict fasting' },
+  { id: 'inv-4', name: 'Skin Scraping for KOH Fungus Test', category: 'Microbiology', price: 300, normalRange: 'Negative for fungal hyphae', instructions: 'Clean lesion, no cream' },
+  { id: 'inv-5', name: 'Serum IgE Allergy Level', category: 'Pathology', price: 850, unit: 'IU/mL', normalRange: '< 100 IU/mL' },
+  { id: 'inv-6', name: 'X-Ray Both Knees (AP & Lateral)', category: 'Radiology', price: 600, instructions: 'Standing weight-bearing view' },
+  { id: 'inv-7', name: 'Urine Routine & Microscopic Culture', category: 'Pathology', price: 400, instructions: 'Mid-stream early morning sample' },
+];
+
+export const PROCEDURE_CATALOG: ProcedureCatalogItem[] = [
+  { id: 'proc-1', name: 'Diode Laser Hair Removal', category: 'Laser & Aesthetics', price: 1500, durationMins: 30, requiresConsent: true },
+  { id: 'proc-2', name: 'PRP (Platelet-Rich Plasma) Therapy', category: 'Regenerative', price: 2500, durationMins: 45, requiresConsent: true },
+  { id: 'proc-3', name: 'Chemical Peel & Facial Resurfacing', category: 'Cosmetology', price: 1800, durationMins: 30, requiresConsent: true },
+  { id: 'proc-4', name: 'Minor Lesion Excision & Biopsy', category: 'Surgical', price: 1200, durationMins: 25, requiresConsent: true },
+  { id: 'proc-5', name: 'Orthopedic Joint Injection', category: 'Orthopedics', price: 2000, durationMins: 20, requiresConsent: true },
+  { id: 'proc-6', name: 'Sterile Wound Dressing & Debridement', category: 'Nursing OPD', price: 250, durationMins: 15, requiresConsent: false },
+];
+
+export const FOLLOWUP_TASKS: FollowUpTask[] = [
+  {
+    id: 'fu-1',
+    patientId: 'pat-1',
+    patientName: 'Mahesh Kumar',
+    mrdNumber: 'MRD-2026-0001',
+    mobile: '9825100001',
+    doctorName: 'Dr. Raj Valaki',
+    originalVisitDate: '2026-09-10',
+    reason: 'Review contact dermatitis recovery & allergy response',
+    dueDate: '2026-09-19',
+    priority: 'High',
+    status: 'PENDING',
+    callLogs: [
+      { date: '2026-09-17', caller: 'Staff Nurse Rekha', outcome: 'ANSWERED', notes: 'Patient reports mild redness remaining; advised to continue cream.' }
+    ]
+  },
+  {
+    id: 'fu-2',
+    patientId: 'pat-3',
+    patientName: 'Rekha Patel',
+    mrdNumber: 'MRD-2026-0003',
+    mobile: '9825100003',
+    doctorName: 'Dr. Raj Valaki',
+    originalVisitDate: '2026-08-28',
+    reason: 'Diode Laser Session 2 of 6 check-up',
+    dueDate: '2026-09-19',
+    priority: 'Medium',
+    status: 'PENDING',
+    callLogs: []
+  },
+  {
+    id: 'fu-3',
+    patientId: 'pat-4',
+    patientName: 'Amit Shah',
+    mrdNumber: 'MRD-2026-0004',
+    mobile: '9825100004',
+    doctorName: 'Dr. Priya Mehta',
+    originalVisitDate: '2026-09-01',
+    reason: 'UTI post-antibiotic culture test verification',
+    dueDate: '2026-09-15',
+    priority: 'High',
+    status: 'NO_SHOW',
+    callLogs: [
+      { date: '2026-09-16', caller: 'Front Desk Riya', outcome: 'NO_ANSWER', notes: 'Call rang full, no response.' },
+      { date: '2026-09-17', caller: 'Front Desk Riya', outcome: 'ANSWERED', notes: 'Patient traveling outside Surat; will return next week.' }
+    ]
+  },
+  {
+    id: 'fu-4',
+    patientId: 'pat-8',
+    patientName: 'Deepak Trivedi',
+    mrdNumber: 'MRD-2026-0008',
+    mobile: '9825100008',
+    doctorName: 'Dr. Suresh Kumar',
+    originalVisitDate: '2026-09-05',
+    reason: 'Knee OA Joint Injection tolerance check',
+    dueDate: '2026-09-22',
+    priority: 'Medium',
+    status: 'PENDING',
+    callLogs: []
+  }
+];
+
+export const DOCTOR_LEAVES: DoctorLeave[] = [
+  { id: 'l-1', doctorId: 'doc-1', startDate: '2026-09-25', endDate: '2026-09-27', reason: 'National Dermatology Conference (DERMACON 2026)', type: 'Conference', status: 'APPROVED' },
+  { id: 'l-2', doctorId: 'doc-2', startDate: '2026-10-02', endDate: '2026-10-04', reason: 'Family function & festival leave', type: 'Casual', status: 'APPROVED' },
+];
+
+export const CHAT_MESSAGES: ChatMessage[] = [
+  { id: 'c-1', sender: 'Riya Patel', senderRole: 'Reception', message: 'Dr. Valaki, patient Mahesh Kumar (C003) has entered your examination cabin.', timestamp: '10:30 AM' },
+  { id: 'c-2', sender: 'Dr. Raj Valaki', senderRole: 'Doctor', message: 'Noted Riya. Please keep the Diode Laser room prepped after this consult.', timestamp: '10:32 AM' },
+  { id: 'c-3', sender: 'Pharma Desk', senderRole: 'Pharmacy', message: 'Notice: Amoxicillin 500mg capsules running very low (8 left). Cefixime is available.', timestamp: '10:35 AM' },
+  { id: 'c-4', sender: 'Dr. Raj Valaki', senderRole: 'Doctor', message: 'Thanks for the alert Pharma team, will prescribe Cefixime if needed.', timestamp: '10:36 AM' },
+];
+
+// Stores
+interface InventoryState {
+  inventory: DrugInventoryItem[];
+  getDrugByName: (name: string) => DrugInventoryItem | undefined;
+  updateStock: (id: string, delta: number) => void;
+}
+
+export const useInventoryStore = create<InventoryState>((set, get) => ({
+  inventory: DRUG_INVENTORY,
+  getDrugByName: (name) => get().inventory.find(i => i.name.toLowerCase().includes(name.toLowerCase())),
+  updateStock: (id, delta) => set(s => ({
+    inventory: s.inventory.map(i => i.id === id ? { ...i, stock: Math.max(0, i.stock + delta) } : i)
+  }))
+}));
+
+interface InvestigationCatalogState {
+  catalog: InvestigationCatalogItem[];
+  addTest: (item: Omit<InvestigationCatalogItem, 'id'>) => void;
+  deleteTest: (id: string) => void;
+}
+
+export const useInvestigationCatalogStore = create<InvestigationCatalogState>((set) => ({
+  catalog: INVESTIGATION_CATALOG,
+  addTest: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `inv-${Date.now()}` }] })),
+  deleteTest: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
+}));
+
+interface ProcedureCatalogState {
+  catalog: ProcedureCatalogItem[];
+  addProcedure: (item: Omit<ProcedureCatalogItem, 'id'>) => void;
+  deleteProcedure: (id: string) => void;
+}
+
+export const useProcedureCatalogStore = create<ProcedureCatalogState>((set) => ({
+  catalog: PROCEDURE_CATALOG,
+  addProcedure: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `proc-${Date.now()}` }] })),
+  deleteProcedure: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
+}));
+
+interface FollowUpState {
+  tasks: FollowUpTask[];
+  addCallLog: (taskId: string, log: { caller: string; outcome: string; notes: string }) => void;
+  updateStatus: (taskId: string, status: FollowUpTask['status']) => void;
+}
+
+export const useFollowUpStore = create<FollowUpState>((set) => ({
+  tasks: FOLLOWUP_TASKS,
+  addCallLog: (taskId, log) => set(s => ({
+    tasks: s.tasks.map(t => t.id === taskId ? {
+      ...t,
+      status: log.outcome === 'ANSWERED' ? 'CALLED' : t.status,
+      callLogs: [{ ...log, date: '2026-09-19' }, ...t.callLogs]
+    } : t)
+  })),
+  updateStatus: (taskId, status) => set(s => ({
+    tasks: s.tasks.map(t => t.id === taskId ? { ...t, status } : t)
+  }))
+}));
+
+interface DoctorLeaveState {
+  leaves: DoctorLeave[];
+  addLeave: (leave: Omit<DoctorLeave, 'id'>) => void;
+  cancelLeave: (id: string) => void;
+}
+
+export const useDoctorLeaveStore = create<DoctorLeaveState>((set) => ({
+  leaves: DOCTOR_LEAVES,
+  addLeave: (leave) => set(s => ({ leaves: [{ ...leave, id: `l-${Date.now()}` }, ...s.leaves] })),
+  cancelLeave: (id) => set(s => ({ leaves: s.leaves.filter(l => l.id !== id) }))
+}));
+
+interface ChatState {
+  messages: ChatMessage[];
+  sendMessage: (msg: { sender: string; senderRole: ChatMessage['senderRole']; message: string }) => void;
+}
+
+export const useChatStore = create<ChatState>((set) => ({
+  messages: CHAT_MESSAGES,
+  sendMessage: (msg) => set(s => ({
+    messages: [...s.messages, { ...msg, id: `c-${Date.now()}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]
+  }))
+}));
+
+// Consultation Master Store
+interface ConsultationState {
+  activeSession: ConsultationSession | null;
+  initSession: (caseId: string, patient: Patient, doctor: Doctor) => void;
+  updateComplaints: (complaints: Partial<ConsultationSession['complaints']>) => void;
+  updateVitals: (vitals: Partial<ConsultationSession['vitals']>) => void;
+  updateHistory: (history: Partial<ConsultationSession['history']>) => void;
+  addInvestigation: (item: ConsultationSession['investigations'][0]) => void;
+  removeInvestigation: (testId: string) => void;
+  addPrescription: (item: ConsultationSession['prescriptions'][0]) => void;
+  removePrescription: (id: string) => void;
+  addProcedure: (item: ConsultationSession['procedures'][0]) => void;
+  removeProcedure: (id: string) => void;
+  addImage: (item: ConsultationSession['images'][0]) => void;
+  removeImage: (id: string) => void;
+  updateDiagnosis: (diagnosis: Partial<ConsultationSession['diagnosis']>) => void;
+  updateBilling: (billing: Partial<ConsultationSession['billing']>) => void;
+  finalizeConsultation: () => void;
+}
+
+const DEFAULT_SESSION: ConsultationSession = {
+  caseId: 'C003-001-190926',
+  patientId: 'pat-1',
+  patientName: 'Mahesh Kumar',
+  mrdNumber: 'MRD-2026-0001',
+  doctorId: 'doc-1',
+  doctorName: 'Dr. Raj Valaki',
+  startTime: '10:30 AM',
+  complaints: {
+    presentComplaint: 'Acute erythematous itchy rash on bilateral arms and dorsal hands',
+    durationYears: 0,
+    durationMonths: 0,
+    durationDays: 4,
+    severity: 'MODERATE',
+    onset: 'Gradual onset after contact with new cleaning chemical',
+    aggravatingFactors: 'Direct sunlight, hot water',
+    relievingFactors: 'Cold compresses'
+  },
+  vitals: {
+    temperature: '98.6',
+    pulse: '76',
+    bpSystolic: '124',
+    bpDiastolic: '82',
+    spo2: '99',
+    weight: '72',
+    height: '174'
+  },
+  history: {
+    pastMedical: 'Mild essential hypertension (well controlled on Telmisartan 40mg)',
+    pastSurgical: 'None reported',
+    allergies: 'Penicillin, Sulfur-based antibiotics',
+    currentMedications: 'Tab. Telmisartan 40mg OD'
+  },
+  investigations: [
+    { testId: 'inv-4', testName: 'Skin Scraping for KOH Fungus Test', category: 'Microbiology', price: 300, status: 'ORDERED' }
+  ],
+  prescriptions: [
+    { id: 'rx-1', drugName: 'Mometasone 0.1% Cream', dosage: 'Apply thin layer', frequency: '1-0-1', durationDays: 14, totalQty: 1, instructions: 'After bath & at bedtime', stockStatus: 'IN_STOCK' },
+    { id: 'rx-2', drugName: 'Bilastine 20mg (Bilaxten)', dosage: '1 Tab', frequency: '0-0-1', durationDays: 10, totalQty: 10, instructions: 'Night after food', stockStatus: 'IN_STOCK' },
+    { id: 'rx-3', drugName: 'Emollient Moisturizer Lotion', dosage: 'Generous application', frequency: '1-1-1', durationDays: 30, totalQty: 1, instructions: 'Apply within 3 mins of water contact', stockStatus: 'IN_STOCK' }
+  ],
+  procedures: [
+    { id: 'p-1', procedureName: 'Diode Laser Hair Removal', scheduledDate: '2026-09-20', scheduledTime: '14:30', sessionsCount: 'Session 1 of 6', completedInClinic: false, notes: 'Full beard shaping; patch test tolerated well', consentGenerated: true, price: 1500 }
+  ],
+  images: [
+    { id: 'img-1', url: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80', tag: 'BEFORE', caption: 'Bilateral forearm erythematous patch baseline', annotations: ['Erythema zone (8x4cm)', 'Excoriation marks'], uploadedAt: '2026-09-19 10:35 AM' }
+  ],
+  diagnosis: {
+    provisional: 'Contact Irritant Dermatitis with Secondary Xerosis',
+    differential: 'Atopic Eczema, Photosensitive Dermatitis',
+    finalDiagnosis: 'Acute Contact Allergic Dermatitis (ICD-10: L23.9)',
+    icd10Code: 'L23.9',
+    treatmentPlan: 'Topical potent corticosteroid taper over 14 days; non-sedative antihistamine for nocturnal pruritus; barrier repair moisturizing regimen.',
+    patientAdvice: 'Strictly avoid direct contact with alkaline detergents. Use vinyl gloves when handling cleaning chemicals. Avoid scratch trauma.',
+    followUpDate: '2026-09-26',
+    followUpPurpose: 'Review lesion clearance and taper steroid',
+    nursingInstructions: 'Call patient on Day 3 to verify pruritus reduction.'
+  },
+  billing: {
+    consultationFee: 500,
+    discountPercent: 0,
+    isFoc: false
+  },
+  isFinalized: false
+};
+
+export const useConsultationStore = create<ConsultationState>((set, get) => ({
+  activeSession: DEFAULT_SESSION,
+  initSession: (caseId, patient, doctor) => set({
+    activeSession: {
+      ...DEFAULT_SESSION,
+      caseId,
+      patientId: patient.id,
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      mrdNumber: patient.mrdNumber,
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      isFinalized: false,
+    }
+  }),
+  updateComplaints: (complaints) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, complaints: { ...s.activeSession.complaints, ...complaints } }
+  }) : s),
+  updateVitals: (vitals) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, vitals: { ...s.activeSession.vitals, ...vitals } }
+  }) : s),
+  updateHistory: (history) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, history: { ...s.activeSession.history, ...history } }
+  }) : s),
+  addInvestigation: (item) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, investigations: [...s.activeSession.investigations, item] }
+  }) : s),
+  removeInvestigation: (testId) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, investigations: s.activeSession.investigations.filter(i => i.testId !== testId) }
+  }) : s),
+  addPrescription: (item) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, prescriptions: [...s.activeSession.prescriptions, item] }
+  }) : s),
+  removePrescription: (id) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, prescriptions: s.activeSession.prescriptions.filter(p => p.id !== id) }
+  }) : s),
+  addProcedure: (item) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, procedures: [...s.activeSession.procedures, item] }
+  }) : s),
+  removeProcedure: (id) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, procedures: s.activeSession.procedures.filter(p => p.id !== id) }
+  }) : s),
+  addImage: (item) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, images: [...s.activeSession.images, item] }
+  }) : s),
+  removeImage: (id) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, images: s.activeSession.images.filter(img => img.id !== id) }
+  }) : s),
+  updateDiagnosis: (diagnosis) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, diagnosis: { ...s.activeSession.diagnosis, ...diagnosis } }
+  }) : s),
+  updateBilling: (billing) => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, billing: { ...s.activeSession.billing, ...billing } }
+  }) : s),
+  finalizeConsultation: () => set(s => s.activeSession ? ({
+    activeSession: { ...s.activeSession, isFinalized: true, finalizedAt: '2026-09-19 10:55 AM' }
+  }) : s),
+}));
+
+// ============================================================
+// Pharmacy & Dispensary Module (FEFO Engine & POS Cashiering)
+// ============================================================
+
+export interface DrugBatch {
+  id: string;
+  drugId: string;
+  drugName: string;
+  batchNumber: string;
+  expiryDate: string; // YYYY-MM-DD
+  stockQuantity: number;
+  unitCost: number;
+  supplier: string;
+  isQuarantined?: boolean;
+}
+
+export interface StockMovement {
+  id: string;
+  drugId: string;
+  drugName: string;
+  movementType: 'DISPENSE' | 'RECEIVE' | 'RETURN' | 'ADJUSTMENT' | 'DISPOSAL';
+  quantity: number;
+  batchNumber: string;
+  reference: string;
+  date: string;
+  performedBy: string;
+}
+
+export interface PrescriptionFulfillmentItem {
+  id: string;
+  drugId: string;
+  drugName: string;
+  formulation: string;
+  dosage: string;
+  frequency: string;
+  durationDays: number;
+  prescribedQty: number;
+  dispensedQty: number;
+  unitPrice: number;
+  instructions: string;
+  isDispensed: boolean;
+  batchAllocations?: Array<{ batchNumber: string; qty: number }>;
+}
+
+export interface PrescriptionFulfillment {
+  id: string;
+  caseId: string;
+  patientId: string;
+  patientName: string;
+  mrdNumber: string;
+  age: number;
+  gender: Gender;
+  mobile: string;
+  doctorName: string;
+  consultationDate: string;
+  allergies: string[];
+  status: 'PHARMACY_PENDING' | 'IN_PROGRESS' | 'DISPENSED' | 'CANCELLED';
+  items: PrescriptionFulfillmentItem[];
+  billing: {
+    subtotal: number;
+    tax: number;
+    totalPayable: number;
+    paymentMode?: 'CASH' | 'CARD_UPI';
+    invoiceNumber?: string;
+    dispensedAt?: string;
+    dispensedBy?: string;
+  };
+}
+
+export const INITIAL_DRUG_BATCHES: DrugBatch[] = [
+  { id: 'b-1', drugId: 'd-1', drugName: 'Amoxicillin 500mg', batchNumber: 'BAT-2601', expiryDate: '2026-10-15', stockQuantity: 8, unitCost: 9.5, supplier: 'Sun Pharma Distributors' },
+  { id: 'b-2', drugId: 'd-1', drugName: 'Amoxicillin 500mg', batchNumber: 'BAT-2602', expiryDate: '2027-08-31', stockQuantity: 0, unitCost: 9.5, supplier: 'Sun Pharma Distributors' },
+  { id: 'b-3', drugId: 'd-2', drugName: 'Paracetamol 650mg (Dolo)', batchNumber: 'BAT-2605', expiryDate: '2026-11-20', stockQuantity: 12, unitCost: 2.1, supplier: 'Micro Labs Logistics' },
+  { id: 'b-4', drugId: 'd-3', drugName: 'Mometasone 0.1% Cream', batchNumber: 'BAT-2590', expiryDate: '2027-05-15', stockQuantity: 45, unitCost: 110, supplier: 'Glenmark Pharmaceuticals' },
+  { id: 'b-5', drugId: 'd-4', drugName: 'Bilastine 20mg (Bilaxten)', batchNumber: 'BAT-2580', expiryDate: '2027-12-31', stockQuantity: 35, unitCost: 14, supplier: 'Zydus Healthcare' },
+  { id: 'b-6', drugId: 'd-5', drugName: 'Levocetirizine 5mg', batchNumber: 'BAT-2575', expiryDate: '2026-12-10', stockQuantity: 80, unitCost: 3.5, supplier: 'Cipla Medpro' },
+  { id: 'b-7', drugId: 'd-6', drugName: 'Telmisartan 40mg', batchNumber: 'BAT-2560', expiryDate: '2028-02-28', stockQuantity: 40, unitCost: 6.8, supplier: 'Torrent Pharmaceuticals' },
+  { id: 'b-8', drugId: 'd-7', drugName: 'Nitrofurantoin SR 100mg', batchNumber: 'BAT-2550', expiryDate: '2026-08-30', stockQuantity: 0, unitCost: 12, supplier: 'Alkem Laboratories', isQuarantined: true },
+  { id: 'b-9', drugId: 'd-8', drugName: 'Diacerein 50mg + Glucosamine', batchNumber: 'BAT-2540', expiryDate: '2027-09-30', stockQuantity: 50, unitCost: 16.5, supplier: "Dr. Reddy's Lab" },
+  { id: 'b-10', drugId: 'd-9', drugName: 'Emollient Moisturizer Lotion', batchNumber: 'BAT-2530', expiryDate: '2028-01-31', stockQuantity: 30, unitCost: 210, supplier: 'Galderma India' },
+];
+
+export const INITIAL_STOCK_MOVEMENTS: StockMovement[] = [
+  { id: 'sm-1', drugId: 'd-1', drugName: 'Amoxicillin 500mg', movementType: 'DISPENSE', quantity: -10, batchNumber: 'BAT-2601', reference: 'CASE-987110', date: '2026-09-19 09:45 AM', performedBy: 'Suresh Shah' },
+  { id: 'sm-2', drugId: 'd-3', drugName: 'Mometasone 0.1% Cream', movementType: 'RECEIVE', quantity: 50, batchNumber: 'BAT-2590', reference: 'Invoice INV-9844', date: '2026-09-18 04:20 PM', performedBy: 'Suresh Shah' },
+  { id: 'sm-3', drugId: 'd-2', drugName: 'Paracetamol 650mg (Dolo)', movementType: 'DISPENSE', quantity: -18, batchNumber: 'BAT-2605', reference: 'CASE-986920', date: '2026-09-18 11:15 AM', performedBy: 'Suresh Shah' },
+  { id: 'sm-4', drugId: 'd-7', drugName: 'Nitrofurantoin SR 100mg', movementType: 'DISPOSAL', quantity: -5, batchNumber: 'BAT-2550', reference: 'Expired Quarantine Write-Off', date: '2026-09-17 02:00 PM', performedBy: 'Suresh Shah' },
+  { id: 'sm-5', drugId: 'd-4', drugName: 'Bilastine 20mg (Bilaxten)', movementType: 'RETURN', quantity: 5, batchNumber: 'BAT-2580', reference: 'Adverse rash reaction (CASE-98650)', date: '2026-09-16 03:40 PM', performedBy: 'Suresh Shah' },
+];
+
+export const INITIAL_PRESCRIPTIONS: PrescriptionFulfillment[] = [
+  {
+    id: 'rx-f-1',
+    caseId: 'C003-001-190926',
+    patientId: 'pat-1',
+    patientName: 'Mahesh Kumar',
+    mrdNumber: 'MRD-2026-0001',
+    age: 45,
+    gender: 'M',
+    mobile: '9825100001',
+    doctorName: 'Dr. Raj Valaki',
+    consultationDate: '19/09/2026 10:30 AM',
+    allergies: ['Penicillin', 'Sulfa Drugs'],
+    status: 'PHARMACY_PENDING',
+    items: [
+      { id: 'rxi-1', drugId: 'd-3', drugName: 'Mometasone 0.1% Cream', formulation: 'Ointment', dosage: 'Apply thin layer', frequency: '1-0-1', durationDays: 14, prescribedQty: 1, dispensedQty: 1, unitPrice: 145, instructions: 'After bath & at bedtime', isDispensed: false },
+      { id: 'rxi-2', drugId: 'd-4', drugName: 'Bilastine 20mg (Bilaxten)', formulation: 'Tablet', dosage: '1 Tab', frequency: '0-0-1', durationDays: 10, prescribedQty: 10, dispensedQty: 10, unitPrice: 18, instructions: 'Night after food', isDispensed: false },
+      { id: 'rxi-3', drugId: 'd-9', drugName: 'Emollient Moisturizer Lotion', formulation: 'Lotion', dosage: 'Generous application', frequency: '1-1-1', durationDays: 30, prescribedQty: 1, dispensedQty: 1, unitPrice: 280, instructions: 'Apply within 3 mins of water contact', isDispensed: false },
+    ],
+    billing: {
+      subtotal: 605,
+      tax: 30.25,
+      totalPayable: 635.25
+    }
+  },
+  {
+    id: 'rx-f-2',
+    caseId: 'C002-001-190926',
+    patientId: 'pat-7',
+    patientName: 'Priya Desai',
+    mrdNumber: 'MRD-2026-0007',
+    age: 41,
+    gender: 'F',
+    mobile: '9825100007',
+    doctorName: 'Dr. Raj Valaki',
+    consultationDate: '19/09/2026 10:00 AM',
+    allergies: ['Aspirin'],
+    status: 'IN_PROGRESS',
+    items: [
+      { id: 'rxi-4', drugId: 'd-1', drugName: 'Amoxicillin 500mg', formulation: 'Capsule', dosage: '1 Cap', frequency: '1-0-1', durationDays: 5, prescribedQty: 10, dispensedQty: 10, unitPrice: 12, instructions: 'Take after meals', isDispensed: false },
+      { id: 'rxi-5', drugId: 'd-2', drugName: 'Paracetamol 650mg (Dolo)', formulation: 'Tablet', dosage: '1 Tab SOS', frequency: '1-0-1', durationDays: 3, prescribedQty: 6, dispensedQty: 6, unitPrice: 3, instructions: 'For fever or severe pain', isDispensed: false }
+    ],
+    billing: {
+      subtotal: 138,
+      tax: 6.9,
+      totalPayable: 144.9
+    }
+  },
+  {
+    id: 'rx-f-3',
+    caseId: 'C004-001-190926',
+    patientId: 'pat-3',
+    patientName: 'Rekha Patel',
+    mrdNumber: 'MRD-2026-0003',
+    age: 28,
+    gender: 'F',
+    mobile: '9825100003',
+    doctorName: 'Dr. Raj Valaki',
+    consultationDate: '19/09/2026 10:45 AM',
+    allergies: [],
+    status: 'PHARMACY_PENDING',
+    items: [
+      { id: 'rxi-6', drugId: 'd-8', drugName: 'Diacerein 50mg + Glucosamine', formulation: 'Tablet', dosage: '1 Tab', frequency: '1-0-1', durationDays: 30, prescribedQty: 60, dispensedQty: 60, unitPrice: 22, instructions: 'Continuous course for joint support', isDispensed: false }
+    ],
+    billing: {
+      subtotal: 1320,
+      tax: 66,
+      totalPayable: 1386
+    }
+  },
+  {
+    id: 'rx-f-4',
+    caseId: 'C006-001-190926',
+    patientId: 'pat-4',
+    patientName: 'Amit Shah',
+    mrdNumber: 'MRD-2026-0004',
+    age: 55,
+    gender: 'M',
+    mobile: '9825100004',
+    doctorName: 'Dr. Raj Valaki',
+    consultationDate: '19/09/2026 11:00 AM',
+    allergies: [],
+    status: 'PHARMACY_PENDING',
+    items: [
+      { id: 'rxi-7', drugId: 'd-6', drugName: 'Telmisartan 40mg', formulation: 'Tablet', dosage: '1 Tab', frequency: '1-0-0', durationDays: 30, prescribedQty: 30, dispensedQty: 30, unitPrice: 9, instructions: 'Morning empty stomach or after breakfast', isDispensed: false }
+    ],
+    billing: {
+      subtotal: 270,
+      tax: 13.5,
+      totalPayable: 283.5
+    }
+  },
+  {
+    id: 'rx-f-5',
+    caseId: 'C001-001-190926',
+    patientId: 'pat-6',
+    patientName: 'Rahul Sharma',
+    mrdNumber: 'MRD-2026-0006',
+    age: 38,
+    gender: 'M',
+    mobile: '9825100006',
+    doctorName: 'Dr. Raj Valaki',
+    consultationDate: '19/09/2026 09:30 AM',
+    allergies: [],
+    status: 'DISPENSED',
+    items: [
+      { id: 'rxi-8', drugId: 'd-5', drugName: 'Levocetirizine 5mg', formulation: 'Tablet', dosage: '1 Tab', frequency: '0-0-1', durationDays: 7, prescribedQty: 7, dispensedQty: 7, unitPrice: 5, instructions: 'Bedtime', isDispensed: true, batchAllocations: [{ batchNumber: 'BAT-2575', qty: 7 }] }
+    ],
+    billing: {
+      subtotal: 35,
+      tax: 1.75,
+      totalPayable: 36.75,
+      paymentMode: 'CARD_UPI',
+      invoiceNumber: 'INV-PHARM-26001',
+      dispensedAt: '19/09/2026 09:50 AM',
+      dispensedBy: 'Suresh Shah'
+    }
+  }
+];
+
+interface PharmacyState {
+  prescriptions: PrescriptionFulfillment[];
+  batches: DrugBatch[];
+  movements: StockMovement[];
+  getPrescriptionByCaseId: (caseId: string) => PrescriptionFulfillment | undefined;
+  dispensePrescription: (
+    caseId: string,
+    itemsToDispense: Array<{ itemId: string; dispensedQty: number }>,
+    paymentMode: 'CASH' | 'CARD_UPI'
+  ) => { invoiceNumber: string };
+  addStock: (drugId: string, drugName: string, batchNumber: string, expiryDate: string, quantity: number, supplier: string) => void;
+  addNewDrugMaster: (drug: Omit<DrugInventoryItem, 'id' | 'stock'> & { initialStock?: number; batchNumber?: string; expiryDate?: string; supplier?: string }) => void;
+  processReturn: (caseId: string, drugId: string, batchNumber: string, quantity: number, reason: string) => void;
+  disposeBatch: (batchId: string, reason: string) => void;
+}
+
+export const usePharmacyStore = create<PharmacyState>((set, get) => ({
+  prescriptions: INITIAL_PRESCRIPTIONS,
+  batches: INITIAL_DRUG_BATCHES,
+  movements: INITIAL_STOCK_MOVEMENTS,
+
+  getPrescriptionByCaseId: (caseId) => {
+    return get().prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+  },
+
+  dispensePrescription: (caseId, itemsToDispense, paymentMode) => {
+    const state = get();
+    const prescription = state.prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+    const invoiceNumber = `INV-PHARM-${Math.floor(10000 + Math.random() * 90000)}`;
+    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    let updatedBatches = [...state.batches];
+    let newMovements: StockMovement[] = [];
+
+    // Process each item with FEFO batch deduction
+    const updatedItems = (prescription?.items || []).map(item => {
+      const match = itemsToDispense.find(i => i.itemId === item.id);
+      if (!match || match.dispensedQty <= 0) return item;
+
+      let remainingToDeduct = match.dispensedQty;
+      let batchAllocations: Array<{ batchNumber: string; qty: number }> = [];
+
+      // FEFO Sort: Find active batches for this drug sorted by earliest expiry
+      const drugBatches = updatedBatches
+        .filter(b => b.drugId === item.drugId && !b.isQuarantined && b.stockQuantity > 0)
+        .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+      for (const batch of drugBatches) {
+        if (remainingToDeduct <= 0) break;
+        const deductFromThis = Math.min(batch.stockQuantity, remainingToDeduct);
+        batch.stockQuantity -= deductFromThis;
+        remainingToDeduct -= deductFromThis;
+        batchAllocations.push({ batchNumber: batch.batchNumber, qty: deductFromThis });
+
+        newMovements.push({
+          id: `sm-${Date.now()}-${Math.random()}`,
+          drugId: item.drugId,
+          drugName: item.drugName,
+          movementType: 'DISPENSE',
+          quantity: -deductFromThis,
+          batchNumber: batch.batchNumber,
+          reference: caseId,
+          date: nowTime,
+          performedBy: 'Suresh Shah'
+        });
+      }
+
+      // Sync overall inventory stock
+      useInventoryStore.getState().updateStock(item.drugId, -match.dispensedQty);
+
+      return {
+        ...item,
+        isDispensed: true,
+        dispensedQty: match.dispensedQty,
+        batchAllocations
+      };
+    });
+
+    // Calculate subtotal, 5% GST tax, total
+    const subtotal = updatedItems.reduce((sum, item) => sum + (item.isDispensed ? item.dispensedQty * item.unitPrice : 0), 0);
+    const tax = parseFloat((subtotal * 0.05).toFixed(2));
+    const totalPayable = parseFloat((subtotal + tax).toFixed(2));
+
+    set(s => ({
+      batches: updatedBatches,
+      movements: [...newMovements, ...s.movements],
+      prescriptions: s.prescriptions.map(p => p.caseId.toLowerCase() === caseId.toLowerCase() ? {
+        ...p,
+        status: 'DISPENSED',
+        items: updatedItems,
+        billing: {
+          subtotal,
+          tax,
+          totalPayable,
+          paymentMode,
+          invoiceNumber,
+          dispensedAt: nowTime,
+          dispensedBy: 'Suresh Shah'
+        }
+      } : p)
+    }));
+
+    // Update queue entry stage to COMPLETED / BILLING_PENDING
+    const queueStore = useQueueStore.getState();
+    const entry = queueStore.queue.find(q => q.caseNumber.toLowerCase() === caseId.toLowerCase());
+    if (entry) {
+      queueStore.updateStatus(entry.id, 'COMPLETED');
+    }
+
+    return { invoiceNumber };
+  },
+
+  addStock: (drugId, drugName, batchNumber, expiryDate, quantity, supplier) => {
+    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const newBatch: DrugBatch = {
+      id: `b-${Date.now()}`,
+      drugId,
+      drugName,
+      batchNumber,
+      expiryDate,
+      stockQuantity: quantity,
+      unitCost: 10,
+      supplier
+    };
+
+    const newMovement: StockMovement = {
+      id: `sm-${Date.now()}`,
+      drugId,
+      drugName,
+      movementType: 'RECEIVE',
+      quantity,
+      batchNumber,
+      reference: `Supplier Delivery (${supplier})`,
+      date: nowTime,
+      performedBy: 'Suresh Shah'
+    };
+
+    // Update inventory item stock
+    useInventoryStore.getState().updateStock(drugId, quantity);
+
+    set(s => ({
+      batches: [newBatch, ...s.batches],
+      movements: [newMovement, ...s.movements]
+    }));
+  },
+
+  addNewDrugMaster: (drug) => {
+    const newId = `d-${Date.now()}`;
+    const initialQty = drug.initialStock || 0;
+
+    const newDrugItem: DrugInventoryItem = {
+      id: newId,
+      name: drug.name,
+      genericName: drug.genericName,
+      formulation: drug.formulation,
+      stock: initialQty,
+      reorderLevel: drug.reorderLevel,
+      unitPrice: drug.unitPrice,
+      alternatives: drug.alternatives || []
+    };
+
+    // Add to inventory store
+    useInventoryStore.setState(s => ({
+      inventory: [newDrugItem, ...s.inventory]
+    }));
+
+    if (initialQty > 0 && drug.batchNumber && drug.expiryDate) {
+      get().addStock(newId, drug.name, drug.batchNumber, drug.expiryDate, initialQty, drug.supplier || 'Standard Distributor');
+    }
+  },
+
+  processReturn: (caseId, drugId, batchNumber, quantity, reason) => {
+    const state = get();
+    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const batch = state.batches.find(b => b.batchNumber === batchNumber);
+    const drugName = batch?.drugName || 'Medication';
+
+    // Re-credit batch
+    const updatedBatches = state.batches.map(b => b.batchNumber === batchNumber ? { ...b, stockQuantity: b.stockQuantity + quantity } : b);
+
+    // Update inventory item
+    useInventoryStore.getState().updateStock(drugId, quantity);
+
+    // Log return movement
+    const returnMovement: StockMovement = {
+      id: `sm-${Date.now()}`,
+      drugId,
+      drugName,
+      movementType: 'RETURN',
+      quantity,
+      batchNumber,
+      reference: `Return: ${caseId} (${reason})`,
+      date: nowTime,
+      performedBy: 'Suresh Shah'
+    };
+
+    // Auto-log Special Note to Patient Record
+    const patientStore = usePatientStore.getState();
+    const targetPrescription = state.prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+    if (targetPrescription) {
+      const patient = patientStore.patients.find(p => p.id === targetPrescription.patientId);
+      if (patient) {
+        const specialNote = `${new Date().toLocaleDateString('en-GB')}/Pharmacy Return: ${drugName} (Qty: ${quantity}) — ${reason}`;
+        patientStore.updatePatient(patient.id, {
+          specialNotes: [...(patient.specialNotes || []), specialNote]
+        });
+      }
+    }
+
+    set(s => ({
+      batches: updatedBatches,
+      movements: [returnMovement, ...s.movements]
+    }));
+  },
+
+  disposeBatch: (batchId, reason) => {
+    const state = get();
+    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const batch = state.batches.find(b => b.id === batchId);
+    if (!batch) return;
+
+    const disposedQty = batch.stockQuantity;
+    useInventoryStore.getState().updateStock(batch.drugId, -disposedQty);
+
+    const disposalMovement: StockMovement = {
+      id: `sm-${Date.now()}`,
+      drugId: batch.drugId,
+      drugName: batch.drugName,
+      movementType: 'DISPOSAL',
+      quantity: -disposedQty,
+      batchNumber: batch.batchNumber,
+      reference: `Quarantine Write-Off (${reason})`,
+      date: nowTime,
+      performedBy: 'Suresh Shah'
+    };
+
+    set(s => ({
+      batches: s.batches.map(b => b.id === batchId ? { ...b, isQuarantined: true, stockQuantity: 0 } : b),
+      movements: [disposalMovement, ...s.movements]
+    }));
+  }
+}));
+
+// ============================================================
+// Admin & Enterprise Governance Module
+// ============================================================
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: 'RECEPTION' | 'NURSING' | 'MEDICAL' | 'ADMIN';
+  designation: string;
+  email: string;
+  phone: string;
+  salary: number;
+  overtimeRate: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  joinedDate: string;
+  shift: string;
+  licenseNumber?: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  staffId: string;
+  staffName: string;
+  date: string;
+  checkIn: string;
+  checkOut: string;
+  hoursWorked: number;
+  overtimeHours: number;
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY';
+}
+
+export interface ProcedureMaster {
+  id: string;
+  name: string;
+  code: string;
+  category: 'Dermatology' | 'General Surgery' | 'Orthopedics' | 'ENT' | 'Nursing / Minor';
+  basePrice: number;
+  durationMins: number;
+  requiresConsent: boolean;
+  requiresNursing: boolean;
+  requiresRoom: boolean;
+  linkedConsumables: Array<{ drugId: string; drugName: string; quantity: number }>;
+  preInstructions: string;
+  postInstructions: string;
+}
+
+export interface LabTestMaster {
+  id: string;
+  name: string;
+  category: 'Biochemistry' | 'Hematology' | 'Pathology' | 'Microbiology' | 'Radiology';
+  specimenTube: 'EDTA (Purple)' | 'Serum Gel (Yellow)' | 'Fluoride (Grey)' | 'Plain (Red)' | 'Urine Sterile Container';
+  price: number;
+  turnaroundHours: number;
+  parameters: Array<{
+    name: string;
+    unit: string;
+    maleMin: number;
+    maleMax: number;
+    femaleMin: number;
+    femaleMax: number;
+    criticalLow?: number;
+    criticalHigh?: number;
+  }>;
+}
+
+export interface ConsentTemplate {
+  id: string;
+  title: string;
+  category: string;
+  language: 'English' | 'Hindi' | 'Gujarati';
+  content: string;
+  variables: string[];
+  isActive: boolean;
+  lastUpdated: string;
+}
+
+export interface ClinicExpense {
+  id: string;
+  title: string;
+  category: 'Rent & Lease' | 'Bio-Medical Waste' | 'IT & Utilities' | 'Medical Consumables' | 'Maintenance & Facility' | 'Marketing';
+  amount: number;
+  date: string;
+  paymentMethod: 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE';
+  receiptNumber: string;
+  approvedBy: string;
+  notes?: string;
+}
+
+export interface SecuritySession {
+  id: string;
+  userId: string;
+  userName: string;
+  role: 'ADMIN' | 'DOCTOR' | 'NURSING' | 'RECEPTION' | 'MEDICAL';
+  deviceName: string;
+  ipAddress: string;
+  location: string;
+  riskScore: number;
+  loginTime: string;
+  status: 'ACTIVE' | 'TERMINATED';
+}
+
+export interface SecurityEvent {
+  id: string;
+  timestamp: string;
+  eventType: 'AUTH_SUCCESS' | 'AUTH_FAILURE' | 'ANOMALOUS_ACCESS' | 'LOCK_PREEMPTION' | 'KEY_ROTATION' | 'THREAT_BLOCKED';
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  sourceIp: string;
+  description: string;
+  actionTaken: string;
+}
+
+export interface NotificationTemplate {
+  id: string;
+  title: string;
+  triggerEvent: 'APPOINTMENT_BOOKED' | 'REMINDER_24H' | 'FOLLOWUP_REMINDER' | 'APPOINTMENT_CANCELLED' | 'GOOGLE_REVIEW_REQUEST';
+  channel: 'SMS' | 'WHATSAPP' | 'BOTH';
+  content: string;
+  isEnabled: boolean;
+}
+
+export interface ClinicSettings {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  gstNumber: string;
+  regNumber: string;
+  upiVpa: string;
+  merchantName: string;
+  prescriptionLayout: {
+    showHeader: boolean;
+    showDoctorDetails: boolean;
+    showPatientVitals: boolean;
+    showDrugScheduleTable: boolean;
+    showLabOrders: boolean;
+    showSignatureBlock: boolean;
+    topMarginMm: number;
+    bottomMarginMm: number;
+  };
+}
+
+export interface HolidaySchedule {
+  id: string;
+  date: string;
+  name: string;
+  isRecurringYearly: boolean;
+}
+
+export const INITIAL_STAFF: StaffMember[] = [
+  { id: 'st-1', name: 'Bhavna Desai', role: 'NURSING', designation: 'Staff Triage Nurse', email: 'bhavna.desai@medflow.health', phone: '+91 98251 33410', salary: 38000, overtimeRate: 350, status: 'ACTIVE', joinedDate: '2024-03-15', shift: '08:00 AM – 04:00 PM', licenseNumber: 'GNC-78412' },
+  { id: 'st-2', name: 'Suresh Shah', role: 'MEDICAL', designation: 'Senior Dispensary Officer', email: 'suresh.shah@medflow.health', phone: '+91 98251 44810', salary: 45000, overtimeRate: 400, status: 'ACTIVE', joinedDate: '2023-08-01', shift: '08:00 AM – 04:00 PM', licenseNumber: 'PHARM-GUJ-88219' },
+  { id: 'st-3', name: 'Pooja Patel', role: 'RECEPTION', designation: 'Front Desk Lead', email: 'pooja.patel@medflow.health', phone: '+91 98251 11200', salary: 28000, overtimeRate: 250, status: 'ACTIVE', joinedDate: '2025-01-10', shift: '08:30 AM – 04:30 PM' },
+  { id: 'st-4', name: 'Amit Dave', role: 'ADMIN', designation: 'Clinic Operations Coordinator', email: 'amit.dave@medflow.health', phone: '+91 98251 99011', salary: 55000, overtimeRate: 500, status: 'ACTIVE', joinedDate: '2022-11-20', shift: '09:00 AM – 06:00 PM' },
+];
+
+export const INITIAL_ATTENDANCE: AttendanceRecord[] = [
+  { id: 'att-1', staffId: 'st-1', staffName: 'Bhavna Desai', date: '2026-09-19', checkIn: '07:55 AM', checkOut: '04:10 PM', hoursWorked: 8.25, overtimeHours: 0.25, status: 'PRESENT' },
+  { id: 'att-2', staffId: 'st-2', staffName: 'Suresh Shah', date: '2026-09-19', checkIn: '08:02 AM', checkOut: '04:30 PM', hoursWorked: 8.5, overtimeHours: 0.5, status: 'PRESENT' },
+  { id: 'att-3', staffId: 'st-3', staffName: 'Pooja Patel', date: '2026-09-19', checkIn: '08:28 AM', checkOut: '04:30 PM', hoursWorked: 8.0, overtimeHours: 0.0, status: 'PRESENT' },
+  { id: 'att-4', staffId: 'st-4', staffName: 'Amit Dave', date: '2026-09-19', checkIn: '08:50 AM', checkOut: '06:15 PM', hoursWorked: 9.4, overtimeHours: 1.4, status: 'PRESENT' },
+];
+
+export const INITIAL_PROCEDURES: ProcedureMaster[] = [
+  {
+    id: 'proc-1',
+    name: 'Chemical Peel (Glycolic 35%)',
+    code: 'PROC-DERM-01',
+    category: 'Dermatology',
+    basePrice: 1500,
+    durationMins: 30,
+    requiresConsent: true,
+    requiresNursing: true,
+    requiresRoom: true,
+    linkedConsumables: [
+      { drugId: 'd-9', drugName: 'Emollient Moisturizer Lotion', quantity: 1 }
+    ],
+    preInstructions: 'Avoid retinoids and direct sunlight for 48 hours prior.',
+    postInstructions: 'Apply broad-spectrum SPF 50 sunscreen twice daily. Do not pick peeling skin.'
+  },
+  {
+    id: 'proc-2',
+    name: 'Skin Lesion Excision & Biopsy',
+    code: 'PROC-SURG-02',
+    category: 'General Surgery',
+    basePrice: 2800,
+    durationMins: 45,
+    requiresConsent: true,
+    requiresNursing: true,
+    requiresRoom: true,
+    linkedConsumables: [
+      { drugId: 'd-1', drugName: 'Amoxicillin 500mg', quantity: 6 }
+    ],
+    preInstructions: 'Discontinue blood thinners 3 days prior with physician approval.',
+    postInstructions: 'Keep incision dry for 48 hours. Return in 7 days for suture removal.'
+  },
+  {
+    id: 'proc-3',
+    name: 'Intra-Articular Knee Injection',
+    code: 'PROC-ORTHO-03',
+    category: 'Orthopedics',
+    basePrice: 2200,
+    durationMins: 20,
+    requiresConsent: true,
+    requiresNursing: true,
+    requiresRoom: true,
+    linkedConsumables: [
+      { drugId: 'd-8', drugName: 'Diacerein 50mg + Glucosamine', quantity: 1 }
+    ],
+    preInstructions: 'No strenuous lower limb exertion on procedure day.',
+    postInstructions: 'Ice application 15 mins every 3 hours. Limit weight-bearing for 24h.'
+  },
+  {
+    id: 'proc-4',
+    name: 'Ear Syringing & Cerumen Removal',
+    code: 'PROC-ENT-04',
+    category: 'ENT',
+    basePrice: 650,
+    durationMins: 15,
+    requiresConsent: false,
+    requiresNursing: true,
+    requiresRoom: false,
+    linkedConsumables: [],
+    preInstructions: 'Instill wax-softening drops 3 days prior to appointment.',
+    postInstructions: 'Keep ears dry for 24 hours. Report dizziness immediately.'
+  },
+  {
+    id: 'proc-5',
+    name: 'Aseptic Wound Dressing (Large)',
+    code: 'PROC-NURS-05',
+    category: 'Nursing / Minor',
+    basePrice: 400,
+    durationMins: 15,
+    requiresConsent: false,
+    requiresNursing: true,
+    requiresRoom: false,
+    linkedConsumables: [
+      { drugId: 'd-3', drugName: 'Mometasone 0.1% Cream', quantity: 1 }
+    ],
+    preInstructions: 'None.',
+    postInstructions: 'Change dressing daily or if soiled.'
+  }
+];
+
+export const INITIAL_LAB_TESTS: LabTestMaster[] = [
+  {
+    id: 'lab-1',
+    name: 'Complete Blood Count (CBC) with ESR',
+    category: 'Hematology',
+    specimenTube: 'EDTA (Purple)',
+    price: 450,
+    turnaroundHours: 4,
+    parameters: [
+      { name: 'Hemoglobin', unit: 'g/dL', maleMin: 13.0, maleMax: 17.5, femaleMin: 12.0, femaleMax: 15.5, criticalLow: 7.0, criticalHigh: 20.0 },
+      { name: 'Total WBC Count', unit: 'cells/mcL', maleMin: 4000, maleMax: 11000, femaleMin: 4000, femaleMax: 11000, criticalLow: 2000, criticalHigh: 30000 },
+      { name: 'Platelet Count', unit: 'lakh/mcL', maleMin: 1.5, maleMax: 4.5, femaleMin: 1.5, femaleMax: 4.5, criticalLow: 0.5, criticalHigh: 10.0 }
+    ]
+  },
+  {
+    id: 'lab-2',
+    name: 'Fasting Blood Sugar (FBS) & HbA1c',
+    category: 'Biochemistry',
+    specimenTube: 'Fluoride (Grey)',
+    price: 600,
+    turnaroundHours: 6,
+    parameters: [
+      { name: 'Fasting Glucose', unit: 'mg/dL', maleMin: 70, maleMax: 100, femaleMin: 70, femaleMax: 100, criticalLow: 50, criticalHigh: 400 },
+      { name: 'HbA1c', unit: '%', maleMin: 4.0, maleMax: 5.6, femaleMin: 4.0, femaleMax: 5.6, criticalHigh: 12.0 }
+    ]
+  },
+  {
+    id: 'lab-3',
+    name: 'Lipid Profile Screen',
+    category: 'Biochemistry',
+    specimenTube: 'Serum Gel (Yellow)',
+    price: 850,
+    turnaroundHours: 8,
+    parameters: [
+      { name: 'Total Cholesterol', unit: 'mg/dL', maleMin: 125, maleMax: 200, femaleMin: 125, femaleMax: 200 },
+      { name: 'Triglycerides', unit: 'mg/dL', maleMin: 50, maleMax: 150, femaleMin: 50, femaleMax: 150 },
+      { name: 'HDL Cholesterol', unit: 'mg/dL', maleMin: 40, maleMax: 60, femaleMin: 50, femaleMax: 70 }
+    ]
+  },
+  {
+    id: 'lab-4',
+    name: 'Serum Creatinine & eGFR',
+    category: 'Biochemistry',
+    specimenTube: 'Serum Gel (Yellow)',
+    price: 350,
+    turnaroundHours: 3,
+    parameters: [
+      { name: 'Serum Creatinine', unit: 'mg/dL', maleMin: 0.7, maleMax: 1.3, femaleMin: 0.6, femaleMax: 1.1, criticalHigh: 4.0 }
+    ]
+  }
+];
+
+export const INITIAL_CONSENT_TEMPLATES: ConsentTemplate[] = [
+  {
+    id: 'cons-1',
+    title: 'Informed Consent for Minor Surgical Excision & Biopsy',
+    category: 'Surgery',
+    language: 'English',
+    content: 'I, [Patient Name], bearing MRD Number [MRD Number], hereby give full voluntary consent to [Doctor Name] and the clinical team at [Clinic Name] to perform [Procedure Name] on date [Date]. The risks, benefits, and alternative treatment options have been thoroughly explained to me.',
+    variables: ['[Patient Name]', '[MRD Number]', '[Doctor Name]', '[Clinic Name]', '[Procedure Name]', '[Date]'],
+    isActive: true,
+    lastUpdated: '2026-09-01'
+  },
+  {
+    id: 'cons-2',
+    title: 'Dermatological Chemical Peel & Laser Consent',
+    category: 'Dermatology',
+    language: 'English',
+    content: 'I, [Patient Name], confirm that I have disclosed all active allergies and topical medications. I consent to undergoing [Procedure Name] performed by [Doctor Name]. I understand temporary erythema, minor scaling, and transient hyperpigmentation may occur.',
+    variables: ['[Patient Name]', '[Doctor Name]', '[Procedure Name]'],
+    isActive: true,
+    lastUpdated: '2026-08-20'
+  },
+  {
+    id: 'cons-3',
+    title: 'Joint Infiltration & Aspiration Consent (ગુજરાતી)',
+    category: 'Orthopedics',
+    language: 'Gujarati',
+    content: 'હું, [Patient Name], [Doctor Name] દ્વારા કરવામાં આવતી [Procedure Name] પ્રક્રિયા માટે મારી સ્વેચ્છાએ મંજૂરી આપું છું. પ્રક્રિયાના જોખમો અને ફાયદા મને મારી માતૃભાષામાં સમજાવવામાં આવ્યા છે.',
+    variables: ['[Patient Name]', '[Doctor Name]', '[Procedure Name]'],
+    isActive: true,
+    lastUpdated: '2026-09-05'
+  }
+];
+
+export const INITIAL_EXPENSES: ClinicExpense[] = [
+  { id: 'exp-1', title: 'Clinical Facility Rent (September 2026)', category: 'Rent & Lease', amount: 65000, date: '2026-09-01', paymentMethod: 'BANK_TRANSFER', receiptNumber: 'REC-RENT-2609', approvedBy: 'Superadmin (Medical Director)', notes: 'Premises Plot 42 Ellis Bridge' },
+  { id: 'exp-2', title: 'Bio-Medical Waste Incineration Contract', category: 'Bio-Medical Waste', amount: 4500, date: '2026-09-05', paymentMethod: 'BANK_TRANSFER', receiptNumber: 'REC-BMW-4102', approvedBy: 'Amit Dave', notes: 'Envirocare Bio Waste Solutions' },
+  { id: 'exp-3', title: 'High-Speed Fiber Lease & HIPAA Cloud Backup', category: 'IT & Utilities', amount: 3200, date: '2026-09-08', paymentMethod: 'UPI', receiptNumber: 'TXN-UPI-98210', approvedBy: 'Amit Dave', notes: 'Airtel Enterprise Fiber 300Mbps' },
+  { id: 'exp-4', title: 'Diagnostic Tubes, Needles & PPE Consumables', category: 'Medical Consumables', amount: 14800, date: '2026-09-12', paymentMethod: 'BANK_TRANSFER', receiptNumber: 'INV-SURG-8819', approvedBy: 'Superadmin (Medical Director)', notes: 'BD Vacutainer Supplies' },
+  { id: 'exp-5', title: 'Torrent Power Electricity Utility Bill', category: 'IT & Utilities', amount: 12400, date: '2026-09-15', paymentMethod: 'UPI', receiptNumber: 'TORRENT-77182', approvedBy: 'Amit Dave', notes: 'Monthly OPD Cabin & AC Meter' }
+];
+
+export const INITIAL_SECURITY_SESSIONS: SecuritySession[] = [
+  { id: 'sec-1', userId: 'usr-1', userName: 'Dr. Raj Valaki', role: 'DOCTOR', deviceName: 'Apple iPad Pro (Consultation Cabin 1)', ipAddress: '192.168.10.101', location: 'Ahmedabad, Gujarat', riskScore: 8, loginTime: '19/09/2026, 08:30 AM', status: 'ACTIVE' },
+  { id: 'sec-2', userId: 'usr-2', userName: 'Bhavna Desai', role: 'NURSING', deviceName: 'HP All-in-One (Triage Station)', ipAddress: '192.168.10.104', location: 'Ahmedabad, Gujarat', riskScore: 12, loginTime: '19/09/2026, 07:55 AM', status: 'ACTIVE' },
+  { id: 'sec-3', userId: 'usr-3', userName: 'Suresh Shah', role: 'MEDICAL', deviceName: 'Dell Optiplex (Pharmacy POS Counter)', ipAddress: '192.168.10.108', location: 'Ahmedabad, Gujarat', riskScore: 5, loginTime: '19/09/2026, 08:02 AM', status: 'ACTIVE' },
+  { id: 'sec-4', userId: 'usr-4', userName: 'Pooja Patel', role: 'RECEPTION', deviceName: 'Lenovo ThinkCentre (Front Desk 01)', ipAddress: '192.168.10.102', location: 'Ahmedabad, Gujarat', riskScore: 14, loginTime: '19/09/2026, 08:28 AM', status: 'ACTIVE' },
+  { id: 'sec-5', userId: 'usr-ext', userName: 'External Node Request', role: 'RECEPTION', deviceName: 'Unknown Chrome / Linux', ipAddress: '185.220.101.5', location: 'Tor Exit Node (Frankfurt, DE)', riskScore: 94, loginTime: '19/09/2026, 11:15 AM', status: 'TERMINATED' }
+];
+
+export const INITIAL_SECURITY_EVENTS: SecurityEvent[] = [
+  { id: 'ev-1', timestamp: '19/09/2026 11:15:20 AM', eventType: 'THREAT_BLOCKED', severity: 'CRITICAL', sourceIp: '185.220.101.5', description: 'Tor Exit Node anomalous API probing against /api/patients', actionTaken: 'Connection Dropped & IP Auto-Blacklisted' },
+  { id: 'ev-2', timestamp: '19/09/2026 08:30:10 AM', eventType: 'AUTH_SUCCESS', severity: 'LOW', sourceIp: '192.168.10.101', description: 'Physician login Dr. Raj Valaki via Cabin 1 iPad (MFA OK)', actionTaken: 'Session Token Issued' },
+  { id: 'ev-3', timestamp: '19/09/2026 08:02:45 AM', eventType: 'AUTH_SUCCESS', severity: 'LOW', sourceIp: '192.168.10.108', description: 'Dispensary login Suresh Shah via POS Counter (MFA OK)', actionTaken: 'Session Token Issued' },
+  { id: 'ev-4', timestamp: '18/09/2026 06:00:00 PM', eventType: 'KEY_ROTATION', severity: 'MEDIUM', sourceIp: '127.0.0.1', description: 'Automated 30-day cryptographic JWT signing secret rotation', actionTaken: 'HMAC-SHA256 Re-keyed' },
+  { id: 'ev-5', timestamp: '18/09/2026 02:40:12 PM', eventType: 'LOCK_PREEMPTION', severity: 'MEDIUM', sourceIp: '192.168.10.105', description: 'Admin released orphaned session lock on Case C004-001', actionTaken: 'Lock Transferred to Billing Desk' }
+];
+
+export const INITIAL_NOTIFICATION_TEMPLATES: NotificationTemplate[] = [
+  { id: 'notif-1', title: 'Instant Appointment Confirmation', triggerEvent: 'APPOINTMENT_BOOKED', channel: 'BOTH', content: 'Dear [Patient Name], your OPD consultation with [Doctor Name] is confirmed at [Clinic Name] on [Appointment Date] at [Appointment Time]. Token: [Token]. View queue live: [Live Link]', isEnabled: true },
+  { id: 'notif-2', title: '24-Hour Advance Appointment Reminder', triggerEvent: 'REMINDER_24H', channel: 'WHATSAPP', content: 'Reminder: Hello [Patient Name], you have an appointment with [Doctor Name] tomorrow at [Appointment Time]. Please carry your previous medical records and arrive 10 mins early.', isEnabled: true },
+  { id: 'notif-3', title: 'Follow-Up Due Clinical Reminder', triggerEvent: 'FOLLOWUP_REMINDER', channel: 'WHATSAPP', content: 'Hello [Patient Name], your scheduled follow-up consultation with [Doctor Name] is due on [Follow-Up Date]. Reply to this message to reserve your slot.', isEnabled: true },
+  { id: 'notif-4', title: 'Post-Consultation Google Review Request', triggerEvent: 'GOOGLE_REVIEW_REQUEST', channel: 'SMS', content: 'Thank you for visiting [Clinic Name]. How was your consultation with [Doctor Name]? Please take 30 seconds to rate us: https://g.page/r/medflow/review', isEnabled: true }
+];
+
+export const INITIAL_CLINIC_SETTINGS: ClinicSettings = {
+  name: 'MedFlow Multispeciality Outpatient Clinic',
+  address: 'Plot 42, Ellis Bridge Medical Enclave, Ahmedabad, Gujarat 380006',
+  phone: '+91 79 4002 8800',
+  email: 'contact@medflow.health',
+  gstNumber: '24AAACM4982K1Z5',
+  regNumber: 'CLINIC-GUJ-MED-2023-09',
+  upiVpa: 'medflow.clinic@okaxis',
+  merchantName: 'MedFlow Healthcare LLP',
+  prescriptionLayout: {
+    showHeader: true,
+    showDoctorDetails: true,
+    showPatientVitals: true,
+    showDrugScheduleTable: true,
+    showLabOrders: true,
+    showSignatureBlock: true,
+    topMarginMm: 35,
+    bottomMarginMm: 25
+  }
+};
+
+export const INITIAL_HOLIDAYS: HolidaySchedule[] = [
+  { id: 'hol-1', date: '2026-10-02', name: 'Gandhi Jayanti', isRecurringYearly: true },
+  { id: 'hol-2', date: '2026-10-20', name: 'Diwali Festive Holiday', isRecurringYearly: false },
+  { id: 'hol-3', date: '2026-10-21', name: 'New Year (Vikram Samvat)', isRecurringYearly: false },
+  { id: 'hol-4', date: '2026-12-25', name: 'Christmas Day', isRecurringYearly: true }
+];
+
+interface AdminState {
+  staff: StaffMember[];
+  attendance: AttendanceRecord[];
+  procedures: ProcedureMaster[];
+  labTests: LabTestMaster[];
+  consentTemplates: ConsentTemplate[];
+  expenses: ClinicExpense[];
+  sessions: SecuritySession[];
+  securityEvents: SecurityEvent[];
+  notifications: NotificationTemplate[];
+  settings: ClinicSettings;
+  holidays: HolidaySchedule[];
+  isPanicLockdown: boolean;
+
+  // Staff & HRMS
+  addStaff: (member: Omit<StaffMember, 'id' | 'joinedDate'>) => void;
+  updateStaff: (id: string, updates: Partial<StaffMember>) => void;
+  toggleStaffStatus: (id: string) => void;
+  logAttendance: (record: Omit<AttendanceRecord, 'id'>) => void;
+
+  // Procedures
+  addProcedure: (proc: Omit<ProcedureMaster, 'id'>) => void;
+  updateProcedure: (id: string, updates: Partial<ProcedureMaster>) => void;
+  deleteProcedure: (id: string) => void;
+
+  // Lab Tests
+  addLabTest: (test: Omit<LabTestMaster, 'id'>) => void;
+  updateLabTest: (id: string, updates: Partial<LabTestMaster>) => void;
+
+  // Expenses
+  addExpense: (expense: Omit<ClinicExpense, 'id'>) => void;
+
+  // Consent & Notifications
+  updateConsentTemplate: (id: string, content: string) => void;
+  toggleNotificationTemplate: (id: string) => void;
+
+  // Settings & Security
+  updateSettings: (settings: Partial<ClinicSettings>) => void;
+  terminateSession: (sessionId: string) => void;
+  triggerPanicLockdown: (activate: boolean) => void;
+
+  // Holidays
+  addHoliday: (holiday: Omit<HolidaySchedule, 'id'>) => void;
+  removeHoliday: (id: string) => void;
+}
+
+export const useAdminStore = create<AdminState>((set) => ({
+  staff: INITIAL_STAFF,
+  attendance: INITIAL_ATTENDANCE,
+  procedures: INITIAL_PROCEDURES,
+  labTests: INITIAL_LAB_TESTS,
+  consentTemplates: INITIAL_CONSENT_TEMPLATES,
+  expenses: INITIAL_EXPENSES,
+  sessions: INITIAL_SECURITY_SESSIONS,
+  securityEvents: INITIAL_SECURITY_EVENTS,
+  notifications: INITIAL_NOTIFICATION_TEMPLATES,
+  settings: INITIAL_CLINIC_SETTINGS,
+  holidays: INITIAL_HOLIDAYS,
+  isPanicLockdown: false,
+
+  addStaff: (member) => {
+    const newMember: StaffMember = {
+      ...member,
+      id: `st-${Date.now()}`,
+      joinedDate: new Date().toISOString().split('T')[0]
+    };
+    set(s => ({ staff: [newMember, ...s.staff] }));
+  },
+
+  updateStaff: (id, updates) => {
+    set(s => ({ staff: s.staff.map(m => m.id === id ? { ...m, ...updates } : m) }));
+  },
+
+  toggleStaffStatus: (id) => {
+    set(s => ({
+      staff: s.staff.map(m => m.id === id ? {
+        ...m,
+        status: m.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+      } : m)
+    }));
+  },
+
+  logAttendance: (record) => {
+    const newRecord: AttendanceRecord = {
+      ...record,
+      id: `att-${Date.now()}`
+    };
+    set(s => ({ attendance: [newRecord, ...s.attendance] }));
+  },
+
+  addProcedure: (proc) => {
+    const newProc: ProcedureMaster = {
+      ...proc,
+      id: `proc-${Date.now()}`
+    };
+    set(s => ({ procedures: [newProc, ...s.procedures] }));
+  },
+
+  updateProcedure: (id, updates) => {
+    set(s => ({ procedures: s.procedures.map(p => p.id === id ? { ...p, ...updates } : p) }));
+  },
+
+  deleteProcedure: (id) => {
+    set(s => ({ procedures: s.procedures.filter(p => p.id !== id) }));
+  },
+
+  addLabTest: (test) => {
+    const newTest: LabTestMaster = {
+      ...test,
+      id: `lab-${Date.now()}`
+    };
+    set(s => ({ labTests: [newTest, ...s.labTests] }));
+  },
+
+  updateLabTest: (id, updates) => {
+    set(s => ({ labTests: s.labTests.map(t => t.id === id ? { ...t, ...updates } : t) }));
+  },
+
+  addExpense: (expense) => {
+    const newExpense: ClinicExpense = {
+      ...expense,
+      id: `exp-${Date.now()}`
+    };
+    set(s => ({ expenses: [newExpense, ...s.expenses] }));
+  },
+
+  updateConsentTemplate: (id, content) => {
+    set(s => ({
+      consentTemplates: s.consentTemplates.map(c => c.id === id ? {
+        ...c,
+        content,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      } : c)
+    }));
+  },
+
+  toggleNotificationTemplate: (id) => {
+    set(s => ({
+      notifications: s.notifications.map(n => n.id === id ? {
+        ...n,
+        isEnabled: !n.isEnabled
+      } : n)
+    }));
+  },
+
+  updateSettings: (newSettings) => {
+    set(s => ({ settings: { ...s.settings, ...newSettings } }));
+  },
+
+  terminateSession: (sessionId) => {
+    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+    set(s => ({
+      sessions: s.sessions.map(sess => sess.id === sessionId ? { ...sess, status: 'TERMINATED' } : sess),
+      securityEvents: [
+        {
+          id: `ev-${Date.now()}`,
+          timestamp: nowTime,
+          eventType: 'THREAT_BLOCKED',
+          severity: 'HIGH',
+          sourceIp: s.sessions.find(x => x.id === sessionId)?.ipAddress || '0.0.0.0',
+          description: `Superadmin manually terminated session ${sessionId} (${s.sessions.find(x => x.id === sessionId)?.userName})`,
+          actionTaken: 'JWT Token Revoked & Socket Disconnected'
+        },
+        ...s.securityEvents
+      ]
+    }));
+  },
+
+  triggerPanicLockdown: (activate) => {
+    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+    set(s => ({
+      isPanicLockdown: activate,
+      securityEvents: [
+        {
+          id: `ev-${Date.now()}`,
+          timestamp: nowTime,
+          eventType: 'ANOMALOUS_ACCESS',
+          severity: 'CRITICAL',
+          sourceIp: '127.0.0.1 (Admin Console)',
+          description: activate
+            ? 'GLOBAL PANIC LOCKDOWN INITIATED: Non-admin sessions frozen, database switched to READ-ONLY.'
+            : 'GLOBAL PANIC LOCKDOWN LIFTED: Clinical terminals resumed normal operations.',
+          actionTaken: activate ? 'All Active Tokens Invalidate Except Superadmin' : 'Normal Operations Restored'
+        },
+        ...s.securityEvents
+      ]
+    }));
+  },
+
+  addHoliday: (holiday) => {
+    const newHol: HolidaySchedule = {
+      ...holiday,
+      id: `hol-${Date.now()}`
+    };
+    set(s => ({ holidays: [...s.holidays, newHol] }));
+  },
+
+  removeHoliday: (id) => {
+    set(s => ({ holidays: s.holidays.filter(h => h.id !== id) }));
+  }
+}));
+
+// ============================================================
+// Helpers
+// ============================================================
+
+export { DOCTORS, PATIENTS, QUEUE_ENTRIES, BILLS, NOTIFICATIONS, SLOTS };
+
+
+
