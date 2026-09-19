@@ -140,7 +140,7 @@ export default function BillingPage() {
       </div>
 
       {/* Financial Metrics Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: 20 }}>
+      <div className="billing-stats-grid">
         <div className="stat-card primary">
           <div className="stat-label">Total Collected</div>
           <div className="stat-value">₹{totalRevenue.toLocaleString('en-IN')}</div>

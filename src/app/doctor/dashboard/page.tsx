@@ -296,7 +296,7 @@ export default function DoctorDashboardPage() {
       )}
 
       {/* Active Session & Next Patient Hero Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, marginBottom: 24 }}>
+      <div className="doctor-hero-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, marginBottom: 24 }}>
         {/* Left Hero: Active Session Spotlight */}
         <div className="card" style={{
           border: activeSessionPatient ? '2px solid #036d92' : '1px solid var(--border)',

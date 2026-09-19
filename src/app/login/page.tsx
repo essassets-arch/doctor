@@ -163,17 +163,190 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
-      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      color: '#F8FAFC',
-      padding: '30px 20px',
-      position: 'relative',
-      overflowX: 'hidden'
-    }}>
+    <div className="login-page-container">
+      {/* Responsive Stylesheet */}
+      <style>{`
+        .login-page-container {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
+          font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+          display: flex;
+          flex-direction: column;
+          color: #F8FAFC;
+          padding: 30px 24px;
+          position: relative;
+          overflow-x: hidden;
+          box-sizing: border-box;
+        }
+
+        .login-inner {
+          max-width: 1240px;
+          width: 100%;
+          margin: 0 auto;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .login-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 32px;
+          padding-bottom: 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          gap: 16px;
+        }
+
+        .login-header-badges {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
+
+        .login-main-grid {
+          display: grid;
+          grid-template-columns: 420px 1fr;
+          gap: 32px;
+          align-items: start;
+        }
+
+        .login-form-card {
+          background: rgba(30, 41, 59, 0.75);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 16px;
+          padding: 32px;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .login-roles-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 18px;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .login-roles-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+        }
+
+        .login-role-card {
+          background: rgba(30, 41, 59, 0.6);
+          border-radius: 14px;
+          padding: 18px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          min-height: 160px;
+        }
+
+        .login-help-tip {
+          margin-top: 16px;
+          padding: 12px 16px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 12px;
+          gap: 12px;
+        }
+
+        .login-footer {
+          margin-top: 40px;
+          padding-top: 20px;
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 11.5px;
+          color: #64748B;
+          gap: 12px;
+        }
+
+        /* Tablets and below (<= 1024px) */
+        @media (max-width: 1024px) {
+          .login-main-grid {
+            grid-template-columns: 1fr;
+            gap: 28px;
+          }
+        }
+
+        /* Mobile landscape and tablets (<= 768px) */
+        @media (max-width: 768px) {
+          .login-page-container {
+            padding: 20px 16px;
+          }
+          .login-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+          }
+          .login-header-badges {
+            width: 100%;
+            justify-content: flex-start;
+            gap: 8px;
+          }
+          .login-footer {
+            flex-direction: column;
+            text-align: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 28px;
+          }
+        }
+
+        /* Mobile portrait (<= 640px) */
+        @media (max-width: 640px) {
+          .login-page-container {
+            padding: 16px 12px;
+          }
+          .login-form-card {
+            padding: 20px 16px;
+            border-radius: 12px;
+          }
+          .login-roles-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+          .login-role-card {
+            padding: 15px;
+          }
+          .login-help-tip {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+          }
+          .login-header-badges span {
+            font-size: 11px;
+          }
+        }
+
+        /* Small mobile screens (<= 380px) */
+        @media (max-width: 380px) {
+          .login-page-container {
+            padding: 12px 8px;
+          }
+          .login-form-card {
+            padding: 16px 12px;
+          }
+        }
+      `}</style>
+
       {/* Decorative Glow Elements */}
       <div style={{
         position: 'absolute', top: -100, left: '20%', width: 500, height: 500,
@@ -187,24 +360,22 @@ export default function LoginPage() {
       }} />
 
       {/* Main Container */}
-      <div style={{ maxWidth: 1240, width: '100%', margin: '0 auto', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div className="login-inner">
 
         {/* Top Header Branding */}
-        <header style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 36, paddingBottom: 20, borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
-        }}>
+        <header className="login-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{
               width: 44, height: 44, borderRadius: 12,
               background: 'linear-gradient(135deg, #036D92, #6366F1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#FFFFFF', boxShadow: '0 4px 16px rgba(99, 102, 241, 0.35)'
+              color: '#FFFFFF', boxShadow: '0 4px 16px rgba(99, 102, 241, 0.35)',
+              flexShrink: 0
             }}>
               <Activity size={24} strokeWidth={2.6} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.04em', color: '#FFFFFF' }}>
                   MEDFLOW
                 </span>
@@ -221,13 +392,13 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="login-header-badges">
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
               fontSize: 12, color: '#34D399', background: 'rgba(52, 211, 153, 0.1)',
               padding: '6px 14px', borderRadius: 20, border: '1px solid rgba(52, 211, 153, 0.25)'
             }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34D399', animation: 'pulse 1.5s infinite' }} />
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34D399' }} />
               <span>SSE Telemetry: Live & Synchronized</span>
             </div>
 
@@ -242,19 +413,12 @@ export default function LoginPage() {
         </header>
 
         {/* Content Grid: Left Form + Right Quick Launchers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 32, alignItems: 'start' }}>
+        <div className="login-main-grid">
 
           {/* ============================================================ */}
           {/* 1. SECURE CREDENTIAL LOGIN FORM                              */}
           {/* ============================================================ */}
-          <div style={{
-            background: 'rgba(30, 41, 59, 0.75)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 16,
-            padding: 32,
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.3)'
-          }}>
+          <div className="login-form-card">
             <div style={{ marginBottom: 24 }}>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#FFFFFF' }}>
                 Terminal Authentication
@@ -285,7 +449,8 @@ export default function LoginPage() {
                       color: '#F8FAFC',
                       fontSize: 13,
                       fontWeight: 600,
-                      outline: 'none'
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   >
                     <option value="Surat Central OPD (Main Facility)">Surat Central OPD (Main Facility)</option>
@@ -316,7 +481,8 @@ export default function LoginPage() {
                       padding: '10px 12px 10px 38px',
                       color: '#F8FAFC',
                       fontSize: 13,
-                      outline: 'none'
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   />
                 </div>
@@ -348,7 +514,8 @@ export default function LoginPage() {
                       padding: '10px 38px 10px 38px',
                       color: '#F8FAFC',
                       fontSize: 13,
-                      outline: 'none'
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   />
                   <button
@@ -365,7 +532,7 @@ export default function LoginPage() {
               </div>
 
               {/* Remember Me & 2FA Info */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#94A3B8' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#94A3B8', flexWrap: 'wrap', gap: 6 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
@@ -422,8 +589,8 @@ export default function LoginPage() {
           {/* ============================================================ */}
           {/* 2. QUICK ROLE-BASED LOGIN TILES (ALL PANELS)                */}
           {/* ============================================================ */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div className="login-roles-section">
+            <div className="login-roles-header">
               <div>
                 <h2 style={{
                   margin: 0, fontSize: 18, fontWeight: 800, color: '#FFFFFF',
@@ -446,7 +613,7 @@ export default function LoginPage() {
             </div>
 
             {/* Grid of Role Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            <div className="login-roles-grid">
               {QUICK_ROLES.map(role => {
                 const Icon = role.icon;
                 const isCurrentLoading = loadingRole === role.id;
@@ -455,18 +622,9 @@ export default function LoginPage() {
                   <div
                     key={role.id}
                     onClick={() => handleQuickLogin(role)}
+                    className="login-role-card"
                     style={{
-                      background: 'rgba(30, 41, 59, 0.6)',
                       border: `1.5px solid ${isCurrentLoading ? role.accentColor : 'rgba(255, 255, 255, 0.08)'}`,
-                      borderRadius: 14,
-                      padding: 18,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between'
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.borderColor = role.accentColor;
@@ -486,7 +644,8 @@ export default function LoginPage() {
                         background: role.bgColor,
                         border: `1px solid ${role.borderColor}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: role.accentColor
+                        color: role.accentColor,
+                        flexShrink: 0
                       }}>
                         <Icon size={20} strokeWidth={2.4} />
                       </div>
@@ -534,16 +693,12 @@ export default function LoginPage() {
             </div>
 
             {/* Bottom Help Tip */}
-            <div style={{
-              marginTop: 16, padding: '12px 16px', borderRadius: 10,
-              background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12
-            }}>
+            <div className="login-help-tip">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94A3B8' }}>
-                <CheckCircle2 size={16} color="#34D399" />
+                <CheckCircle2 size={16} color="#34D399" style={{ flexShrink: 0 }} />
                 <span>Default supervisor emergency bypass PIN: <strong>1234</strong> (for FOC waivers & overrides)</span>
               </div>
-              <Link href="/waiting-screen" target="_blank" style={{ color: '#38BDF8', textDecoration: 'none', fontWeight: 600 }}>
+              <Link href="/waiting-screen" target="_blank" style={{ color: '#38BDF8', textDecoration: 'none', fontWeight: 600, flexShrink: 0 }}>
                 Open Public TV Board ➔
               </Link>
             </div>
@@ -553,10 +708,7 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <footer style={{
-          marginTop: 40, paddingTop: 20, borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, color: '#64748B'
-        }}>
+        <footer className="login-footer">
           <div>
             MedFlow Enterprise OPD Management System • Version 2.4 Production • Multi-Tenant Architecture
           </div>

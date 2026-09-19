@@ -100,7 +100,7 @@ export default function WaitingRoomScreen() {
       userSelect: 'none'
     }}>
       {/* Top TV Bar */}
-      <header style={{
+      <header className="waiting-header" style={{
         height: 80,
         background: '#111827',
         borderBottom: '2px solid #1F2937',
@@ -129,7 +129,7 @@ export default function WaitingRoomScreen() {
         </div>
 
         {/* Live Clock & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
             onClick={playChime}
             style={{
@@ -174,7 +174,7 @@ export default function WaitingRoomScreen() {
       </header>
 
       {/* Main Waiting Room Stage */}
-      <main style={{ flex: 1, padding: '28px 32px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 28 }}>
+      <main className="waiting-screen-main" style={{ flex: 1, padding: '28px 32px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 28 }}>
         {/* Left Column: Hero Calling Token & Active Rooms */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* Big NOW CALLING Box */}
@@ -203,7 +203,7 @@ export default function WaitingRoomScreen() {
             {callingEntry ? (
               <>
                 <div style={{
-                  fontSize: 108, fontWeight: 900, color: '#FFFFFF',
+                  fontSize: 'clamp(52px, 12vw, 108px)', fontWeight: 900, color: '#FFFFFF',
                   lineHeight: 1, margin: '20px 0 10px', letterSpacing: '0.04em',
                   textShadow: '0 0 40px rgba(99,102,241,0.8)'
                 }}>
@@ -250,7 +250,7 @@ export default function WaitingRoomScreen() {
               Consulting Rooms Status
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            <div className="waiting-rooms-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
               {doctors.map(doc => {
                 const inSession = inSessionEntries.find(q => q.doctorId === doc.id);
                 const isCalling = callingEntry?.doctorId === doc.id;

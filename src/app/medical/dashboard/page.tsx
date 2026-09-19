@@ -229,7 +229,7 @@ export default function MedicalDashboardPage() {
       </div>
 
       {/* 3.1 Real-Time KPI Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="stats-grid" style={{ marginBottom: 24 }}>
         {/* Card 1: Pending Dispensing */}
         <div className="card" style={{ padding: 20, borderRadius: 18, border: '1.5px solid #FDE68A', background: '#FFFBEB', boxShadow: '0 2px 8px rgba(245,158,11,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -312,7 +312,7 @@ export default function MedicalDashboardPage() {
       </div>
 
       {/* Main Grid: Left Prescription Queue (1.6fr) + Right Stock Alerts Widget (1.4fr) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr', gap: 24, alignItems: 'start' }}>
+      <div className="medical-dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr', gap: 24, alignItems: 'start' }}>
         {/* 3.3 Today's Prescription Queue Widget */}
         <div className="card" style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid #E2E8F0', background: '#FFFFFF' }}>
           <div style={{

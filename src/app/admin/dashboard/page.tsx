@@ -88,7 +88,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 8, padding: 3 }}>
             {(['TODAY', 'WEEK', 'MONTH'] as const).map(tab => (
               <button
@@ -294,7 +294,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Main 2-Column Analytics Workspace */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24, marginBottom: 28 }}>
+      <div className="admin-analytics-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24, marginBottom: 28 }}>
         
         {/* Left: 30-Day Revenue Trend Visual Area Chart */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 22 }}>

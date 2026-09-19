@@ -222,7 +222,7 @@ export default function NursingDashboardPage() {
       </div>
 
       {/* 3.1 Real-time Shift KPI Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         {/* Card 1: Today's Patients */}
         <div className="card" style={{ padding: 20, borderRadius: 18, border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -305,7 +305,7 @@ export default function NursingDashboardPage() {
       </div>
 
       {/* Main Grid: Left Triage Patient Queue (2fr) + Right Coordination Hub (1fr) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, alignItems: 'start' }}>
+      <div className="nursing-main-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, alignItems: 'start' }}>
         {/* Left: Patient Queue & Triage Table */}
         <div className="card" style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
           {/* Table Header & Filter Tabs */}

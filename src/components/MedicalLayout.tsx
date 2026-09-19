@@ -8,7 +8,7 @@ import {
   LogOut, Tv, MessageSquare, Send, X, ArrowUpRight,
   ShieldCheck, AlertTriangle, Stethoscope, Sparkles,
   ClipboardList, Package, RotateCcw, AlertCircle,
-  Pill, UserCircle, CheckCircle2, ShieldAlert
+  Pill, UserCircle, CheckCircle2, ShieldAlert, Menu
 } from 'lucide-react';
 import { usePharmacyStore, useInventoryStore, useChatStore } from '@/store';
 
@@ -28,6 +28,7 @@ export default function MedicalLayout({ children }: { children: React.ReactNode 
   const { inventory } = useInventoryStore();
   const { messages, sendMessage } = useChatStore();
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -67,8 +68,150 @@ export default function MedicalLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="app-shell" style={{ background: '#FDFDFD' }}>
+      {/* Mobile Navigation Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)', zIndex: 998
+          }}
+        />
+      )}
+
+      {/* Mobile Navigation Drawer */}
+      <aside
+        style={{
+          position: 'fixed', top: 0, bottom: 0, left: 0, width: 280,
+          background: '#FFFFFF', zIndex: 999,
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+          transform: mobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+      >
+        {/* Drawer Header */}
+        <div style={{
+          height: 60, padding: '0 18px', borderBottom: '1px solid #E2E8F0',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#F0FDFA'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, background: '#0D9488', borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF'
+            }}>
+              <Pill size={18} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 14, color: '#0F172A' }}>MEDFLOW</div>
+              <div style={{ fontSize: 9, fontWeight: 800, color: '#0D9488', letterSpacing: '0.1em' }}>PHARMACY & POS</div>
+            </div>
+          </div>
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Drawer Navigation Links */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {MEDICAL_NAV_ITEMS.map(item => {
+            const Icon = item.icon;
+            const active = pathname === item.href || (item.href !== '/medical/dashboard' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px', borderRadius: 8, textDecoration: 'none',
+                  fontSize: 13, fontWeight: active ? 700 : 500,
+                  background: active ? '#F0FDFA' : 'transparent',
+                  color: active ? '#0D9488' : '#334155'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Icon size={17} color={active ? '#0D9488' : '#64748B'} />
+                  <span>{item.label}</span>
+                </div>
+                {item.showRxBadge && pendingRxCount > 0 && (
+                  <span style={{
+                    background: '#0D9488', color: '#FFFFFF', fontSize: 10, fontWeight: 800,
+                    padding: '2px 7px', borderRadius: 10
+                  }}>
+                    {pendingRxCount}
+                  </span>
+                )}
+                {item.showLowStockBadge && lowStockCount > 0 && (
+                  <span style={{
+                    background: '#F59E0B', color: '#FFFFFF', fontSize: 10, fontWeight: 800,
+                    padding: '2px 7px', borderRadius: 10
+                  }}>
+                    {lowStockCount}
+                  </span>
+                )}
+                {item.showAlertBadge && alertCount > 0 && (
+                  <span style={{
+                    background: '#EF4444', color: '#FFFFFF', fontSize: 10, fontWeight: 800,
+                    padding: '2px 7px', borderRadius: 10
+                  }}>
+                    {alertCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Drawer Footer */}
+        <div style={{ padding: '14px 16px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: '50%', background: '#CCFBF1',
+              color: '#0D9488', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12
+            }}>
+              SS
+            </div>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0F172A' }}>Suresh Shah</div>
+              <div style={{ fontSize: 10, color: '#64748B' }}>Senior Dispensary Officer</div>
+            </div>
+          </div>
+          <Link
+            href="/login"
+            onClick={() => setMobileMenuOpen(false)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              width: '100%', padding: '8px 12px', borderRadius: 6,
+              background: '#F1F5F9', color: '#DC2626', fontSize: 12, fontWeight: 700, textDecoration: 'none'
+            }}
+          >
+            <LogOut size={14} />
+            <span>Clock Out & End Pharmacy Shift</span>
+          </Link>
+        </div>
+      </aside>
+
       {/* MedFlow Pharmacy Top Navigation Bar (Emerald #059669 Theme) */}
       <header className="medical-header">
+        {/* Mobile Hamburger Button */}
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="medical-mobile-menu-btn"
+          style={{
+            background: 'none', border: 'none', color: '#0F172A',
+            display: 'none', alignItems: 'center', justifyContent: 'center',
+            padding: 6, cursor: 'pointer', marginRight: 8
+          }}
+          title="Open Pharmacy Navigation Menu"
+        >
+          <Menu size={22} />
+        </button>
+
         {/* Left: Brand & Logo */}
         <Link href="/medical/dashboard" className="medical-logo">
           <div className="medical-logo-icon">

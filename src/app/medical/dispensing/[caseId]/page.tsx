@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Pill, ShieldAlert, ArrowLeft, CheckCircle2, Clock,
   Trash2, Plus, Minus, CreditCard, Banknote, Receipt,
-  Sparkles, AlertTriangle, Printer, Layers, User, Calendar
+  Sparkles, AlertTriangle, Printer, Layers, User, Calendar, X
 } from 'lucide-react';
 import { usePharmacyStore, useInventoryStore, useUIStore } from '@/store';
 
@@ -193,7 +193,7 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B' }}>Case ID</div>
               <div style={{ fontWeight: 800, fontSize: 13, color: '#0F172A', fontFamily: 'monospace' }}>{prescription.caseId}</div>
@@ -211,7 +211,7 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
       </div>
 
       {/* Two Columns: Left Doctor's Prescriptions (1.4fr) + Right POS Billing Cart (1.6fr) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr', gap: 24, alignItems: 'start' }}>
+      <div className="dispensing-layout-grid" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr', gap: 24, alignItems: 'start' }}>
         {/* 5.2 Physician Prescription Details */}
         <div className="card" style={{ borderRadius: 20, border: '1px solid #E2E8F0', overflow: 'hidden', background: '#FFFFFF' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -476,92 +476,261 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
       {/* Tax Invoice & Printable Receipt Modal */}
       {isReceiptModalOpen && (
         <div className="modal-overlay" onClick={() => setIsReceiptModalOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ background: '#059669', color: '#FFFFFF', borderBottom: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Receipt size={18} />
-                <span className="modal-title" style={{ color: '#FFFFFF', fontWeight: 900, fontSize: 15 }}>
-                  MedFlow Pharmacy Tax Invoice
-                </span>
+          <div
+            className="modal"
+            style={{
+              maxWidth: 500,
+              borderRadius: 16,
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.35)',
+              background: '#FFFFFF'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                color: '#FFFFFF',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: 'rgba(255,255,255,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Receipt size={18} color="#FFFFFF" />
+                </div>
+                <div>
+                  <div style={{ color: '#FFFFFF', fontWeight: 900, fontSize: 15, lineHeight: 1.2 }}>
+                    MedFlow Pharmacy Tax Invoice
+                  </div>
+                  <div style={{ fontSize: 11, color: '#A7F3D0', fontWeight: 600 }}>
+                    Official Outpatient Dispensary Voucher
+                  </div>
+                </div>
               </div>
-              <button className="btn btn-ghost btn-icon" style={{ color: '#FFFFFF' }} onClick={() => setIsReceiptModalOpen(false)}>
-                ✕
+
+              {/* Close Button */}
+              <button
+                onClick={() => setIsReceiptModalOpen(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: '1px solid rgba(255, 255, 255, 0.35)',
+                  color: '#FFFFFF',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s'
+                }}
+                title="Close"
+              >
+                <X size={16} />
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: 24, fontSize: 13 }}>
-              <div style={{ textAlign: 'center', borderBottom: '1px dashed #CBD5E1', paddingBottom: 14, marginBottom: 14 }}>
-                <div style={{ fontWeight: 900, fontSize: 16, color: '#0F172A' }}>MEDFLOW OUTPATIENT CLINIC</div>
-                <div style={{ fontSize: 11, color: '#64748B' }}>Surat Central Main Branch • Dispensary Lic: PHARM-GUJ-88219</div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#059669', marginTop: 4 }}>
-                  Tax Invoice #: {completedInvoice || 'INV-PHARM-26012'}
+            {/* Modal Body - Receipt Paper Styling */}
+            <div style={{ padding: '20px 22px', background: '#F8FAFC' }}>
+              <div
+                style={{
+                  background: '#FFFFFF',
+                  border: '2px dashed #CBD5E1',
+                  borderRadius: 12,
+                  padding: '20px 18px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  fontSize: 12.5,
+                  color: '#1E293B'
+                }}
+              >
+                {/* Receipt Header */}
+                <div style={{ textAlign: 'center', borderBottom: '1px dashed #CBD5E1', paddingBottom: 14, marginBottom: 14 }}>
+                  <div style={{ fontWeight: 900, fontSize: 16, color: '#0F172A', letterSpacing: '0.04em' }}>
+                    MEDFLOW OUTPATIENT CLINIC & PHARMACY
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                    Surat Central Main Branch • Ring Road, Surat
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 1 }}>
+                    Dispensary Lic: <strong>PHARM-GUJ-88219</strong> • GSTIN: <strong>24AAACM1234F1Z5</strong>
+                  </div>
+                  <div style={{
+                    display: 'inline-block',
+                    background: '#ECFDF5',
+                    color: '#047857',
+                    fontWeight: 800,
+                    fontSize: 11,
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    border: '1px solid #A7F3D0',
+                    marginTop: 8
+                  }}>
+                    Tax Invoice #: {completedInvoice || 'INV-PHARM-26001'}
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 11.5, color: '#334155' }}>
-                <div>
-                  <div>Patient: <strong>{prescription.patientName}</strong></div>
-                  <div>MRD: {prescription.mrdNumber}</div>
+                {/* Patient & Doctor Meta */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14, fontSize: 11.5, background: '#F8FAFC', padding: '10px 12px', borderRadius: 8 }}>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 700 }}>Patient Details</div>
+                    <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 12 }}>{prescription.patientName}</div>
+                    <div style={{ color: '#475569' }}>MRD: <strong>{prescription.mrdNumber}</strong></div>
+                    <div style={{ color: '#475569' }}>Age/Gender: {prescription.age}Y / {prescription.gender === 'M' ? 'Male' : 'Female'}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: '#64748B', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 700 }}>Consultation Meta</div>
+                    <div style={{ fontWeight: 800, color: '#059669', fontSize: 12 }}>{prescription.doctorName}</div>
+                    <div style={{ color: '#475569' }}>Date: {new Date().toLocaleDateString('en-GB')}</div>
+                    <div style={{ color: '#475569' }}>Case ID: {prescription.caseId}</div>
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div>Doctor: <strong>{prescription.doctorName}</strong></div>
-                  <div>Date: {new Date().toLocaleDateString('en-GB')}</div>
-                </div>
-              </div>
 
-              {/* Items Table */}
-              <table style={{ width: '100%', marginBottom: 14, fontSize: 12 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 0' }}>Item</th>
-                    <th style={{ textAlign: 'center', padding: '6px 0' }}>Qty</th>
-                    <th style={{ textAlign: 'right', padding: '6px 0' }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dispenseItems.filter(i => !i.isOmitted).map(item => (
-                    <tr key={item.itemId} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '6px 0', fontWeight: 600 }}>{item.drugName}</td>
-                      <td style={{ textAlign: 'center', padding: '6px 0' }}>{item.dispensedQty}</td>
-                      <td style={{ textAlign: 'right', padding: '6px 0' }}>₹{(item.dispensedQty * item.unitPrice).toFixed(2)}</td>
+                {/* Items Table */}
+                <table style={{ width: '100%', marginBottom: 14, fontSize: 12, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1.5px solid #E2E8F0', color: '#475569', background: '#F1F5F9' }}>
+                      <th style={{ textAlign: 'left', padding: '7px 8px', borderRadius: '4px 0 0 4px' }}>Item Description</th>
+                      <th style={{ textAlign: 'center', padding: '7px 6px' }}>Qty</th>
+                      <th style={{ textAlign: 'right', padding: '7px 6px' }}>Rate</th>
+                      <th style={{ textAlign: 'right', padding: '7px 8px', borderRadius: '0 4px 4px 0' }}>Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {dispenseItems.filter(i => !i.isOmitted).map((item, idx) => (
+                      <tr key={item.itemId} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px', fontWeight: 700, color: '#0F172A' }}>
+                          <div>{idx + 1}. {item.drugName}</div>
+                          <span style={{ fontSize: 10, color: '#64748B', fontWeight: 500 }}>
+                            {item.dosage} • {item.formulation}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '8px 6px', fontWeight: 800 }}>
+                          {item.dispensedQty}
+                        </td>
+                        <td style={{ textAlign: 'right', padding: '8px 6px', color: '#64748B' }}>
+                          ₹{item.unitPrice.toFixed(2)}
+                        </td>
+                        <td style={{ textAlign: 'right', padding: '8px', fontWeight: 800, color: '#0F172A' }}>
+                          ₹{(item.dispensedQty * item.unitPrice).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-              <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: 10, fontSize: 12.5 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span>Subtotal:</span>
-                  <span>₹{subtotal.toFixed(2)}</span>
+                {/* Financial Summary */}
+                <div style={{ borderTop: '1.5px dashed #CBD5E1', paddingTop: 10, fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#475569' }}>
+                    <span>Gross Subtotal:</span>
+                    <span style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#475569' }}>
+                    <span>CGST (2.5%):</span>
+                    <span>₹{(tax / 2).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, color: '#475569' }}>
+                    <span>SGST (2.5%):</span>
+                    <span>₹{(tax / 2).toFixed(2)}</span>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontWeight: 900,
+                    fontSize: 16,
+                    color: '#047857',
+                    background: '#ECFDF5',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #A7F3D0',
+                    marginTop: 4
+                  }}>
+                    <span>Net Amount Paid:</span>
+                    <span>₹{totalPayable.toFixed(2)}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span>GST (5%):</span>
-                  <span>₹{tax.toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: 15, color: '#059669', marginTop: 6 }}>
-                  <span>Amount Paid ({paymentMode}):</span>
-                  <span>₹{totalPayable.toFixed(2)}</span>
-                </div>
-              </div>
 
-              <div style={{ textAlign: 'center', fontSize: 10.5, color: '#64748B', marginTop: 18, borderTop: '1px solid #F1F5F9', paddingTop: 10 }}>
-                Dispensed by Suresh Shah • Take medicines strictly per physician instructions.
+                {/* Payment Badge & Barcode Simulation */}
+                <div style={{ marginTop: 14, textAlign: 'center' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: '#F0FDF4',
+                    border: '1px solid #86EFAC',
+                    color: '#15803D',
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 800
+                  }}>
+                    <CheckCircle2 size={13} />
+                    <span>PAYMENT STATUS: {paymentMode.toUpperCase()} — SETTLED</span>
+                  </div>
+
+                  {/* Barcode line */}
+                  <div style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.25em',
+                    fontSize: 14,
+                    fontWeight: 900,
+                    color: '#475569',
+                    marginTop: 10,
+                    padding: '4px 0',
+                    borderTop: '1px solid #F1F5F9'
+                  }}>
+                    ||| | |||| || | ||||| | |||
+                  </div>
+                  <div style={{ fontSize: 9.5, color: '#94A3B8', fontFamily: 'monospace' }}>
+                    AUTH-{prescription.caseId.replace(/[^0-9]/g, '') || '26001'}-VERIFIED
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'center', fontSize: 10, color: '#64748B', marginTop: 12, borderTop: '1px dashed #E2E8F0', paddingTop: 8 }}>
+                  Dispensed by: <strong>Suresh Shah (Dispensary Officer)</strong><br />
+                  Medicines once sold will only be returned as per statutory drug return policy. Store below 25°C.
+                </div>
               </div>
             </div>
 
-            <div className="modal-footer" style={{ background: '#F8FAFC', padding: 14 }}>
+            {/* Modal Footer */}
+            <div
+              style={{
+                background: '#F8FAFC',
+                padding: '14px 20px',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 10
+              }}
+            >
               <button className="btn btn-ghost" onClick={() => setIsReceiptModalOpen(false)}>
                 Close
               </button>
               <button
                 className="btn btn-primary"
-                style={{ background: '#059669', borderColor: '#059669' }}
+                style={{
+                  background: '#059669',
+                  borderColor: '#059669',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontWeight: 700
+                }}
                 onClick={() => {
                   window.print();
                   setIsReceiptModalOpen(false);
                 }}
               >
-                <Printer size={15} /> Print Receipt
+                <Printer size={15} /> Print Official Receipt
               </button>
             </div>
           </div>

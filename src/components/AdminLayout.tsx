@@ -12,7 +12,7 @@ import {
   FileText, Activity, Lock, Sliders, DollarSign,
   HelpCircle, BarChart3, Bell, CheckCircle2, ShieldAlert,
   LifeBuoy, Search, PanelLeftClose, PanelLeftOpen,
-  CreditCard, Receipt, Eye
+  CreditCard, Receipt, Eye, Menu
 } from 'lucide-react';
 import { useAdminStore, useInventoryStore, useChatStore } from '@/store';
 
@@ -35,6 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { messages, sendMessage } = useChatStore();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navSearch, setNavSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -150,27 +151,45 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [NAV_SECTIONS, pathname]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F8FAFC', fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif' }}>
+    <div style={{
+      display: 'flex', minHeight: '100vh', background: '#F8FAFC',
+      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
+      overflowX: 'hidden', width: '100%', maxWidth: '100vw'
+    }}>
       
+      {/* Mobile Drawer Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)', zIndex: 998
+          }}
+        />
+      )}
+
       {/* ============================================================ */}
       {/* 1. LEFT SIDEBAR (Dark Enterprise Slate / Indigo Theme)       */}
       {/* ============================================================ */}
-      <aside style={{
-        width: isCollapsed ? 76 : 270,
-        background: '#0F172A',
-        borderRight: '1px solid #1E293B',
-        color: '#F8FAFC',
-        display: 'flex',
-        flexDirection: 'column',
-        transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        zIndex: 50,
-        position: 'sticky',
-        top: 0,
-        height: '100vh',
-        boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)'
-      }}>
+      <aside
+        className={`admin-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
+        style={{
+          width: isCollapsed ? 76 : 270,
+          background: '#0F172A',
+          borderRight: '1px solid #1E293B',
+          color: '#F8FAFC',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s ease',
+          zIndex: 999,
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)'
+        }}
+      >
         
-        {/* Sidebar Header: Logo & Collapse Toggle */}
+        {/* Sidebar Header: Logo & Collapse / Close Toggle */}
         <div style={{
           height: 64,
           padding: isCollapsed ? '0 16px' : '0 20px',
@@ -181,7 +200,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           background: 'linear-gradient(180deg, #1E1B4B 0%, #0F172A 100%)'
         }}>
           {!isCollapsed ? (
-            <Link href="/admin/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <Link
+              href="/admin/dashboard"
+              onClick={() => setMobileMenuOpen(false)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}
+            >
               <div style={{
                 width: 36, height: 36, borderRadius: 8,
                 background: 'linear-gradient(135deg, #6366F1, #4338CA)',
@@ -200,7 +223,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             </Link>
           ) : (
-            <Link href="/admin/dashboard" title="MedFlow Admin Dashboard" style={{ textDecoration: 'none' }}>
+            <Link
+              href="/admin/dashboard"
+              onClick={() => setMobileMenuOpen(false)}
+              title="MedFlow Admin Dashboard"
+              style={{ textDecoration: 'none' }}
+            >
               <div style={{
                 width: 38, height: 38, borderRadius: 8,
                 background: 'linear-gradient(135deg, #6366F1, #4338CA)',
@@ -212,23 +240,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           )}
 
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            style={{
-              background: '#1E293B',
-              border: '1px solid #334155',
-              color: '#94A3B8',
-              borderRadius: 6,
-              width: 28, height: 28,
-              display: isCollapsed ? 'none' : 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'color 0.15s, background 0.15s'
-            }}
-            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            <PanelLeftClose size={15} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Desktop Collapse Toggle */}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="admin-desktop-collapse-btn"
+              style={{
+                background: '#1E293B',
+                border: '1px solid #334155',
+                color: '#94A3B8',
+                borderRadius: 6,
+                width: 28, height: 28,
+                display: isCollapsed ? 'none' : 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'color 0.15s, background 0.15s'
+              }}
+              title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            >
+              <PanelLeftClose size={15} />
+            </button>
+
+            {/* Mobile Close Button */}
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="admin-mobile-close-btn"
+              style={{
+                background: '#1E293B',
+                border: '1px solid #334155',
+                color: '#94A3B8',
+                borderRadius: 6,
+                width: 28, height: 28,
+                display: 'none',
+                alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Close Menu"
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Search Input (When Expanded) */}
@@ -316,6 +367,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
                       title={isCollapsed ? item.label : undefined}
                       style={{
                         display: 'flex',
@@ -470,23 +522,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           height: 58,
           background: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
-          padding: '0 24px',
+          padding: '0 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           position: 'sticky',
           top: isPanicLockdown ? 36 : 0,
           zIndex: 40,
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+          overflowX: 'hidden',
+          maxWidth: '100vw'
         }}>
           
-          {/* Left: Breadcrumbs & Active Page Indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+          {/* Left: Mobile Menu Trigger + Breadcrumbs & Active Page Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="admin-mobile-menu-btn"
+              style={{
+                background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 6,
+                width: 34, height: 34, display: 'none', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: '#1E293B', flexShrink: 0
+              }}
+              title="Open Admin Navigation Menu"
+            >
+              <Menu size={18} />
+            </button>
+
+            <span className="admin-header-section" style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: 0.5, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
               {activeItem.section}
             </span>
-            <ChevronRight size={14} color="#CBD5E1" />
-            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+            <ChevronRight size={14} color="#CBD5E1" className="admin-header-sep" />
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {activeItem.item}
             </h2>
           </div>

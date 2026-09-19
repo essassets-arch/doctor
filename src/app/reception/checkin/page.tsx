@@ -186,7 +186,7 @@ function CheckInContent() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>
+      <div className="grid-two-column" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>
         {/* Left Column: Patient & Doctor Setup */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Patient Selector Card */}
@@ -307,7 +307,7 @@ function CheckInContent() {
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-group">
                 <label className="form-label required">Assign Doctor</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="doctor-selection-grid">
                   {doctors.map(doc => {
                     const isSelected = selectedDoctorId === doc.id;
                     const count = queue.filter(q => q.doctorId === doc.id && (q.status === 'WAITING' || q.status === 'CALLING')).length;
@@ -381,7 +381,7 @@ function CheckInContent() {
 
             {recordVitals && (
               <div className="card-body">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                <div className="grid-vitals-five" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
                   <div className="form-group">
                     <label className="form-label">BP (mmHg)</label>
                     <input
@@ -475,7 +475,7 @@ function CheckInContent() {
 
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Payment Mode Choice */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <div className="grid-billing-choice" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div
                   onClick={() => setBillingChoice('PAY_NOW')}
                   style={{

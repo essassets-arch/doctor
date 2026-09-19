@@ -11,8 +11,8 @@ test.describe('Module B: Doctor Clinical OS Workflow', () => {
     await expect(page.locator('.doctor-logo-text')).toContainText('CLINICAL OS');
 
     // Verify nav items
-    await expect(page.getByRole('link', { name: 'DASHBOARD' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /OPD QUEUE/i })).toBeVisible();
+    await expect(page.getByRole('navigation').getByRole('link', { name: 'DASHBOARD' })).toBeVisible();
+    await expect(page.getByRole('navigation').getByRole('link', { name: /OPD QUEUE/i })).toBeVisible();
   });
 
   test('02. Doctor OPD Queue displays patients waiting', async ({ page }) => {

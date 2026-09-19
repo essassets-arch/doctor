@@ -254,7 +254,7 @@ function AppointmentsContent() {
                 {/* Doctor Selection Grid */}
                 <div className="form-group">
                   <label className="form-label required">Select Doctor</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="doctor-selection-grid">
                     {doctors.map(doc => {
                       const isSelected = selectedDoctorId === doc.id;
                       return (
@@ -376,7 +376,7 @@ function AppointmentsContent() {
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
                         Morning Session (09:00 AM – 12:00 PM)
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 14 }}>
+                      <div className="slots-grid" style={{ marginBottom: 14 }}>
                         {morningSlots.map(slot => {
                           const isAvail = availableSlots.includes(slot);
                           const isSel = selectedSlot === slot;
@@ -406,7 +406,7 @@ function AppointmentsContent() {
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
                         Afternoon Session (02:00 PM – 05:00 PM)
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+                      <div className="slots-grid">
                         {afternoonSlots.map(slot => {
                           const isAvail = availableSlots.includes(slot);
                           const isSel = selectedSlot === slot;

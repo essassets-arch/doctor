@@ -106,14 +106,18 @@ export default function DashboardPage() {
 
       {/* Billing Pending Handover Banner (Phase 4 & 5 Integration) */}
       {billingPendingEntries.length > 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
-          border: '2px solid #EA580C', borderRadius: 10,
-          padding: '14px 20px', marginBottom: 20,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
-          boxShadow: '0 4px 16px rgba(234,88,12,0.15)',
-          animation: 'fadeIn 0.3s ease'
-        }}>
+        <div
+          className="reception-billing-banner"
+          style={{
+            background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
+            border: '2px solid #EA580C', borderRadius: 10,
+            padding: '14px 20px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+            flexWrap: 'wrap',
+            boxShadow: '0 4px 16px rgba(234,88,12,0.15)',
+            animation: 'fadeIn 0.3s ease'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
               width: 38, height: 38, borderRadius: '50%', background: '#EA580C',
@@ -122,7 +126,7 @@ export default function DashboardPage() {
               <Wallet size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#9A3412', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#9A3412', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 CONSULTATION COMPLETED — READY FOR BILLING CHECKOUT & DISCHARGE
                 <span className="badge badge-primary">{billingPendingEntries.length} Handover</span>
               </div>
@@ -143,7 +147,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="stats-grid">
         {[
           { label: 'Total Today', value: stats.total, icon: <Users size={20} />, type: 'primary', sub: '+3 vs yesterday' },
           { label: 'Waiting', value: stats.waiting, icon: <Clock size={20} />, type: 'warning', sub: 'Avg wait: 18 min' },

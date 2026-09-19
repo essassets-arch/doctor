@@ -245,20 +245,24 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
   return (
     <div className="page-container" style={{ paddingBottom: 60 }}>
       {/* 5.1 Session Top Bar */}
-      <div style={{
-        background: '#FFFFFF', border: '1.5px solid #036d92',
-        borderRadius: 12, padding: '12px 20px', marginBottom: 16,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-        boxShadow: '0 4px 14px rgba(3, 109, 146, 0.08)'
-      }}>
+      <div
+        className="consultation-top-bar"
+        style={{
+          background: '#FFFFFF', border: '1.5px solid #036d92',
+          borderRadius: 12, padding: '12px 20px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          flexWrap: 'wrap',
+          boxShadow: '0 4px 14px rgba(3, 109, 146, 0.08)'
+        }}
+      >
         {/* Left: Case Info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <Link href="/doctor/dashboard" style={{ color: '#036d92', display: 'flex', alignItems: 'center' }}>
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
                 {activeSession?.patientName || patient.firstName + ' ' + patient.lastName}
               </h2>
               <span className="badge" style={{ background: '#e6f3f8', color: '#036d92', fontWeight: 800, fontFamily: 'monospace' }}>
@@ -365,7 +369,7 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
       </div>
 
       {/* Main Workspace Layout (Side Panel + 7 Tabs) */}
-      <div style={{ display: 'grid', gridTemplateColumns: showSidePanel ? '280px 1fr' : '1fr', gap: 16 }}>
+      <div className="consultation-layout-grid" style={{ display: 'grid', gridTemplateColumns: showSidePanel ? '280px 1fr' : '1fr', gap: 16 }}>
         {/* 5.3 Patient Side Panel */}
         {showSidePanel && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -441,7 +445,7 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
         {/* 7 Clinical Consultation Tabs Area */}
         <div>
           {/* Tabs Navigation Header */}
-          <div className="tabs" style={{ background: '#FFFFFF', borderRadius: '10px 10px 0 0', padding: '6px 12px', border: '1px solid var(--border)', borderBottom: 'none' }}>
+          <div className="tabs consultation-tabs" style={{ background: '#FFFFFF', borderRadius: '10px 10px 0 0', padding: '6px 12px', border: '1px solid var(--border)', borderBottom: 'none', overflowX: 'auto', whiteSpace: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
             {[
               { id: 'complaints', label: '1. Complaints & Vitals', icon: Heart },
               { id: 'investigations', label: `2. Lab Orders (${activeSession?.investigations.length || 0})`, icon: FileText },
@@ -487,7 +491,7 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
                     Current Triage Vitals
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10 }}>
+                  <div className="consultation-vitals-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10 }}>
                     <div>
                       <label className="form-label">Temp (°F)</label>
                       <input
