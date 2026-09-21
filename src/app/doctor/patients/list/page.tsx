@@ -89,65 +89,87 @@ export default function DoctorPatientListPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredPatients.map(p => (
-                <tr key={p.id}>
-                  <td>
-                    <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontWeight: 800 }}>
-                      {p.mrdNumber}
-                    </span>
-                  </td>
-
-                  <td>
-                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {p.firstName} {p.middleName ? p.middleName + ' ' : ''}{p.lastName}
+              {filteredPatients.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+                      No patients found
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      Registered: {p.createdAt}
+                    <div style={{ fontSize: '0.85rem', marginBottom: 16 }}>
+                      {patients.length === 0
+                        ? 'No patients registered in the hospital database yet. Register a patient from Reception check-in.'
+                        : 'No patients match your search criteria.'}
                     </div>
-                  </td>
-
-                  <td>{p.age} Yrs / {p.gender}</td>
-
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                      <Phone size={12} color="var(--text-muted)" />
-                      {p.mobile}
-                    </div>
-                  </td>
-
-                  <td>{p.city || 'Surat'}</td>
-
-                  <td>
-                    <span className="badge badge-danger">{p.bloodGroup || 'N/A'}</span>
-                  </td>
-
-                  <td>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {p.tags?.map(t => (
-                        <span key={t} className="badge badge-warning" style={{ fontSize: 10 }}>{t}</span>
-                      ))}
-                    </div>
-                  </td>
-
-                  <td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <Link href={`/doctor/patients/${p.id}/history`}>
-                        <button className="btn btn-outline btn-sm" style={{ borderColor: '#036d92', color: '#036d92' }}>
-                          <Activity size={13} /> History
+                    {patients.length === 0 && (
+                      <Link href="/reception/register">
+                        <button className="btn btn-primary btn-sm" style={{ background: '#036d92', borderColor: '#036d92' }}>
+                          Register Patient in Reception
                         </button>
                       </Link>
-
-                      <button
-                        onClick={() => handleStartDirectEncounter(p)}
-                        className="btn btn-primary btn-sm"
-                        style={{ background: '#036d92', borderColor: '#036d92' }}
-                      >
-                        <Play size={13} /> Consult
-                      </button>
-                    </div>
+                    )}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredPatients.map(p => (
+                  <tr key={p.id}>
+                    <td>
+                      <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontWeight: 800 }}>
+                        {p.mrdNumber}
+                      </span>
+                    </td>
+
+                    <td>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {p.firstName} {p.middleName ? p.middleName + ' ' : ''}{p.lastName}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        Registered: {p.createdAt}
+                      </div>
+                    </td>
+
+                    <td>{p.age} Yrs / {p.gender}</td>
+
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                        <Phone size={12} color="var(--text-muted)" />
+                        {p.mobile}
+                      </div>
+                    </td>
+
+                    <td>{p.city || 'Surat'}</td>
+
+                    <td>
+                      <span className="badge badge-danger">{p.bloodGroup || 'N/A'}</span>
+                    </td>
+
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {p.tags?.map(t => (
+                          <span key={t} className="badge badge-warning" style={{ fontSize: 10 }}>{t}</span>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <Link href={`/doctor/patients/${p.id}/history`}>
+                          <button className="btn btn-outline btn-sm" style={{ borderColor: '#036d92', color: '#036d92' }}>
+                            <Activity size={13} /> History
+                          </button>
+                        </Link>
+
+                        <button
+                          onClick={() => handleStartDirectEncounter(p)}
+                          className="btn btn-primary btn-sm"
+                          style={{ background: '#036d92', borderColor: '#036d92' }}
+                        >
+                          <Play size={13} /> Consult
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

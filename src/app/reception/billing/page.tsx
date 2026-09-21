@@ -35,7 +35,7 @@ export default function BillingPage() {
 
   // New Bill Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(patients[0]?.id || 'pat-1');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(patients[0]?.id || '');
   const [selectedDoctorName, setSelectedDoctorName] = useState<string>(doctors[0]?.name || 'Dr. Raj Valaki');
   const [lineItems, setLineItems] = useState<BillItem[]>([
     { id: '1', name: 'OPD Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }
@@ -79,25 +79,23 @@ export default function BillingPage() {
       unitPrice: price,
       quantity: 1,
       discount: 0,
-      total: price
+      total: price,
     };
-    const updated = [...lineItems, newItem];
-    setLineItems(updated);
-    const sum = updated.reduce((s, i) => s + i.total, 0);
-    setAmountReceived(sum);
+    setLineItems([...lineItems, newItem]);
   };
 
   const removeLineItem = (id: string) => {
-    const updated = lineItems.filter(i => i.id !== id);
-    setLineItems(updated);
-    const sum = updated.reduce((s, i) => s + i.total, 0);
-    setAmountReceived(sum);
+    setLineItems(lineItems.filter(i => i.id !== id));
   };
 
-  const totalBillAmount = lineItems.reduce((s, i) => s + i.total, 0);
+  const totalBillAmount = lineItems.reduce((sum, item) => sum + item.total, 0);
 
   const handleCreateBill = () => {
     const p = patients.find(pat => pat.id === selectedPatientId) || patients[0];
+    if (!p) {
+      alert('No registered patient selected. Please register a patient first in Reception.');
+      return;
+    }
     const balance = Math.max(0, totalBillAmount - amountReceived);
     let finalStatus: BillingStatus = 'PENDING';
     if (balance === 0 && totalBillAmount > 0) finalStatus = 'PAID';
@@ -345,6 +343,9 @@ export default function BillingPage() {
                     value={selectedPatientId}
                     onChange={e => setSelectedPatientId(e.target.value)}
                   >
+                    {patients.length === 0 && (
+                      <option value="">No registered patients yet (Register in Reception)</option>
+                    )}
                     {patients.map(p => (
                       <option key={p.id} value={p.id}>
                         {p.firstName} {p.lastName} ({p.mrdNumber}) • {p.mobile}

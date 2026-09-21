@@ -4,6 +4,25 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 // SSR-Safe LocalStorage adapter for Next.js Turbopack
 const isClient = typeof window !== 'undefined';
 
+// Automatic clean slate migration: ensure old mock data is wiped from browser storage
+if (isClient) {
+  const CLEAN_SLATE_KEY = 'medflow_clean_slate_v5_dynamic';
+  try {
+    if (!localStorage.getItem(CLEAN_SLATE_KEY)) {
+      const keysToClear = [
+        'doctor-patients', 'doctor-queue', 'doctor-appointments',
+        'doctor-billing', 'doctor-clinical', 'doctor-lab',
+        'doctor-followup', 'doctor-chat', 'doctor-consultation',
+        'doctor-pharmacy', 'doctor-admin'
+      ];
+      keysToClear.forEach(k => {
+        try { localStorage.removeItem(k); } catch {}
+      });
+      localStorage.setItem(CLEAN_SLATE_KEY, 'true');
+    }
+  } catch {}
+}
+
 const dummyStorage = {
   getItem: (_key: string) => null,
   setItem: (_key: string, _value: string) => {},
@@ -237,7 +256,7 @@ export interface ClinicalRecord {
 }
 
 // ============================================================
-// Mock Data
+// Clinical Master Catalogs (Preserved for Clinical Operations)
 // ============================================================
 
 const DOCTORS: Doctor[] = [
@@ -247,42 +266,11 @@ const DOCTORS: Doctor[] = [
   { id: 'doc-4', name: 'Dr. Suresh Kumar', specialization: 'Orthopedics', initials: 'SK', avatarColor: 'linear-gradient(135deg,#EF4444,#FB7185)', room: 'Room 4' },
 ];
 
-const PATIENTS: Patient[] = [
-  { id: 'pat-1', mrdNumber: 'MRD-2026-0001', firstName: 'Mahesh', middleName: 'K.', lastName: 'Kumar', mobile: '9825100001', age: 45, ageMonths: 0, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1981-04-13', createdAt: '2024-01-15', lastVisit: '2026-09-10', tags: ['VIP'] },
-  { id: 'pat-2', mrdNumber: 'MRD-2026-0002', firstName: 'Anita', lastName: 'Sharma', mobile: '9825100002', age: 32, ageMonths: 3, ageDays: 5, gender: 'F', language: 'Hindi', bloodGroup: 'A+', city: 'Vadodara', dob: '1994-06-10', createdAt: '2024-03-22', lastVisit: '2026-09-15' },
-  { id: 'pat-3', mrdNumber: 'MRD-2026-0003', firstName: 'Rekha', lastName: 'Patel', mobile: '9825100003', age: 28, ageMonths: 0, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O+', city: 'Surat', dob: '1998-03-20', createdAt: '2025-01-05', lastVisit: '2026-08-28', tags: ['Diabetic'] },
-  { id: 'pat-4', mrdNumber: 'MRD-2026-0004', firstName: 'Amit', lastName: 'Shah', mobile: '9825100004', age: 55, ageMonths: 2, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'AB+', city: 'Navsari', dob: '1971-07-05', createdAt: '2023-11-10', lastVisit: '2026-09-01' },
-  { id: 'pat-5', mrdNumber: 'MRD-2026-0005', firstName: 'Sneha', lastName: 'Joshi', mobile: '9825100005', age: 24, ageMonths: 8, ageDays: 12, gender: 'F', language: 'Hindi', bloodGroup: 'B-', city: 'Surat', dob: '2001-11-25', createdAt: '2026-02-14', lastVisit: '2026-09-18', isNew: true },
-  { id: 'pat-6', mrdNumber: 'MRD-2026-0006', firstName: 'Rahul', lastName: 'Sharma', mobile: '9825100006', age: 38, ageMonths: 0, ageDays: 0, gender: 'M', language: 'English', bloodGroup: 'A-', city: 'Bharuch', dob: '1988-02-12', createdAt: '2025-05-20', lastVisit: '2026-07-30' },
-  { id: 'pat-7', mrdNumber: 'MRD-2026-0007', firstName: 'Priya', lastName: 'Desai', mobile: '9825100007', age: 41, ageMonths: 4, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O-', city: 'Surat', dob: '1985-05-14', createdAt: '2024-08-30', lastVisit: '2026-09-12' },
-  { id: 'pat-8', mrdNumber: 'MRD-2026-0008', firstName: 'Deepak', lastName: 'Trivedi', mobile: '9825100008', age: 62, ageMonths: 1, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1964-08-10', createdAt: '2023-06-01', lastVisit: '2026-09-05', tags: ['VIP', 'Diabetic'] },
-];
-
-const QUEUE_ENTRIES: QueueEntry[] = [
-  { id: 'q-1', caseNumber: 'C001-001-190926', tokenDisplay: 'C001', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '09:30 AM', checkInTime: '09:25 AM', age: 38, gender: 'M', city: 'Bharuch', billingStatus: 'PAID', status: 'COMPLETED', vitalsRecorded: true, complaintsRecorded: true },
-  { id: 'q-2', caseNumber: 'C002-001-190926', tokenDisplay: 'C002', patientId: 'pat-7', patientName: 'Priya Desai', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Follow-Up', appointmentTime: '10:00 AM', checkInTime: '09:58 AM', age: 41, gender: 'F', city: 'Surat', billingStatus: 'PENDING', status: 'BILLING_PENDING', vitalsRecorded: true, complaintsRecorded: true },
-  { id: 'q-3', caseNumber: 'C003-001-190926', tokenDisplay: 'C003', patientId: 'pat-1', patientName: 'Mahesh Kumar', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '10:30 AM', checkInTime: '10:15 AM', age: 45, gender: 'M', city: 'Surat', billingStatus: 'PAID', status: 'IN_SESSION', vitalsRecorded: true, complaintsRecorded: true, isFoc: false },
-  { id: 'q-4', caseNumber: 'C004-001-190926', tokenDisplay: 'C004', patientId: 'pat-3', patientName: 'Rekha Patel', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Procedure', priority: 'EMERGENCY', appointmentTime: '10:45 AM', checkInTime: '10:40 AM', age: 28, gender: 'F', city: 'Surat', billingStatus: 'FOC', status: 'WAITING', vitalsRecorded: true, complaintsRecorded: true, isFoc: true },
-  { id: 'q-5', caseNumber: 'C005-001-190926', tokenDisplay: 'C005', patientId: 'pat-5', patientName: 'Sneha Joshi', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', visitType: 'Consultation', priority: 'NORMAL', appointmentTime: '11:00 AM', checkInTime: '10:55 AM', age: 24, gender: 'F', city: 'Surat', billingStatus: 'PENDING', status: 'WAITING', vitalsRecorded: false, complaintsRecorded: false, isNew: true },
-  { id: 'q-6', caseNumber: 'APP-11:30', tokenDisplay: 'APP-11:30', patientId: 'pat-2', patientName: 'Anita Sharma', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', visitType: 'Follow-Up', priority: 'NORMAL', appointmentTime: '11:30 AM', age: 32, gender: 'F', city: 'Vadodara', billingStatus: 'PENDING', status: 'WAITING', vitalsRecorded: false, complaintsRecorded: false },
-  { id: 'q-7', caseNumber: 'C006-001-190926', tokenDisplay: 'C006', patientId: 'pat-4', patientName: 'Amit Shah', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', priority: 'URGENT', appointmentTime: '11:00 AM', checkInTime: '10:50 AM', age: 55, gender: 'M', city: 'Navsari', billingStatus: 'PARTIAL', status: 'ON_HOLD', onHoldReason: 'Awaiting In-Clinic Blood Sugar & ECG', labReady: false, vitalsRecorded: true, complaintsRecorded: true },
-  { id: 'q-8', caseNumber: 'C007-001-190926', tokenDisplay: 'C007', patientId: 'pat-8', patientName: 'Deepak Trivedi', doctorId: 'doc-4', doctorName: 'Dr. Suresh Kumar', visitType: 'Procedure', priority: 'NORMAL', appointmentTime: '12:00 PM', checkInTime: '11:45 AM', age: 62, gender: 'M', city: 'Surat', billingStatus: 'PAID', status: 'WAITING', vitalsRecorded: true, complaintsRecorded: false },
-  { id: 'q-9', caseNumber: 'MR-001-190926', tokenDisplay: 'MR-001', patientId: 'mr-1', patientName: 'Suresh Patel (Zydus Healthcare)', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'MR Visit', priority: 'NORMAL', appointmentTime: '12:30 PM', checkInTime: '12:15 PM', age: 34, gender: 'M', city: 'Surat', billingStatus: 'FOC', status: 'WAITING', isMR: true, mrCompany: 'Zydus Healthcare', vitalsRecorded: true, complaintsRecorded: true },
-];
-
-const BILLS: BillRecord[] = [
-  { id: 'bill-1', invoiceNumber: 'INV-2026-0087', patientId: 'pat-6', patientName: 'Rahul Sharma', mrdNumber: 'MRD-2026-0006', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'CASH', items: [{ id: 'i1', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
-  { id: 'bill-2', invoiceNumber: 'INV-2026-0088', patientId: 'pat-7', patientName: 'Priya Desai', mrdNumber: 'MRD-2026-0007', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 800, collectedAmount: 500, balance: 300, status: 'PARTIAL', paymentMode: 'UPI', items: [{ id: 'i2', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i3', name: 'PRP Treatment Session', unitPrice: 300, quantity: 1, discount: 0, total: 300 }] },
-  { id: 'bill-3', invoiceNumber: 'INV-2026-0089', patientId: 'pat-4', patientName: 'Amit Shah', mrdNumber: 'MRD-2026-0004', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', netAmount: 2500, collectedAmount: 1500, balance: 1000, status: 'PARTIAL', paymentMode: 'CARD', items: [{ id: 'i4', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i5', name: 'Laser Procedure', unitPrice: 2000, quantity: 1, discount: 0, total: 2000 }] },
-  { id: 'bill-4', invoiceNumber: 'INV-2026-0090', patientId: 'pat-1', patientName: 'Mahesh Kumar', mrdNumber: 'MRD-2026-0001', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'UPI', items: [{ id: 'i6', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
-];
-
-const NOTIFICATIONS: Notification[] = [
-  { id: 'n-1', type: 'danger', message: 'NOW CALLING: Amit Shah (Token C006) — Room 3', timestamp: '10:58 AM', read: false },
-  { id: 'n-2', type: 'success', message: 'Mahesh Kumar is now IN SESSION with Dr. Raj Valaki', timestamp: '10:45 AM', read: false },
-  { id: 'n-3', type: 'info', message: 'New appointment booked: Sneha Joshi — 11:00 AM Dr. Anita Soni', timestamp: '10:30 AM', read: true },
-  { id: 'n-4', type: 'warning', message: 'Lab report pending for Rekha Patel', timestamp: '09:45 AM', read: true },
-];
+// Clean Initial State: Empty arrays for Dynamic User Creation
+const PATIENTS: Patient[] = [];
+const QUEUE_ENTRIES: QueueEntry[] = [];
+const BILLS: BillRecord[] = [];
+const NOTIFICATIONS: Notification[] = [];
 
 // ============================================================
 // Patient Store
@@ -307,21 +295,25 @@ export const usePatientStore = create<PatientState>()(
       patients: PATIENTS,
       searchResults: PATIENTS,
       selectedPatient: null,
-      nextMrd: 'MRD-2026-0009',
+      nextMrd: 'MRD-2026-0001',
       searchQuery: '',
       addPatient: (data) => {
+        const currentMrd = get().nextMrd || 'MRD-2026-0001';
         const newPatient: Patient = {
           ...data,
           id: `pat-${Date.now()}`,
-          mrdNumber: get().nextMrd,
+          mrdNumber: currentMrd,
           createdAt: new Date().toISOString().split('T')[0],
         };
         set(s => {
           const updated = [newPatient, ...s.patients];
+          const parts = (s.nextMrd || 'MRD-2026-0001').split('-');
+          const seq = parseInt(parts[2] || '1', 10);
+          const nextSeq = isNaN(seq) ? 2 : seq + 1;
           return {
             patients: updated,
             searchResults: updated,
-            nextMrd: `MRD-2026-${String(parseInt(s.nextMrd.split('-')[2]) + 1).padStart(4, '0')}`
+            nextMrd: `MRD-2026-${String(nextSeq).padStart(4, '0')}`
           };
         });
         notifyTabSync('doctor-patients');
@@ -547,13 +539,7 @@ export const useQueueStore = create<QueueState>()(
 // Appointment Store
 // ============================================================
 
-const APPOINTMENTS: Appointment[] = [
-  { id: 'apt-1', patientId: 'pat-2', patientName: 'Anita Sharma', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', date: '2026-09-19', time: '11:30', visitType: 'Follow-Up', status: 'SCHEDULED' },
-  { id: 'apt-2', patientId: 'pat-4', patientName: 'Amit Shah', doctorId: 'doc-3', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', time: '11:00', visitType: 'Consultation', status: 'ARRIVED' },
-  { id: 'apt-3', patientId: 'pat-8', patientName: 'Deepak Trivedi', doctorId: 'doc-4', doctorName: 'Dr. Suresh Kumar', date: '2026-09-19', time: '12:00', visitType: 'Procedure', status: 'SCHEDULED' },
-  { id: 'apt-4', patientId: 'pat-3', patientName: 'Rekha Patel', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', time: '09:30', visitType: 'Consultation', status: 'SCHEDULED' },
-  { id: 'apt-5', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', time: '10:00', visitType: 'Follow-Up', status: 'SCHEDULED' },
-];
+const APPOINTMENTS: Appointment[] = [];
 
 const SLOTS = ['09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30', '10:45', '11:00', '11:15', '11:30', '11:45', '14:00', '14:15', '14:30', '14:45', '15:00', '15:15', '15:30', '16:00', '16:30', '17:00'];
 
@@ -633,7 +619,7 @@ export const useBillingStore = create<BillingState>()(
     (set, get) => ({
       bills: BILLS,
       addBill: (bill) => {
-        const invoiceNumber = `INV-2026-${String(get().bills.length + 91).padStart(4, '0')}`;
+        const invoiceNumber = `INV-2026-${String(get().bills.length + 1).padStart(4, '0')}`;
         set(s => ({ bills: [{ ...bill, id: `bill-${Date.now()}`, invoiceNumber }, ...s.bills] }));
         notifyTabSync('doctor-billing');
       },
@@ -687,152 +673,9 @@ export const useUIStore = create<UIState>((set) => ({
 // Clinical Records & Lab Store
 // ============================================================
 
-export const CLINICAL_RECORDS: ClinicalRecord[] = [
-  {
-    id: 'cr-1',
-    patientId: 'pat-1',
-    date: '2026-09-10',
-    doctorName: 'Dr. Raj Valaki',
-    department: 'Dermatology',
-    chiefComplaint: 'Eczema flare-up with severe itching and dry patches on both arms',
-    diagnosis: 'Atopic Dermatitis (Moderate)',
-    vitals: { bp: '128/82', pulse: '76', temp: '98.4°F', weight: '74 kg', spo2: '99%' },
-    prescription: [
-      { medicine: 'Mometasone Furoate 0.1% Cream', dosage: 'Apply twice daily', duration: '14 days', instructions: 'External use on lesions only' },
-      { medicine: 'Tab. Bilastine 20mg', dosage: '1 tablet at bedtime', duration: '10 days', instructions: 'After food' },
-      { medicine: 'Emollient Moisturizer Lotion', dosage: 'Apply generously', duration: '30 days', instructions: 'Within 3 mins of bathing' }
-    ],
-    followUpDate: '2026-09-24'
-  },
-  {
-    id: 'cr-2',
-    patientId: 'pat-1',
-    date: '2026-08-05',
-    doctorName: 'Dr. Raj Valaki',
-    department: 'Dermatology',
-    chiefComplaint: 'Mild itching on forearms and rash after detergent exposure',
-    diagnosis: 'Contact Irritant Dermatitis',
-    vitals: { bp: '130/80', pulse: '72', temp: '98.6°F', weight: '75 kg', spo2: '98%' },
-    prescription: [
-      { medicine: 'Hydrocortisone 1% Cream', dosage: 'Apply twice daily', duration: '7 days', instructions: 'Avoid soap' },
-      { medicine: 'Tab. Levocetirizine 5mg', dosage: '1 tablet at night', duration: '5 days', instructions: 'Oral' }
-    ],
-    followUpDate: '2026-08-19'
-  },
-  {
-    id: 'cr-3',
-    patientId: 'pat-2',
-    date: '2026-09-15',
-    doctorName: 'Dr. Anita Soni',
-    department: 'General Medicine',
-    chiefComplaint: 'Persistent headache, occasional dizziness, and fatigue for 2 weeks',
-    diagnosis: 'Essential Hypertension Stage 1 & Mild Anemia',
-    vitals: { bp: '144/92', pulse: '84', temp: '98.2°F', weight: '62 kg', spo2: '98%' },
-    prescription: [
-      { medicine: 'Tab. Telmisartan 40mg', dosage: '1 tablet once daily morning', duration: '30 days', instructions: 'After breakfast' },
-      { medicine: 'Tab. Autrin (Iron + Folic Acid)', dosage: '1 tablet daily', duration: '30 days', instructions: 'After lunch' }
-    ],
-    followUpDate: '2026-10-15'
-  },
-  {
-    id: 'cr-4',
-    patientId: 'pat-4',
-    date: '2026-09-01',
-    doctorName: 'Dr. Priya Mehta',
-    department: 'Gynecology',
-    chiefComplaint: 'Lower pelvic discomfort, urinary frequency, and dysuria',
-    diagnosis: 'Acute Cystitis / UTI',
-    vitals: { bp: '122/78', pulse: '80', temp: '99.1°F', weight: '68 kg', spo2: '99%' },
-    prescription: [
-      { medicine: 'Tab. Nitrofurantoin SR 100mg', dosage: '1 tablet twice daily', duration: '7 days', instructions: 'With meals' },
-      { medicine: 'Syp. Citralka 5ml', dosage: '1 tsp in a glass of water TID', duration: '5 days', instructions: 'Drink plenty of water' }
-    ],
-    followUpDate: '2026-09-08'
-  },
-  {
-    id: 'cr-5',
-    patientId: 'pat-8',
-    date: '2026-09-05',
-    doctorName: 'Dr. Suresh Kumar',
-    department: 'Orthopedics',
-    chiefComplaint: 'Bilateral knee pain, crepitus, difficulty climbing stairs for 6 months',
-    diagnosis: 'Osteoarthritis Grade II (Knee)',
-    vitals: { bp: '136/84', pulse: '74', temp: '98.5°F', weight: '82 kg', spo2: '97%' },
-    prescription: [
-      { medicine: 'Tab. Diacerein + Glucosamine', dosage: '1 tablet twice daily', duration: '60 days', instructions: 'After meals' },
-      { medicine: 'Gel Diclofenac 1.16%', dosage: 'Apply gently on knee joints', duration: '15 days', instructions: 'External' }
-    ],
-    followUpDate: '2026-11-05'
-  }
-];
+export const CLINICAL_RECORDS: ClinicalRecord[] = [];
 
-export const LAB_DOCUMENTS: LabDocument[] = [
-  {
-    id: 'lab-1',
-    patientId: 'pat-1',
-    patientName: 'Mahesh Kumar',
-    mrdNumber: 'MRD-2026-0001',
-    title: 'Complete Blood Count (CBC) & IgE Panel',
-    category: 'Blood Test',
-    fileName: 'CBC_IgE_MaheshKumar.pdf',
-    fileSize: '1.4 MB',
-    uploadedAt: '2026-09-10 11:20 AM',
-    status: 'Attached to EHR',
-    doctorName: 'Dr. Raj Valaki'
-  },
-  {
-    id: 'lab-2',
-    patientId: 'pat-2',
-    patientName: 'Anita Sharma',
-    mrdNumber: 'MRD-2026-0002',
-    title: 'Lipid Profile & Serum Iron Studies',
-    category: 'Blood Test',
-    fileName: 'Lipid_Iron_AnitaSharma.pdf',
-    fileSize: '890 KB',
-    uploadedAt: '2026-09-15 02:45 PM',
-    status: 'Pending Doctor Review',
-    doctorName: 'Dr. Anita Soni'
-  },
-  {
-    id: 'lab-3',
-    patientId: 'pat-3',
-    patientName: 'Rekha Patel',
-    mrdNumber: 'MRD-2026-0003',
-    title: 'HbA1c & Fasting Blood Sugar',
-    category: 'Pathology',
-    fileName: 'HbA1c_FBS_RekhaPatel.pdf',
-    fileSize: '740 KB',
-    uploadedAt: '2026-09-19 09:40 AM',
-    status: 'Pending Doctor Review',
-    doctorName: 'Dr. Raj Valaki'
-  },
-  {
-    id: 'lab-4',
-    patientId: 'pat-4',
-    patientName: 'Amit Shah',
-    mrdNumber: 'MRD-2026-0004',
-    title: 'Urine Routine & Microscopic Culture',
-    category: 'Pathology',
-    fileName: 'Urine_Culture_AmitShah.pdf',
-    fileSize: '1.1 MB',
-    uploadedAt: '2026-09-02 10:15 AM',
-    status: 'Attached to EHR',
-    doctorName: 'Dr. Priya Mehta'
-  },
-  {
-    id: 'lab-5',
-    patientId: 'pat-8',
-    patientName: 'Deepak Trivedi',
-    mrdNumber: 'MRD-2026-0008',
-    title: 'X-Ray Both Knees (AP & Lateral Weight-bearing)',
-    category: 'Radiology',
-    fileName: 'XRay_Knee_DeepakTrivedi.dcm',
-    fileSize: '14.2 MB',
-    uploadedAt: '2026-09-05 03:10 PM',
-    status: 'Attached to EHR',
-    doctorName: 'Dr. Suresh Kumar'
-  }
-];
+export const LAB_DOCUMENTS: LabDocument[] = [];
 
 interface LabState {
   documents: LabDocument[];
@@ -1090,81 +933,14 @@ export const PROCEDURE_CATALOG: ProcedureCatalogItem[] = [
   { id: 'proc-6', name: 'Sterile Wound Dressing & Debridement', category: 'Nursing OPD', price: 250, durationMins: 15, requiresConsent: false },
 ];
 
-export const FOLLOWUP_TASKS: FollowUpTask[] = [
-  {
-    id: 'fu-1',
-    patientId: 'pat-1',
-    patientName: 'Mahesh Kumar',
-    mrdNumber: 'MRD-2026-0001',
-    mobile: '9825100001',
-    doctorName: 'Dr. Raj Valaki',
-    originalVisitDate: '2026-09-10',
-    reason: 'Review contact dermatitis recovery & allergy response',
-    dueDate: '2026-09-19',
-    priority: 'High',
-    status: 'PENDING',
-    callLogs: [
-      { date: '2026-09-17', caller: 'Staff Nurse Rekha', outcome: 'ANSWERED', notes: 'Patient reports mild redness remaining; advised to continue cream.' }
-    ]
-  },
-  {
-    id: 'fu-2',
-    patientId: 'pat-3',
-    patientName: 'Rekha Patel',
-    mrdNumber: 'MRD-2026-0003',
-    mobile: '9825100003',
-    doctorName: 'Dr. Raj Valaki',
-    originalVisitDate: '2026-08-28',
-    reason: 'Diode Laser Session 2 of 6 check-up',
-    dueDate: '2026-09-19',
-    priority: 'Medium',
-    status: 'PENDING',
-    callLogs: []
-  },
-  {
-    id: 'fu-3',
-    patientId: 'pat-4',
-    patientName: 'Amit Shah',
-    mrdNumber: 'MRD-2026-0004',
-    mobile: '9825100004',
-    doctorName: 'Dr. Priya Mehta',
-    originalVisitDate: '2026-09-01',
-    reason: 'UTI post-antibiotic culture test verification',
-    dueDate: '2026-09-15',
-    priority: 'High',
-    status: 'NO_SHOW',
-    callLogs: [
-      { date: '2026-09-16', caller: 'Front Desk Riya', outcome: 'NO_ANSWER', notes: 'Call rang full, no response.' },
-      { date: '2026-09-17', caller: 'Front Desk Riya', outcome: 'ANSWERED', notes: 'Patient traveling outside Surat; will return next week.' }
-    ]
-  },
-  {
-    id: 'fu-4',
-    patientId: 'pat-8',
-    patientName: 'Deepak Trivedi',
-    mrdNumber: 'MRD-2026-0008',
-    mobile: '9825100008',
-    doctorName: 'Dr. Suresh Kumar',
-    originalVisitDate: '2026-09-05',
-    reason: 'Knee OA Joint Injection tolerance check',
-    dueDate: '2026-09-22',
-    priority: 'Medium',
-    status: 'PENDING',
-    callLogs: []
-  }
-];
+export const FOLLOWUP_TASKS: FollowUpTask[] = [];
 
 export const DOCTOR_LEAVES: DoctorLeave[] = [
   { id: 'l-1', doctorId: 'doc-1', startDate: '2026-09-25', endDate: '2026-09-27', reason: 'National Dermatology Conference (DERMACON 2026)', type: 'Conference', status: 'APPROVED' },
   { id: 'l-2', doctorId: 'doc-2', startDate: '2026-10-02', endDate: '2026-10-04', reason: 'Family function & festival leave', type: 'Casual', status: 'APPROVED' },
 ];
 
-export const CHAT_MESSAGES: ChatMessage[] = [
-  { id: 'c-1', sender: 'Riya Patel', senderRole: 'Reception', message: 'Dr. Valaki, patient Mahesh Kumar (C003) has entered your examination cabin.', timestamp: '10:30 AM' },
-  { id: 'c-2', sender: 'Dr. Raj Valaki', senderRole: 'Doctor', message: 'Noted Riya. Please keep the Diode Laser room prepped after this consult.', timestamp: '10:32 AM' },
-  { id: 'c-3', sender: 'Pharma Desk', senderRole: 'Pharmacy', message: 'Notice: Amoxicillin 500mg capsules running very low (8 left). Cefixime is available.', timestamp: '10:35 AM' },
-  { id: 'c-4', sender: 'Dr. Raj Valaki', senderRole: 'Doctor', message: 'Thanks for the alert Pharma team, will prescribe Cefixime if needed.', timestamp: '10:36 AM' },
-];
+export const CHAT_MESSAGES: ChatMessage[] = [];
 
 // Stores
 interface InventoryState {
@@ -1329,80 +1105,12 @@ interface ConsultationState {
   finalizeConsultation: () => void;
 }
 
-const DEFAULT_SESSION: ConsultationSession = {
-  caseId: 'C003-001-190926',
-  patientId: 'pat-1',
-  patientName: 'Mahesh Kumar',
-  mrdNumber: 'MRD-2026-0001',
-  doctorId: 'doc-1',
-  doctorName: 'Dr. Raj Valaki',
-  startTime: '10:30 AM',
-  complaints: {
-    presentComplaint: 'Acute erythematous itchy rash on bilateral arms and dorsal hands',
-    durationYears: 0,
-    durationMonths: 0,
-    durationDays: 4,
-    severity: 'MODERATE',
-    onset: 'Gradual onset after contact with new cleaning chemical',
-    aggravatingFactors: 'Direct sunlight, hot water',
-    relievingFactors: 'Cold compresses'
-  },
-  vitals: {
-    temperature: '98.6',
-    pulse: '76',
-    bpSystolic: '124',
-    bpDiastolic: '82',
-    spo2: '99',
-    weight: '72',
-    height: '174'
-  },
-  history: {
-    pastMedical: 'Mild essential hypertension (well controlled on Telmisartan 40mg)',
-    pastSurgical: 'None reported',
-    allergies: 'Penicillin, Sulfur-based antibiotics',
-    currentMedications: 'Tab. Telmisartan 40mg OD'
-  },
-  investigations: [
-    { testId: 'inv-4', testName: 'Skin Scraping for KOH Fungus Test', category: 'Microbiology', price: 300, status: 'ORDERED' }
-  ],
-  prescriptions: [
-    { id: 'rx-1', drugName: 'Mometasone 0.1% Cream', dosage: 'Apply thin layer', frequency: '1-0-1', durationDays: 14, totalQty: 1, instructions: 'After bath & at bedtime', stockStatus: 'IN_STOCK' },
-    { id: 'rx-2', drugName: 'Bilastine 20mg (Bilaxten)', dosage: '1 Tab', frequency: '0-0-1', durationDays: 10, totalQty: 10, instructions: 'Night after food', stockStatus: 'IN_STOCK' },
-    { id: 'rx-3', drugName: 'Emollient Moisturizer Lotion', dosage: 'Generous application', frequency: '1-1-1', durationDays: 30, totalQty: 1, instructions: 'Apply within 3 mins of water contact', stockStatus: 'IN_STOCK' }
-  ],
-  procedures: [
-    { id: 'p-1', procedureName: 'Diode Laser Hair Removal', scheduledDate: '2026-09-20', scheduledTime: '14:30', sessionsCount: 'Session 1 of 6', completedInClinic: false, notes: 'Full beard shaping; patch test tolerated well', consentGenerated: true, price: 1500 }
-  ],
-  images: [
-    { id: 'img-1', url: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80', tag: 'BEFORE', caption: 'Bilateral forearm erythematous patch baseline', annotations: ['Erythema zone (8x4cm)', 'Excoriation marks'], uploadedAt: '2026-09-19 10:35 AM' }
-  ],
-  diagnosis: {
-    provisional: 'Contact Irritant Dermatitis with Secondary Xerosis',
-    differential: 'Atopic Eczema, Photosensitive Dermatitis',
-    finalDiagnosis: 'Acute Contact Allergic Dermatitis (ICD-10: L23.9)',
-    icd10Code: 'L23.9',
-    treatmentPlan: 'Topical potent corticosteroid taper over 14 days; non-sedative antihistamine for nocturnal pruritus; barrier repair moisturizing regimen.',
-    patientAdvice: 'Strictly avoid direct contact with alkaline detergents. Use vinyl gloves when handling cleaning chemicals. Avoid scratch trauma.',
-    followUpDate: '2026-09-26',
-    followUpPurpose: 'Review lesion clearance and taper steroid',
-    nursingInstructions: 'Call patient on Day 3 to verify pruritus reduction.'
-  },
-  billing: {
-    consultationFee: 500,
-    discountPercent: 0,
-    isFoc: false
-  },
-  isFinalized: false
-};
-
-const INITIAL_SESSIONS: Record<string, ConsultationSession> = {
-  'C003-001-190926': DEFAULT_SESSION,
-};
+const INITIAL_SESSIONS: Record<string, ConsultationSession> = {};
 
 export const useConsultationStore = create<ConsultationState>()(
   persist(
     (set, get) => ({
-      activeSession: DEFAULT_SESSION,
+      activeSession: null,
       sessions: INITIAL_SESSIONS,
 
       getSession: (caseId: string) => {
@@ -1727,125 +1435,7 @@ export const INITIAL_STOCK_MOVEMENTS: StockMovement[] = [
   { id: 'sm-5', drugId: 'd-4', drugName: 'Bilastine 20mg (Bilaxten)', movementType: 'RETURN', quantity: 5, batchNumber: 'BAT-2580', reference: 'Adverse rash reaction (CASE-98650)', date: '2026-09-16 03:40 PM', performedBy: 'Suresh Shah' },
 ];
 
-export const INITIAL_PRESCRIPTIONS: PrescriptionFulfillment[] = [
-  {
-    id: 'rx-f-1',
-    caseId: 'C003-001-190926',
-    patientId: 'pat-1',
-    patientName: 'Mahesh Kumar',
-    mrdNumber: 'MRD-2026-0001',
-    age: 45,
-    gender: 'M',
-    mobile: '9825100001',
-    doctorName: 'Dr. Raj Valaki',
-    consultationDate: '19/09/2026 10:30 AM',
-    allergies: ['Penicillin', 'Sulfa Drugs'],
-    status: 'PHARMACY_PENDING',
-    items: [
-      { id: 'rxi-1', drugId: 'd-3', drugName: 'Mometasone 0.1% Cream', formulation: 'Ointment', dosage: 'Apply thin layer', frequency: '1-0-1', durationDays: 14, prescribedQty: 1, dispensedQty: 1, unitPrice: 145, instructions: 'After bath & at bedtime', isDispensed: false },
-      { id: 'rxi-2', drugId: 'd-4', drugName: 'Bilastine 20mg (Bilaxten)', formulation: 'Tablet', dosage: '1 Tab', frequency: '0-0-1', durationDays: 10, prescribedQty: 10, dispensedQty: 10, unitPrice: 18, instructions: 'Night after food', isDispensed: false },
-      { id: 'rxi-3', drugId: 'd-9', drugName: 'Emollient Moisturizer Lotion', formulation: 'Lotion', dosage: 'Generous application', frequency: '1-1-1', durationDays: 30, prescribedQty: 1, dispensedQty: 1, unitPrice: 280, instructions: 'Apply within 3 mins of water contact', isDispensed: false },
-    ],
-    billing: {
-      subtotal: 605,
-      tax: 30.25,
-      totalPayable: 635.25
-    }
-  },
-  {
-    id: 'rx-f-2',
-    caseId: 'C002-001-190926',
-    patientId: 'pat-7',
-    patientName: 'Priya Desai',
-    mrdNumber: 'MRD-2026-0007',
-    age: 41,
-    gender: 'F',
-    mobile: '9825100007',
-    doctorName: 'Dr. Raj Valaki',
-    consultationDate: '19/09/2026 10:00 AM',
-    allergies: ['Aspirin'],
-    status: 'IN_PROGRESS',
-    items: [
-      { id: 'rxi-4', drugId: 'd-1', drugName: 'Amoxicillin 500mg', formulation: 'Capsule', dosage: '1 Cap', frequency: '1-0-1', durationDays: 5, prescribedQty: 10, dispensedQty: 10, unitPrice: 12, instructions: 'Take after meals', isDispensed: false },
-      { id: 'rxi-5', drugId: 'd-2', drugName: 'Paracetamol 650mg (Dolo)', formulation: 'Tablet', dosage: '1 Tab SOS', frequency: '1-0-1', durationDays: 3, prescribedQty: 6, dispensedQty: 6, unitPrice: 3, instructions: 'For fever or severe pain', isDispensed: false }
-    ],
-    billing: {
-      subtotal: 138,
-      tax: 6.9,
-      totalPayable: 144.9
-    }
-  },
-  {
-    id: 'rx-f-3',
-    caseId: 'C004-001-190926',
-    patientId: 'pat-3',
-    patientName: 'Rekha Patel',
-    mrdNumber: 'MRD-2026-0003',
-    age: 28,
-    gender: 'F',
-    mobile: '9825100003',
-    doctorName: 'Dr. Raj Valaki',
-    consultationDate: '19/09/2026 10:45 AM',
-    allergies: [],
-    status: 'PHARMACY_PENDING',
-    items: [
-      { id: 'rxi-6', drugId: 'd-8', drugName: 'Diacerein 50mg + Glucosamine', formulation: 'Tablet', dosage: '1 Tab', frequency: '1-0-1', durationDays: 30, prescribedQty: 60, dispensedQty: 60, unitPrice: 22, instructions: 'Continuous course for joint support', isDispensed: false }
-    ],
-    billing: {
-      subtotal: 1320,
-      tax: 66,
-      totalPayable: 1386
-    }
-  },
-  {
-    id: 'rx-f-4',
-    caseId: 'C006-001-190926',
-    patientId: 'pat-4',
-    patientName: 'Amit Shah',
-    mrdNumber: 'MRD-2026-0004',
-    age: 55,
-    gender: 'M',
-    mobile: '9825100004',
-    doctorName: 'Dr. Raj Valaki',
-    consultationDate: '19/09/2026 11:00 AM',
-    allergies: [],
-    status: 'PHARMACY_PENDING',
-    items: [
-      { id: 'rxi-7', drugId: 'd-6', drugName: 'Telmisartan 40mg', formulation: 'Tablet', dosage: '1 Tab', frequency: '1-0-0', durationDays: 30, prescribedQty: 30, dispensedQty: 30, unitPrice: 9, instructions: 'Morning empty stomach or after breakfast', isDispensed: false }
-    ],
-    billing: {
-      subtotal: 270,
-      tax: 13.5,
-      totalPayable: 283.5
-    }
-  },
-  {
-    id: 'rx-f-5',
-    caseId: 'C001-001-190926',
-    patientId: 'pat-6',
-    patientName: 'Rahul Sharma',
-    mrdNumber: 'MRD-2026-0006',
-    age: 38,
-    gender: 'M',
-    mobile: '9825100006',
-    doctorName: 'Dr. Raj Valaki',
-    consultationDate: '19/09/2026 09:30 AM',
-    allergies: [],
-    status: 'DISPENSED',
-    items: [
-      { id: 'rxi-8', drugId: 'd-5', drugName: 'Levocetirizine 5mg', formulation: 'Tablet', dosage: '1 Tab', frequency: '0-0-1', durationDays: 7, prescribedQty: 7, dispensedQty: 7, unitPrice: 5, instructions: 'Bedtime', isDispensed: true, batchAllocations: [{ batchNumber: 'BAT-2575', qty: 7 }] }
-    ],
-    billing: {
-      subtotal: 35,
-      tax: 1.75,
-      totalPayable: 36.75,
-      paymentMode: 'CARD_UPI',
-      invoiceNumber: 'INV-PHARM-26001',
-      dispensedAt: '19/09/2026 09:50 AM',
-      dispensedBy: 'Suresh Shah'
-    }
-  }
-];
+export const INITIAL_PRESCRIPTIONS: PrescriptionFulfillment[] = [];
 
 interface PharmacyState {
   prescriptions: PrescriptionFulfillment[];

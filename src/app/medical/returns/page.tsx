@@ -14,12 +14,12 @@ export default function MedicalReturnsPage() {
   const { addNotification } = useUIStore();
 
   // Search & Case selection
-  const [caseSearchQuery, setCaseSearchQuery] = useState('C001-001-190926');
-  const [activePrescriptionId, setActivePrescriptionId] = useState<string>('rx-f-5');
+  const [caseSearchQuery, setCaseSearchQuery] = useState('');
+  const [activePrescriptionId, setActivePrescriptionId] = useState<string>('');
 
   // Return form inputs
-  const [selectedItemId, setSelectedItemId] = useState<string>('rxi-8');
-  const [returnQty, setReturnQty] = useState<number>(2);
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [returnQty, setReturnQty] = useState<number>(1);
   const [returnReason, setReturnReason] = useState<string>('Adverse Drug Reaction (Skin Rash / Erythema)');
   const [clinicalNotes, setClinicalNotes] = useState<string>('Patient developed pruritus and erythema after first dose. Discontinued by doctor.');
   const [refundMode, setRefundMode] = useState<'CASH' | 'PATIENT_LEDGER'>('CASH');

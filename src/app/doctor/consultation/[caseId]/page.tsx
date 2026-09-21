@@ -15,7 +15,7 @@ import {
   useInventoryStore, useInvestigationCatalogStore,
   useProcedureCatalogStore, useUIStore, useBillingStore,
   usePharmacyStore, useClinicalStore,
-  playChimeTone, Patient, PrescriptionFulfillmentItem,
+  playChimeTone, Patient, Gender, PrescriptionFulfillmentItem,
   DrugInventoryItem, InvestigationCatalogItem, ProcedureCatalogItem
 } from '@/store';
 
@@ -100,7 +100,23 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
   }, [elapsedSeconds]);
 
   const activeQueueEntry = queue.find(q => q.caseNumber === caseId || q.id === caseId);
-  const patient = patients.find(p => p.id === activeQueueEntry?.patientId || p.id === activeSession?.patientId) || patients[0];
+  const fallbackPatient: Patient = useMemo(() => ({
+    id: activeQueueEntry?.patientId || activeSession?.patientId || 'pat-guest',
+    mrdNumber: activeSession?.mrdNumber || 'MRD-NEW',
+    firstName: activeSession?.patientName?.split(' ')[0] || activeQueueEntry?.patientName?.split(' ')[0] || 'Patient',
+    lastName: activeSession?.patientName?.split(' ').slice(1).join(' ') || activeQueueEntry?.patientName?.split(' ').slice(1).join(' ') || '',
+    mobile: '',
+    age: activeQueueEntry?.age || 30,
+    ageMonths: 0,
+    ageDays: 0,
+    gender: (activeQueueEntry?.gender as Gender) || 'M',
+    language: 'English',
+    bloodGroup: 'B+',
+    city: activeQueueEntry?.city || 'Surat',
+    createdAt: new Date().toISOString().split('T')[0],
+  }), [activeQueueEntry, activeSession]);
+
+  const patient = patients.find(p => p.id === activeQueueEntry?.patientId || p.id === activeSession?.patientId) || fallbackPatient;
 
   useEffect(() => {
     if (!caseId) return;

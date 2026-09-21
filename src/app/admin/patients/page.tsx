@@ -14,7 +14,7 @@ export default function AdminPatientsPage() {
   const { addNotification } = useUIStore();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(patients[0]?.id || 'pat-1');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(patients[0]?.id || '');
 
   // OTP Edit Modal State
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
@@ -41,7 +41,7 @@ export default function AdminPatientsPage() {
   }, [patients, searchTerm]);
 
   const selectedPatient = useMemo(() => {
-    return patients.find(p => p.id === selectedPatientId) || patients[0];
+    return patients.find(p => p.id === selectedPatientId) || patients[0] || null;
   }, [patients, selectedPatientId]);
 
   // Case encounters for this patient
@@ -152,42 +152,70 @@ export default function AdminPatientsPage() {
 
           {/* List Items */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {filteredPatients.map(p => {
-              const isSelected = selectedPatient?.id === p.id;
-
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => setSelectedPatientId(p.id)}
-                  style={{
-                    padding: '14px 18px',
-                    borderBottom: '1px solid #f1f5f9',
-                    cursor: 'pointer',
-                    background: isSelected ? '#EFF6FF' : 'transparent',
-                    borderLeft: `4px solid ${isSelected ? '#0284c7' : 'transparent'}`,
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.95rem', color: isSelected ? '#0284c7' : '#0F172A' }}>
-                        {p.firstName} {p.lastName}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: 2 }}>
-                        {p.age} yrs • {p.gender === 'M' ? 'Male' : 'Female'} • Blood: {p.bloodGroup || 'O+'}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
-                        Phone: {p.mobile}
-                      </div>
-                    </div>
-
-                    <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#4338ca', background: '#EEF2FF', padding: '2px 6px', borderRadius: 4 }}>
-                      {p.mrdNumber}
-                    </span>
-                  </div>
+            {filteredPatients.length === 0 ? (
+              <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                <User size={32} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
+                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#64748b' }}>No patients found</div>
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: 4 }}>
+                  {patients.length === 0 ? 'No patients registered in the system yet.' : 'Try adjusting your search query.'}
                 </div>
-              );
-            })}
+                {patients.length === 0 && (
+                  <Link
+                    href="/reception/register"
+                    style={{
+                      display: 'inline-block',
+                      marginTop: 12,
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      background: '#0284c7',
+                      color: '#ffffff',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    Register Patient in Reception
+                  </Link>
+                )}
+              </div>
+            ) : (
+              filteredPatients.map(p => {
+                const isSelected = selectedPatient?.id === p.id;
+
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedPatientId(p.id)}
+                    style={{
+                      padding: '14px 18px',
+                      borderBottom: '1px solid #f1f5f9',
+                      cursor: 'pointer',
+                      background: isSelected ? '#EFF6FF' : 'transparent',
+                      borderLeft: `4px solid ${isSelected ? '#0284c7' : 'transparent'}`,
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: isSelected ? '#0284c7' : '#0F172A' }}>
+                          {p.firstName} {p.lastName}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: 2 }}>
+                          {p.age} yrs • {p.gender === 'M' ? 'Male' : 'Female'} • Blood: {p.bloodGroup || 'O+'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
+                          Phone: {p.mobile}
+                        </div>
+                      </div>
+
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#4338ca', background: '#EEF2FF', padding: '2px 6px', borderRadius: 4 }}>
+                        {p.mrdNumber}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
         </div>
@@ -338,7 +366,49 @@ export default function AdminPatientsPage() {
             </div>
 
           </div>
-        ) : null}
+        ) : (
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 10,
+            padding: 48,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 400
+          }}>
+            <User size={48} style={{ color: '#cbd5e1', marginBottom: 14 }} />
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', fontWeight: 700, color: '#334155' }}>
+              No Patient Selected
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', maxWidth: 360 }}>
+              {patients.length === 0
+                ? 'No patients registered in the system yet. Register a patient from Reception to view and manage records.'
+                : 'Select a patient from the list on the left to inspect demographic records and encounters.'}
+            </p>
+            {patients.length === 0 && (
+              <Link
+                href="/reception/register"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  background: '#0284c7',
+                  color: '#ffffff',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  textDecoration: 'none'
+                }}
+              >
+                Go to Reception Registration ➔
+              </Link>
+            )}
+          </div>
+        )}
 
       </div>
 

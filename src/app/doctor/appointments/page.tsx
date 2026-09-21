@@ -79,7 +79,7 @@ export default function DoctorAppointmentsPage() {
   const [selectedAptForReschedule, setSelectedAptForReschedule] = useState<Appointment | null>(null);
 
   // New Booking State
-  const [bookingPatientId, setBookingPatientId] = useState(patients[0]?.id || 'pat-1');
+  const [bookingPatientId, setBookingPatientId] = useState(patients[0]?.id || '');
   const [bookingDate, setBookingDate] = useState('2026-09-20');
   const [bookingSlot, setBookingSlot] = useState('10:30');
   const [bookingVisitType, setBookingVisitType] = useState<'Consultation' | 'Follow-Up' | 'Procedure'>('Follow-Up');
@@ -107,6 +107,10 @@ export default function DoctorAppointmentsPage() {
 
   const handleCreateAppointment = () => {
     const pat = patients.find(p => p.id === bookingPatientId) || patients[0];
+    if (!pat) {
+      alert('No registered patient selected. Please register a patient first in Reception.');
+      return;
+    }
     addAppointment({
       patientId: pat.id,
       patientName: `${pat.firstName} ${pat.lastName}`,
@@ -313,6 +317,9 @@ export default function DoctorAppointmentsPage() {
                     value={bookingPatientId}
                     onChange={e => setBookingPatientId(e.target.value)}
                   >
+                    {patients.length === 0 && (
+                      <option value="">No patients registered yet (Register in Reception)</option>
+                    )}
                     {patients.map(p => (
                       <option key={p.id} value={p.id}>
                         {p.firstName} {p.lastName} ({p.mrdNumber}) — {p.mobile}

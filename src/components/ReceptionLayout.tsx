@@ -6,9 +6,9 @@ import {
   LayoutGrid, UserPlus, Search, SquareCheckBig, Users,
   Calendar, Wallet, Upload, Maximize2, Minimize2, ChevronDown,
   Activity, User, LogOut, Tv, ArrowUpRight, CheckCircle2, Shield,
-  MessageSquare, Send, X, Bell, Menu
+  MessageSquare, Send, X, Bell, Menu, RefreshCw
 } from 'lucide-react';
-import { useUIStore, useQueueStore, useChatStore, playChimeTone } from '@/store';
+import { useUIStore, useQueueStore, useChatStore, playChimeTone, resetAllStoresToDefault } from '@/store';
 
 const NAV_ITEMS = [
   { label: 'DASHBOARD', href: '/reception/dashboard', icon: LayoutGrid },
@@ -339,7 +339,7 @@ export default function ReceptionLayout({ children }: { children: React.ReactNod
                   </Link>
 
                   <Link
-                    href="/reception/patients/pat-1#consent"
+                    href="/reception/search"
                     onClick={() => setShowUserDropdown(false)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10,
@@ -348,9 +348,29 @@ export default function ReceptionLayout({ children }: { children: React.ReactNod
                     }}
                     className="hover:bg-slate-50"
                   >
-                    <Activity size={15} color="#64748B" />
-                    <span>Informed Consent Forms</span>
+                    <Search size={15} color="#64748B" />
+                    <span>Search Patient Records</span>
                   </Link>
+
+                  <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
+
+                  <div
+                    onClick={() => {
+                      if (confirm('Are you sure you want to wipe all registered patient and clinical data to reset to a clean slate? Master doctor, drug, and test catalogs will be preserved.')) {
+                        resetAllStoresToDefault();
+                        window.location.href = '/reception/dashboard';
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 12px', borderRadius: 6, fontSize: 12.5,
+                      fontWeight: 600, color: '#D97706', cursor: 'pointer'
+                    }}
+                    className="hover:bg-amber-50"
+                  >
+                    <RefreshCw size={15} />
+                    <span>Reset All Data (Clean Slate)</span>
+                  </div>
 
                   <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
 

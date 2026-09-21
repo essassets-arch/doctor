@@ -17,7 +17,7 @@ export default function LabUploadPage() {
   const { addNotification } = useUIStore();
 
   // Form State
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(patients[0]?.id || 'pat-1');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(patients[0]?.id || '');
   const [category, setCategory] = useState<LabDocument['category']>('Blood Test');
   const [documentTitle, setDocumentTitle] = useState('');
   const [referringDoctor, setReferringDoctor] = useState(doctors[0]?.name || 'Dr. Raj Valaki');
@@ -53,6 +53,10 @@ export default function LabUploadPage() {
   };
 
   const handleUpload = () => {
+    if (!selectedPatient) {
+      alert('No registered patient selected. Please register a patient first in Reception.');
+      return;
+    }
     if (!documentTitle.trim()) {
       alert('Please enter a document title.');
       return;
@@ -150,6 +154,9 @@ export default function LabUploadPage() {
                 value={selectedPatientId}
                 onChange={e => setSelectedPatientId(e.target.value)}
               >
+                {patients.length === 0 && (
+                  <option value="">No registered patients yet (Register in Reception)</option>
+                )}
                 {patients.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.firstName} {p.lastName} ({p.mrdNumber}) • {p.mobile}

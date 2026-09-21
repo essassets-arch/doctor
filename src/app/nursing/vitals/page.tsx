@@ -29,7 +29,7 @@ function VitalsContent() {
       if (match) return match.patientId;
     }
     if (paramPatientId) return paramPatientId;
-    return queue.find(q => q.stage === 'NURSING' || !q.vitalsRecorded)?.patientId || patients[0]?.id || 'pat-1';
+    return queue.find(q => q.stage === 'NURSING' || !q.vitalsRecorded)?.patientId || patients[0]?.id || '';
   });
 
   useEffect(() => {
@@ -237,6 +237,32 @@ function VitalsContent() {
 
     router.push('/nursing/dashboard');
   };
+
+  if (!selectedPatient) {
+    return (
+      <div className="page-container" style={{ maxWidth: 1300, margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
+        <div className="card" style={{ padding: '50px 20px', borderRadius: 20 }}>
+          <Activity size={44} color="#059669" style={{ margin: '0 auto 14px', opacity: 0.6 }} />
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>No Patient Selected for Triage</h2>
+          <p style={{ color: '#64748B', marginTop: 8, fontSize: 13.5 }}>
+            There are currently no patients checked in or registered in the hospital database.
+          </p>
+          <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <Link href="/reception/checkin">
+              <button className="btn btn-primary" style={{ background: '#059669', borderColor: '#059669' }}>
+                Go to Reception Check-In
+              </button>
+            </Link>
+            <Link href="/nursing/dashboard">
+              <button className="btn btn-outline" style={{ borderColor: '#059669', color: '#059669' }}>
+                Nursing Dashboard
+              </button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container" style={{ maxWidth: 1300, margin: '0 auto', padding: '24px 20px' }}>

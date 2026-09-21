@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
   useQueueStore, usePatientStore, useInventoryStore,
-  useConsultationStore, useUIStore, QueueEntry
+  useConsultationStore, useUIStore, QueueEntry, Patient
 } from '@/store';
 
 export default function DoctorDashboardPage() {
@@ -121,7 +121,21 @@ export default function DoctorDashboardPage() {
   // Start Consultation Session
   const handleStartConsultation = (entry: QueueEntry) => {
     updateStatus(entry.id, 'IN_SESSION');
-    const pat = patients.find(p => p.id === entry.patientId) || patients[0];
+    const pat: Patient = patients.find(p => p.id === entry.patientId) || {
+      id: entry.patientId || `pat-${Date.now()}`,
+      firstName: entry.patientName.split(' ')[0] || 'Patient',
+      lastName: entry.patientName.split(' ').slice(1).join(' ') || '',
+      mrdNumber: 'MRD-NEW',
+      mobile: '',
+      age: entry.age || 30,
+      ageMonths: 0,
+      ageDays: 0,
+      gender: entry.gender || 'M',
+      language: 'English',
+      bloodGroup: 'B+',
+      city: entry.city || 'Surat',
+      createdAt: new Date().toISOString().split('T')[0],
+    };
     const doc = doctors.find(d => d.id === entry.doctorId) || {
       id: entry.doctorId || 'doc-1',
       name: entry.doctorName || 'Dr. Raj Valaki',
@@ -148,7 +162,21 @@ export default function DoctorDashboardPage() {
   // Resume On-Hold Consultation
   const handleResumeOnHold = (entry: QueueEntry) => {
     resumeFromHold(entry.id);
-    const pat = patients.find(p => p.id === entry.patientId) || patients[0];
+    const pat: Patient = patients.find(p => p.id === entry.patientId) || {
+      id: entry.patientId || `pat-${Date.now()}`,
+      firstName: entry.patientName.split(' ')[0] || 'Patient',
+      lastName: entry.patientName.split(' ').slice(1).join(' ') || '',
+      mrdNumber: 'MRD-NEW',
+      mobile: '',
+      age: entry.age || 30,
+      ageMonths: 0,
+      ageDays: 0,
+      gender: entry.gender || 'M',
+      language: 'English',
+      bloodGroup: 'B+',
+      city: entry.city || 'Surat',
+      createdAt: new Date().toISOString().split('T')[0],
+    };
     const doc = doctors.find(d => d.id === entry.doctorId) || {
       id: entry.doctorId || 'doc-1',
       name: entry.doctorName || 'Dr. Raj Valaki',
