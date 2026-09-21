@@ -5,7 +5,7 @@ import {
   Users, Clock, CheckCircle2, Activity, RotateCcw, Search,
   CalendarClock, X, Lock, Bell, ArrowUpRight, TrendingUp, Wallet, PauseCircle
 } from 'lucide-react';
-import { useQueueStore, usePatientStore, QueueStatus, QueueEntry } from '@/store';
+import { useQueueStore, usePatientStore, useUIStore, QueueStatus, QueueEntry } from '@/store';
 import QueueStatusBadge from '@/components/QueueStatusBadge';
 import PaymentModal from '@/components/PaymentModal';
 
@@ -21,8 +21,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { queue, doctors, updateStatus } = useQueueStore();
+  const { queue, doctors, updateStatus, updateQueueEntry } = useQueueStore();
   const { getPatientById } = usePatientStore();
+  const { addNotification } = useUIStore();
 
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('2026-09-19');
@@ -31,6 +32,19 @@ export default function DashboardPage() {
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; entry?: QueueEntry }>({ open: false });
   const [cancelModal, setCancelModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [cancelReason, setCancelReason] = useState('');
+
+  const handleDirectArrived = (entry: QueueEntry) => {
+    const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    updateQueueEntry(entry.id, {
+      status: 'WAITING',
+      checkInTime: time,
+      stage: 'NURSING'
+    });
+    addNotification({
+      type: 'success',
+      message: `${entry.patientName} (${entry.tokenDisplay}) marked as Arrived at clinic.`
+    });
+  };
 
   const calling = queue.find(q => q.status === 'CALLING');
   const billingPendingEntries = queue.filter(q => q.status === 'BILLING_PENDING');
@@ -292,12 +306,26 @@ export default function DashboardPage() {
                             <Wallet size={12} /> Settle Bill →
                           </button>
                         ) : isUnarrived ? (
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => patient && setPaymentModal({ open: true, entry })}
-                          >
-                            Arrived
-                          </button>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              style={{ background: '#059669', borderColor: '#059669', fontSize: 11, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                              onClick={() => handleDirectArrived(entry)}
+                              title="Mark Arrived Directly"
+                            >
+                              <CheckCircle2 size={12} /> Arrived
+                            </button>
+                            {entry.billingStatus === 'PENDING' && (
+                              <button
+                                className="btn btn-outline btn-sm"
+                                style={{ fontSize: 11, padding: '4px 8px' }}
+                                onClick={() => patient && setPaymentModal({ open: true, entry })}
+                                title="Collect Fee & Mark Arrived"
+                              >
+                                Pay & Arrive
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <>
                             <span title="Vitals" className={`badge ${entry.vitalsRecorded ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: 10, cursor: 'pointer' }} onClick={() => router.push(`/reception/patients/${entry.patientId}`)}>
@@ -346,7 +374,20 @@ export default function DashboardPage() {
             doctorName={paymentModal.entry!.doctorName}
             appointmentTime={paymentModal.entry!.appointmentTime}
             onClose={() => setPaymentModal({ open: false })}
-            onComplete={() => { updateStatus(paymentModal.entry!.id, 'WAITING'); setPaymentModal({ open: false }); }}
+            onComplete={() => {
+              const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+              updateQueueEntry(paymentModal.entry!.id, {
+                status: 'WAITING',
+                checkInTime: time,
+                stage: 'NURSING',
+                billingStatus: 'PAID'
+              });
+              setPaymentModal({ open: false });
+              addNotification({
+                type: 'success',
+                message: `${paymentModal.entry!.patientName} checked in and marked Arrived.`
+              });
+            }}
           />
         ) : null;
       })()}

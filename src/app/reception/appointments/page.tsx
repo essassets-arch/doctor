@@ -8,7 +8,7 @@ import {
   AlertCircle, ChevronRight, Phone, MessageSquare
 } from 'lucide-react';
 import {
-  usePatientStore, useAppointmentStore, useQueueStore, useUIStore, useDoctorLeaveStore,
+  usePatientStore, useAppointmentStore, useQueueStore, useUIStore, useDoctorLeaveStore, useConsultationStore,
   Patient, Doctor, Appointment, VisitType, SLOTS
 } from '@/store';
 
@@ -18,10 +18,67 @@ function AppointmentsContent() {
   const preselectedPatientId = searchParams.get('patientId');
 
   const { patients, getPatientById } = usePatientStore();
-  const { doctors } = useQueueStore();
-  const { appointments, addAppointment, cancelAppointment, getAvailableSlots } = useAppointmentStore();
+  const { doctors, queue, addToQueue } = useQueueStore();
+  const { appointments, addAppointment, updateAppointment, cancelAppointment, getAvailableSlots } = useAppointmentStore();
   const { leaves } = useDoctorLeaveStore();
   const { addNotification } = useUIStore();
+
+  const handleMarkArrived = (apt: Appointment) => {
+    updateAppointment(apt.id, { status: 'ARRIVED' });
+
+    const existingQueueEntry = queue.find(q => q.patientId === apt.patientId && q.status !== 'COMPLETED' && q.status !== 'CANCELLED');
+    if (!existingQueueEntry) {
+      const tokenIndex = queue.length + 1;
+      const tokenCode = `C${String(tokenIndex).padStart(3, '0')}`;
+      const caseNumber = `${tokenCode}-001-${new Date().toLocaleDateString('en-GB').replace(/\//g, '')}`;
+      const checkInTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const pat = getPatientById(apt.patientId);
+
+      addToQueue({
+        caseNumber,
+        tokenDisplay: tokenCode,
+        patientId: apt.patientId,
+        patientName: apt.patientName,
+        doctorId: apt.doctorId,
+        doctorName: apt.doctorName,
+        visitType: apt.visitType,
+        appointmentTime: apt.time,
+        checkInTime,
+        age: pat?.age || 30,
+        gender: pat?.gender || 'M',
+        city: pat?.city || 'Surat',
+        billingStatus: 'PAID',
+        status: 'WAITING',
+        stage: 'DOCTOR',
+        vitalsRecorded: false,
+        complaintsRecorded: false,
+        isNew: false
+      });
+
+      useConsultationStore.getState().initSession(
+        caseNumber,
+        pat || { id: apt.patientId, firstName: apt.patientName, lastName: '', mobile: '', age: 30, gender: 'M', mrdNumber: 'MRD-NEW' } as any,
+        {
+          id: apt.doctorId,
+          name: apt.doctorName,
+          specialization: 'General Physician',
+          initials: apt.doctorName.split(' ').map(w => w[0]).join('').slice(0, 2),
+          avatarColor: '#036d92',
+          room: 'Cabin 1'
+        }
+      );
+
+      addNotification({
+        type: 'success',
+        message: `${apt.patientName} marked Arrived & queued for ${apt.doctorName} (Token ${tokenCode})!`
+      });
+    } else {
+      addNotification({
+        type: 'success',
+        message: `${apt.patientName} marked Arrived. Patient is already in active queue (${existingQueueEntry.tokenDisplay}).`
+      });
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'book' | 'upcoming'>('book');
 
@@ -671,17 +728,26 @@ function AppointmentsContent() {
                       </td>
 
                       <td>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
                           {apt.status === 'SCHEDULED' && (
                             <>
+                              <button
+                                onClick={() => handleMarkArrived(apt)}
+                                className="btn btn-success btn-sm"
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, padding: '4px 10px' }}
+                                title="Mark Patient Arrived & Enqueue"
+                              >
+                                <CheckCircle2 size={13} /> Arrived
+                              </button>
+
                               <Link href={`/reception/checkin?patientId=${apt.patientId}`} title="Check-In Patient Now">
-                                <button className="btn btn-success btn-sm">
+                                <button className="btn btn-outline btn-sm">
                                   Check In
                                 </button>
                               </Link>
 
                               <Link href={`/reception/appointments/reschedule/${apt.id}`} title="Reschedule Slot">
-                                <button className="btn btn-outline btn-sm">
+                                <button className="btn btn-ghost btn-sm">
                                   Reschedule
                                 </button>
                               </Link>
@@ -695,6 +761,13 @@ function AppointmentsContent() {
                                 Cancel
                               </button>
                             </>
+                          )}
+                          {apt.status === 'ARRIVED' && (
+                            <Link href="/reception/queue">
+                              <span className="badge badge-success" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <CheckCircle2 size={12} /> In Queue →
+                              </span>
+                            </Link>
                           )}
                         </div>
                       </td>

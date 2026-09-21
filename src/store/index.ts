@@ -1,7 +1,27 @@
-// src/store/index.ts
-// Zustand stores for MedFlow OPD Receptionist Panel
-
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+
+// SSR-Safe LocalStorage adapter for Next.js Turbopack
+const isClient = typeof window !== 'undefined';
+
+const dummyStorage = {
+  getItem: (_key: string) => null,
+  setItem: (_key: string, _value: string) => {},
+  removeItem: (_key: string) => {},
+};
+
+export const safeStorage = createJSONStorage(() => (isClient ? localStorage : dummyStorage));
+
+export const notifyTabSync = (storeKey: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('doctor_medflow_sync');
+      bc.postMessage({ key: storeKey, timestamp: Date.now() });
+      bc.close();
+    }
+  } catch {}
+};
 
 // ============================================================
 // Types
@@ -118,9 +138,11 @@ export interface QueueEntry {
   city: string;
   billingStatus: BillingStatus;
   status: QueueStatus;
-  stage?: 'NURSING' | 'DOCTOR' | 'BILLING' | 'COMPLETED';
+  stage?: 'NURSING' | 'DOCTOR' | 'PHARMACY' | 'BILLING' | 'COMPLETED';
   vitalsRecorded: boolean;
   complaintsRecorded: boolean;
+  complaints?: string[];
+  complaintNotes?: string;
   isMR?: boolean;
   mrCompany?: string;
   isNew?: boolean;
@@ -279,48 +301,72 @@ interface PatientState {
   getPatientById: (id: string) => Patient | undefined;
 }
 
-export const usePatientStore = create<PatientState>((set, get) => ({
-  patients: PATIENTS,
-  searchResults: PATIENTS,
-  selectedPatient: null,
-  nextMrd: 'MRD-2026-0009',
-  searchQuery: '',
-  addPatient: (data) => {
-    const newPatient: Patient = {
-      ...data,
-      id: `pat-${Date.now()}`,
-      mrdNumber: get().nextMrd,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    set(s => ({
-      patients: [newPatient, ...s.patients],
-      searchResults: [newPatient, ...s.searchResults],
-      nextMrd: `MRD-2026-${String(parseInt(s.nextMrd.split('-')[2]) + 1).padStart(4, '0')}`
-    }));
-    return newPatient;
-  },
-  updatePatient: (id, data) => set(s => ({
-    patients: s.patients.map(p => p.id === id ? { ...p, ...data } : p),
-    searchResults: s.searchResults.map(p => p.id === id ? { ...p, ...data } : p),
-    selectedPatient: s.selectedPatient?.id === id ? { ...s.selectedPatient, ...data } : s.selectedPatient
-  })),
-  setSelectedPatient: (patient) => set({ selectedPatient: patient }),
-  searchPatients: (query) => {
-    const q = query.toLowerCase();
-    set({
-      searchQuery: query,
-      searchResults: query.length === 0
-        ? get().patients
-        : get().patients.filter(p =>
-          p.firstName.toLowerCase().includes(q) ||
-          p.lastName.toLowerCase().includes(q) ||
-          p.mrdNumber.toLowerCase().includes(q) ||
-          p.mobile.includes(q)
-        )
-    });
-  },
-  getPatientById: (id) => get().patients.find(p => p.id === id),
-}));
+export const usePatientStore = create<PatientState>()(
+  persist(
+    (set, get) => ({
+      patients: PATIENTS,
+      searchResults: PATIENTS,
+      selectedPatient: null,
+      nextMrd: 'MRD-2026-0009',
+      searchQuery: '',
+      addPatient: (data) => {
+        const newPatient: Patient = {
+          ...data,
+          id: `pat-${Date.now()}`,
+          mrdNumber: get().nextMrd,
+          createdAt: new Date().toISOString().split('T')[0],
+        };
+        set(s => {
+          const updated = [newPatient, ...s.patients];
+          return {
+            patients: updated,
+            searchResults: updated,
+            nextMrd: `MRD-2026-${String(parseInt(s.nextMrd.split('-')[2]) + 1).padStart(4, '0')}`
+          };
+        });
+        notifyTabSync('doctor-patients');
+        return newPatient;
+      },
+      updatePatient: (id, data) => {
+        set(s => ({
+          patients: s.patients.map(p => p.id === id ? { ...p, ...data } : p),
+          searchResults: s.searchResults.map(p => p.id === id ? { ...p, ...data } : p),
+          selectedPatient: s.selectedPatient?.id === id ? { ...s.selectedPatient, ...data } : s.selectedPatient
+        }));
+        notifyTabSync('doctor-patients');
+      },
+      setSelectedPatient: (patient) => set({ selectedPatient: patient }),
+      searchPatients: (query) => {
+        const q = query.toLowerCase();
+        set({
+          searchQuery: query,
+          searchResults: query.length === 0
+            ? get().patients
+            : get().patients.filter(p =>
+              p.firstName.toLowerCase().includes(q) ||
+              p.lastName.toLowerCase().includes(q) ||
+              p.mrdNumber.toLowerCase().includes(q) ||
+              p.mobile.includes(q)
+            )
+        });
+      },
+      getPatientById: (id) => get().patients.find(p => p.id === id),
+    }),
+    {
+      name: 'doctor-patients',
+      storage: safeStorage,
+      partialize: (s) => ({
+        patients: s.patients,
+        nextMrd: s.nextMrd,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.searchResults = state.patients;
+        }
+      }
+    }
+  )
+);
 
 // ============================================================
 // Queue Store
@@ -333,7 +379,7 @@ interface QueueState {
   lastEvent: SSEEvent | null;
   emitEvent: (event: Omit<SSEEvent, 'timestamp'>) => void;
   updateStatus: (id: string, status: QueueStatus) => void;
-  addToQueue: (entry: Omit<QueueEntry, 'id'>) => void;
+  addToQueue: (entry: Omit<QueueEntry, 'id'>) => QueueEntry;
   updateVitals: (id: string, vitals: boolean) => void;
   updateComplaints: (id: string, complaints: boolean) => void;
   updateQueueEntry: (id: string, data: Partial<QueueEntry>) => void;
@@ -345,114 +391,157 @@ interface QueueState {
   setCallingEntry: (entry: QueueEntry | null) => void;
 }
 
-export const useQueueStore = create<QueueState>((set, get) => ({
-  queue: QUEUE_ENTRIES,
-  doctors: DOCTORS,
-  callingEntry: QUEUE_ENTRIES.find(q => q.status === 'CALLING') || null,
-  lastEvent: null,
-  emitEvent: (event) => set({ lastEvent: { ...event, timestamp: Date.now() } }),
-  updateStatus: (id, status) => set(s => {
-    const entry = s.queue.find(q => q.id === id);
-    return {
-      queue: s.queue.map(q => q.id === id ? {
-        ...q,
-        status,
-        callCount: status === 'CALLING' ? (q.callCount || 0) + 1 : q.callCount
-      } : q),
-      callingEntry: status === 'CALLING' ? s.queue.find(q => q.id === id) || null : s.callingEntry,
-      lastEvent: {
-        type: 'STATUS_CHANGED',
-        id,
-        token: entry?.tokenDisplay,
-        patientName: entry?.patientName,
-        status,
-        timestamp: Date.now()
-      }
-    };
-  }),
-  addToQueue: (entry) => set(s => {
-    const newEntry: QueueEntry = { ...entry, id: `q-${Date.now()}` };
-    return {
-      queue: [...s.queue, newEntry],
-      lastEvent: {
-        type: 'CHECK_IN',
-        id: newEntry.id,
-        token: newEntry.tokenDisplay,
-        patientName: newEntry.patientName,
-        status: newEntry.status,
-        timestamp: Date.now()
-      }
-    };
-  }),
-  updateVitals: (id, vitals) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, vitalsRecorded: vitals } : q) })),
-  updateComplaints: (id, complaints) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, complaintsRecorded: complaints } : q) })),
-  updateQueueEntry: (id, data) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, ...data } : q) })),
-  putOnHold: (id, reason) => set(s => {
-    const entry = s.queue.find(q => q.id === id);
-    return {
-      queue: s.queue.map(q => q.id === id ? {
-        ...q,
-        status: 'ON_HOLD' as QueueStatus,
-        onHoldReason: reason || 'Awaiting Diagnostics / Lab Results'
-      } : q),
-      lastEvent: {
-        type: 'ON_HOLD',
-        id,
-        token: entry?.tokenDisplay,
-        patientName: entry?.patientName,
-        status: 'ON_HOLD',
-        timestamp: Date.now()
-      }
-    };
-  }),
-  resumeFromHold: (id) => set(s => {
-    const entry = s.queue.find(q => q.id === id);
-    return {
-      queue: s.queue.map(q => q.id === id ? {
-        ...q,
-        status: 'IN_SESSION' as QueueStatus
-      } : q),
-      lastEvent: {
-        type: 'SESSION_STARTED',
-        id,
-        token: entry?.tokenDisplay,
-        patientName: entry?.patientName,
-        status: 'IN_SESSION',
-        timestamp: Date.now()
-      }
-    };
-  }),
-  endSessionAndSendToBilling: (caseNumber, nextStage = 'BILLING') => set(s => {
-    const entry = s.queue.find(q => q.caseNumber === caseNumber);
-    const targetStatus: QueueStatus = nextStage === 'BILLING' ? 'BILLING_PENDING' : 'COMPLETED';
-    return {
-      queue: s.queue.map(q => q.caseNumber === caseNumber ? {
-        ...q,
-        status: targetStatus
-      } : q),
-      lastEvent: {
-        type: 'SESSION_ENDED',
-        caseId: caseNumber,
-        token: entry?.tokenDisplay,
-        patientName: entry?.patientName,
-        status: targetStatus,
-        nextStage,
-        timestamp: Date.now()
-      }
-    };
-  }),
-  completeCheckout: (id) => set(s => ({
-    queue: s.queue.map(q => q.id === id ? { ...q, status: 'COMPLETED' as QueueStatus, billingStatus: 'PAID' } : q),
-    lastEvent: {
-      type: 'PAYMENT_RECEIVED',
-      id,
-      status: 'COMPLETED',
-      timestamp: Date.now()
+export const useQueueStore = create<QueueState>()(
+  persist(
+    (set, get) => ({
+      queue: QUEUE_ENTRIES,
+      doctors: DOCTORS,
+      callingEntry: QUEUE_ENTRIES.find(q => q.status === 'CALLING') || null,
+      lastEvent: null,
+      emitEvent: (event) => set({ lastEvent: { ...event, timestamp: Date.now() } }),
+      updateStatus: (id, status) => {
+        set(s => {
+          const entry = s.queue.find(q => q.id === id);
+          return {
+            queue: s.queue.map(q => q.id === id ? {
+              ...q,
+              status,
+              callCount: status === 'CALLING' ? (q.callCount || 0) + 1 : q.callCount
+            } : q),
+            callingEntry: status === 'CALLING' ? s.queue.find(q => q.id === id) || null : s.callingEntry,
+            lastEvent: {
+              type: 'STATUS_CHANGED',
+              id,
+              token: entry?.tokenDisplay,
+              patientName: entry?.patientName,
+              status,
+              timestamp: Date.now()
+            }
+          };
+        });
+        notifyTabSync('doctor-queue');
+      },
+      addToQueue: (entry) => {
+        const newEntry: QueueEntry = { ...entry, id: `q-${Date.now()}` };
+        set(s => ({
+          queue: [...s.queue, newEntry],
+          lastEvent: {
+            type: 'CHECK_IN',
+            id: newEntry.id,
+            token: newEntry.tokenDisplay,
+            patientName: newEntry.patientName,
+            status: newEntry.status,
+            timestamp: Date.now()
+          }
+        }));
+        notifyTabSync('doctor-queue');
+        return newEntry;
+      },
+      updateVitals: (id, vitals) => {
+        set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, vitalsRecorded: vitals } : q) }));
+        notifyTabSync('doctor-queue');
+      },
+      updateComplaints: (id, complaints) => {
+        set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, complaintsRecorded: complaints } : q) }));
+        notifyTabSync('doctor-queue');
+      },
+      updateQueueEntry: (id, data) => {
+        set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, ...data } : q) }));
+        notifyTabSync('doctor-queue');
+      },
+      putOnHold: (id, reason) => {
+        set(s => {
+          const entry = s.queue.find(q => q.id === id);
+          return {
+            queue: s.queue.map(q => q.id === id ? {
+              ...q,
+              status: 'ON_HOLD' as QueueStatus,
+              onHoldReason: reason || 'Awaiting Diagnostics / Lab Results'
+            } : q),
+            lastEvent: {
+              type: 'ON_HOLD',
+              id,
+              token: entry?.tokenDisplay,
+              patientName: entry?.patientName,
+              status: 'ON_HOLD',
+              timestamp: Date.now()
+            }
+          };
+        });
+        notifyTabSync('doctor-queue');
+      },
+      resumeFromHold: (id) => {
+        set(s => {
+          const entry = s.queue.find(q => q.id === id);
+          return {
+            queue: s.queue.map(q => q.id === id ? {
+              ...q,
+              status: 'IN_SESSION' as QueueStatus
+            } : q),
+            lastEvent: {
+              type: 'SESSION_STARTED',
+              id,
+              token: entry?.tokenDisplay,
+              patientName: entry?.patientName,
+              status: 'IN_SESSION',
+              timestamp: Date.now()
+            }
+          };
+        });
+        notifyTabSync('doctor-queue');
+      },
+      endSessionAndSendToBilling: (caseNumber, nextStage = 'BILLING') => {
+        set(s => {
+          const entry = s.queue.find(q => q.caseNumber === caseNumber);
+          const targetStatus: QueueStatus = (nextStage === 'BILLING' || nextStage === 'PHARMACY') ? 'BILLING_PENDING' : 'COMPLETED';
+          const stageVal = nextStage === 'PHARMACY' ? 'PHARMACY' : (nextStage === 'BILLING' ? 'BILLING' : 'COMPLETED');
+          return {
+            queue: s.queue.map(q => q.caseNumber === caseNumber ? {
+              ...q,
+              status: targetStatus,
+              stage: stageVal
+            } : q),
+            lastEvent: {
+              type: 'SESSION_ENDED',
+              caseId: caseNumber,
+              token: entry?.tokenDisplay,
+              patientName: entry?.patientName,
+              status: targetStatus,
+              nextStage,
+              timestamp: Date.now()
+            }
+          };
+        });
+        notifyTabSync('doctor-queue');
+      },
+      completeCheckout: (id) => {
+        set(s => ({
+          queue: s.queue.map(q => q.id === id ? { ...q, status: 'COMPLETED' as QueueStatus, billingStatus: 'PAID', stage: 'COMPLETED' } : q),
+          lastEvent: {
+            type: 'PAYMENT_RECEIVED',
+            id,
+            status: 'COMPLETED',
+            timestamp: Date.now()
+          }
+        }));
+        notifyTabSync('doctor-queue');
+      },
+      cancelEntry: (id, _reason) => {
+        set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, status: 'CANCELLED' } : q) }));
+        notifyTabSync('doctor-queue');
+      },
+      setCallingEntry: (entry) => set({ callingEntry: entry }),
+    }),
+    {
+      name: 'doctor-queue',
+      storage: safeStorage,
+      partialize: (s) => ({
+        queue: s.queue,
+        callingEntry: s.callingEntry,
+      })
     }
-  })),
-  cancelEntry: (id, _reason) => set(s => ({ queue: s.queue.map(q => q.id === id ? { ...q, status: 'CANCELLED' } : q) })),
-  setCallingEntry: (entry) => set({ callingEntry: entry }),
-}));
+  )
+);
 
 // ============================================================
 // Appointment Store
@@ -477,31 +566,48 @@ interface AppointmentState {
   getAvailableSlots: (doctorId: string, date: string) => string[];
 }
 
-export const useAppointmentStore = create<AppointmentState>((set, get) => ({
-  appointments: APPOINTMENTS,
-  availableSlots: SLOTS,
-  addAppointment: (apt) => set(s => ({ appointments: [...s.appointments, { ...apt, id: `apt-${Date.now()}` }] })),
-  updateAppointment: (id, data) => set(s => ({ appointments: s.appointments.map(a => a.id === id ? { ...a, ...data } : a) })),
-  cancelAppointment: (id, _reason) => set(s => ({ appointments: s.appointments.map(a => a.id === id ? { ...a, status: 'CANCELLED' } : a) })),
-  getAvailableSlots: (doctorId, date) => {
-    try {
-      const leaves = useDoctorLeaveStore.getState()?.leaves;
-      if (leaves) {
-        const onLeave = leaves.some(
-          l => l.doctorId === doctorId && l.status === 'APPROVED' && date >= l.startDate && date <= l.endDate
-        );
-        if (onLeave) return [];
-      }
-    } catch {
-      // Fallback
-    }
+export const useAppointmentStore = create<AppointmentState>()(
+  persist(
+    (set, get) => ({
+      appointments: APPOINTMENTS,
+      availableSlots: SLOTS,
+      addAppointment: (apt) => {
+        set(s => ({ appointments: [...s.appointments, { ...apt, id: `apt-${Date.now()}` }] }));
+        notifyTabSync('doctor-appointments');
+      },
+      updateAppointment: (id, data) => {
+        set(s => ({ appointments: s.appointments.map(a => a.id === id ? { ...a, ...data } : a) }));
+        notifyTabSync('doctor-appointments');
+      },
+      cancelAppointment: (id, _reason) => {
+        set(s => ({ appointments: s.appointments.map(a => a.id === id ? { ...a, status: 'CANCELLED' } : a) }));
+        notifyTabSync('doctor-appointments');
+      },
+      getAvailableSlots: (doctorId, date) => {
+        try {
+          const leaves = useDoctorLeaveStore.getState()?.leaves;
+          if (leaves) {
+            const onLeave = leaves.some(
+              l => l.doctorId === doctorId && l.status === 'APPROVED' && date >= l.startDate && date <= l.endDate
+            );
+            if (onLeave) return [];
+          }
+        } catch {
+          // Fallback
+        }
 
-    const booked = get().appointments
-      .filter(a => a.doctorId === doctorId && a.date === date && a.status !== 'CANCELLED')
-      .map(a => a.time);
-    return SLOTS.filter(s => !booked.includes(s));
-  },
-}));
+        const booked = get().appointments
+          .filter(a => a.doctorId === doctorId && a.date === date && a.status !== 'CANCELLED')
+          .map(a => a.time);
+        return SLOTS.filter(s => !booked.includes(s));
+      },
+    }),
+    {
+      name: 'doctor-appointments',
+      storage: safeStorage,
+    }
+  )
+);
 
 // ============================================================
 // Doctor Store
@@ -522,15 +628,30 @@ interface BillingState {
   getTodayBills: () => BillRecord[];
 }
 
-export const useBillingStore = create<BillingState>((set, get) => ({
-  bills: BILLS,
-  addBill: (bill) => {
-    const invoiceNumber = `INV-2026-${String(get().bills.length + 91).padStart(4, '0')}`;
-    set(s => ({ bills: [{ ...bill, id: `bill-${Date.now()}`, invoiceNumber }, ...s.bills] }));
-  },
-  updateBill: (id, data) => set(s => ({ bills: s.bills.map(b => b.id === id ? { ...b, ...data } : b) })),
-  getTodayBills: () => get().bills.filter(b => b.date === '2026-09-19'),
-}));
+export const useBillingStore = create<BillingState>()(
+  persist(
+    (set, get) => ({
+      bills: BILLS,
+      addBill: (bill) => {
+        const invoiceNumber = `INV-2026-${String(get().bills.length + 91).padStart(4, '0')}`;
+        set(s => ({ bills: [{ ...bill, id: `bill-${Date.now()}`, invoiceNumber }, ...s.bills] }));
+        notifyTabSync('doctor-billing');
+      },
+      updateBill: (id, data) => {
+        set(s => ({ bills: s.bills.map(b => b.id === id ? { ...b, ...data } : b) }));
+        notifyTabSync('doctor-billing');
+      },
+      getTodayBills: () => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        return get().bills.filter(b => b.date === '2026-09-19' || b.date === todayStr);
+      },
+    }),
+    {
+      name: 'doctor-billing',
+      storage: safeStorage,
+    }
+  )
+);
 
 // ============================================================
 // UI Store
@@ -721,22 +842,37 @@ interface LabState {
   getPatientDocuments: (patientId: string) => LabDocument[];
 }
 
-export const useLabStore = create<LabState>((set, get) => ({
-  documents: LAB_DOCUMENTS,
-  addDocument: (doc) => {
-    const newDoc: LabDocument = {
-      ...doc,
-      id: `lab-${Date.now()}`,
-      uploadedAt: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-    };
-    set(s => ({ documents: [newDoc, ...s.documents] }));
-  },
-  deleteDocument: (id) => set(s => ({ documents: s.documents.filter(d => d.id !== id) })),
-  updateStatus: (id, status) => set(s => ({
-    documents: s.documents.map(d => d.id === id ? { ...d, status } : d)
-  })),
-  getPatientDocuments: (patientId) => get().documents.filter(d => d.patientId === patientId),
-}));
+export const useLabStore = create<LabState>()(
+  persist(
+    (set, get) => ({
+      documents: LAB_DOCUMENTS,
+      addDocument: (doc) => {
+        const newDoc: LabDocument = {
+          ...doc,
+          id: `lab-${Date.now()}`,
+          uploadedAt: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
+        };
+        set(s => ({ documents: [newDoc, ...s.documents] }));
+        notifyTabSync('doctor-lab');
+      },
+      deleteDocument: (id) => {
+        set(s => ({ documents: s.documents.filter(d => d.id !== id) }));
+        notifyTabSync('doctor-lab');
+      },
+      updateStatus: (id, status) => {
+        set(s => ({
+          documents: s.documents.map(d => d.id === id ? { ...d, status } : d)
+        }));
+        notifyTabSync('doctor-lab');
+      },
+      getPatientDocuments: (patientId) => get().documents.filter(d => d.patientId === patientId),
+    }),
+    {
+      name: 'doctor-lab',
+      storage: safeStorage,
+    }
+  )
+);
 
 interface ClinicalState {
   records: ClinicalRecord[];
@@ -744,11 +880,22 @@ interface ClinicalState {
   getPatientRecords: (patientId: string) => ClinicalRecord[];
 }
 
-export const useClinicalStore = create<ClinicalState>((set, get) => ({
-  records: CLINICAL_RECORDS,
-  addRecord: (rec) => set(s => ({ records: [{ ...rec, id: `cr-${Date.now()}` }, ...s.records] })),
-  getPatientRecords: (patientId) => get().records.filter(r => r.patientId === patientId),
-}));
+export const useClinicalStore = create<ClinicalState>()(
+  persist(
+    (set, get) => ({
+      records: CLINICAL_RECORDS,
+      addRecord: (rec) => {
+        set(s => ({ records: [{ ...rec, id: `cr-${Date.now()}` }, ...s.records] }));
+        notifyTabSync('doctor-clinical');
+      },
+      getPatientRecords: (patientId) => get().records.filter(r => r.patientId === patientId),
+    }),
+    {
+      name: 'doctor-clinical',
+      storage: safeStorage,
+    }
+  )
+);
 
 // ============================================================
 // Doctor Panel Data & Stores
@@ -1026,13 +1173,24 @@ interface InventoryState {
   updateStock: (id: string, delta: number) => void;
 }
 
-export const useInventoryStore = create<InventoryState>((set, get) => ({
-  inventory: DRUG_INVENTORY,
-  getDrugByName: (name) => get().inventory.find(i => i.name.toLowerCase().includes(name.toLowerCase())),
-  updateStock: (id, delta) => set(s => ({
-    inventory: s.inventory.map(i => i.id === id ? { ...i, stock: Math.max(0, i.stock + delta) } : i)
-  }))
-}));
+export const useInventoryStore = create<InventoryState>()(
+  persist(
+    (set, get) => ({
+      inventory: DRUG_INVENTORY,
+      getDrugByName: (name) => get().inventory.find(i => i.name.toLowerCase().includes(name.toLowerCase())),
+      updateStock: (id, delta) => {
+        set(s => ({
+          inventory: s.inventory.map(i => i.id === id ? { ...i, stock: Math.max(0, i.stock + delta) } : i)
+        }));
+        notifyTabSync('doctor-inventory');
+      }
+    }),
+    {
+      name: 'doctor-inventory',
+      storage: safeStorage,
+    }
+  )
+);
 
 interface InvestigationCatalogState {
   catalog: InvestigationCatalogItem[];
@@ -1040,11 +1198,19 @@ interface InvestigationCatalogState {
   deleteTest: (id: string) => void;
 }
 
-export const useInvestigationCatalogStore = create<InvestigationCatalogState>((set) => ({
-  catalog: INVESTIGATION_CATALOG,
-  addTest: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `inv-${Date.now()}` }] })),
-  deleteTest: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
-}));
+export const useInvestigationCatalogStore = create<InvestigationCatalogState>()(
+  persist(
+    (set) => ({
+      catalog: INVESTIGATION_CATALOG,
+      addTest: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `inv-${Date.now()}` }] })),
+      deleteTest: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
+    }),
+    {
+      name: 'doctor-investigation-catalog',
+      storage: safeStorage,
+    }
+  )
+);
 
 interface ProcedureCatalogState {
   catalog: ProcedureCatalogItem[];
@@ -1052,11 +1218,19 @@ interface ProcedureCatalogState {
   deleteProcedure: (id: string) => void;
 }
 
-export const useProcedureCatalogStore = create<ProcedureCatalogState>((set) => ({
-  catalog: PROCEDURE_CATALOG,
-  addProcedure: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `proc-${Date.now()}` }] })),
-  deleteProcedure: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
-}));
+export const useProcedureCatalogStore = create<ProcedureCatalogState>()(
+  persist(
+    (set) => ({
+      catalog: PROCEDURE_CATALOG,
+      addProcedure: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `proc-${Date.now()}` }] })),
+      deleteProcedure: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
+    }),
+    {
+      name: 'doctor-procedure-catalog',
+      storage: safeStorage,
+    }
+  )
+);
 
 interface FollowUpState {
   tasks: FollowUpTask[];
@@ -1064,19 +1238,27 @@ interface FollowUpState {
   updateStatus: (taskId: string, status: FollowUpTask['status']) => void;
 }
 
-export const useFollowUpStore = create<FollowUpState>((set) => ({
-  tasks: FOLLOWUP_TASKS,
-  addCallLog: (taskId, log) => set(s => ({
-    tasks: s.tasks.map(t => t.id === taskId ? {
-      ...t,
-      status: log.outcome === 'ANSWERED' ? 'CALLED' : t.status,
-      callLogs: [{ ...log, date: '2026-09-19' }, ...t.callLogs]
-    } : t)
-  })),
-  updateStatus: (taskId, status) => set(s => ({
-    tasks: s.tasks.map(t => t.id === taskId ? { ...t, status } : t)
-  }))
-}));
+export const useFollowUpStore = create<FollowUpState>()(
+  persist(
+    (set) => ({
+      tasks: FOLLOWUP_TASKS,
+      addCallLog: (taskId, log) => set(s => ({
+        tasks: s.tasks.map(t => t.id === taskId ? {
+          ...t,
+          status: log.outcome === 'ANSWERED' ? 'CALLED' : t.status,
+          callLogs: [{ ...log, date: '2026-09-19' }, ...t.callLogs]
+        } : t)
+      })),
+      updateStatus: (taskId, status) => set(s => ({
+        tasks: s.tasks.map(t => t.id === taskId ? { ...t, status } : t)
+      }))
+    }),
+    {
+      name: 'doctor-followup',
+      storage: safeStorage,
+    }
+  )
+);
 
 interface DoctorLeaveState {
   leaves: DoctorLeave[];
@@ -1084,28 +1266,53 @@ interface DoctorLeaveState {
   cancelLeave: (id: string) => void;
 }
 
-export const useDoctorLeaveStore = create<DoctorLeaveState>((set) => ({
-  leaves: DOCTOR_LEAVES,
-  addLeave: (leave) => set(s => ({ leaves: [{ ...leave, id: `l-${Date.now()}` }, ...s.leaves] })),
-  cancelLeave: (id) => set(s => ({ leaves: s.leaves.filter(l => l.id !== id) }))
-}));
+export const useDoctorLeaveStore = create<DoctorLeaveState>()(
+  persist(
+    (set) => ({
+      leaves: DOCTOR_LEAVES,
+      addLeave: (leave) => set(s => ({ leaves: [{ ...leave, id: `l-${Date.now()}` }, ...s.leaves] })),
+      cancelLeave: (id) => set(s => ({ leaves: s.leaves.filter(l => l.id !== id) }))
+    }),
+    {
+      name: 'doctor-leaves',
+      storage: safeStorage,
+    }
+  )
+);
 
 interface ChatState {
   messages: ChatMessage[];
   sendMessage: (msg: { sender: string; senderRole: ChatMessage['senderRole']; message: string }) => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
-  messages: CHAT_MESSAGES,
-  sendMessage: (msg) => set(s => ({
-    messages: [...s.messages, { ...msg, id: `c-${Date.now()}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]
-  }))
-}));
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      messages: CHAT_MESSAGES,
+      sendMessage: (msg) => set(s => ({
+        messages: [...s.messages, { ...msg, id: `c-${Date.now()}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]
+      }))
+    }),
+    {
+      name: 'doctor-chat',
+      storage: safeStorage,
+    }
+  )
+);
 
 // Consultation Master Store
 interface ConsultationState {
   activeSession: ConsultationSession | null;
-  initSession: (caseId: string, patient: Patient, doctor: Doctor) => void;
+  sessions: Record<string, ConsultationSession>;
+  getSession: (caseId: string) => ConsultationSession | undefined;
+  loadSession: (caseId: string) => boolean;
+  saveSession: (session: ConsultationSession) => void;
+  initSession: (
+    caseId: string,
+    patient: Patient,
+    doctor: Doctor,
+    initialData?: Partial<ConsultationSession>
+  ) => ConsultationSession;
   updateComplaints: (complaints: Partial<ConsultationSession['complaints']>) => void;
   updateVitals: (vitals: Partial<ConsultationSession['vitals']>) => void;
   updateHistory: (history: Partial<ConsultationSession['history']>) => void;
@@ -1188,63 +1395,247 @@ const DEFAULT_SESSION: ConsultationSession = {
   isFinalized: false
 };
 
-export const useConsultationStore = create<ConsultationState>((set, get) => ({
-  activeSession: DEFAULT_SESSION,
-  initSession: (caseId, patient, doctor) => set({
-    activeSession: {
-      ...DEFAULT_SESSION,
-      caseId,
-      patientId: patient.id,
-      patientName: `${patient.firstName} ${patient.lastName}`,
-      mrdNumber: patient.mrdNumber,
-      doctorId: doctor.id,
-      doctorName: doctor.name,
-      isFinalized: false,
+const INITIAL_SESSIONS: Record<string, ConsultationSession> = {
+  'C003-001-190926': DEFAULT_SESSION,
+};
+
+export const useConsultationStore = create<ConsultationState>()(
+  persist(
+    (set, get) => ({
+      activeSession: DEFAULT_SESSION,
+      sessions: INITIAL_SESSIONS,
+
+      getSession: (caseId: string) => {
+        const found = get().sessions[caseId];
+        if (found) return found;
+        if (get().activeSession?.caseId === caseId) return get().activeSession || undefined;
+        return undefined;
+      },
+
+      loadSession: (caseId: string) => {
+        const found = get().sessions[caseId];
+        if (found) {
+          set({ activeSession: found });
+          return true;
+        }
+        return false;
+      },
+
+      saveSession: (session: ConsultationSession) => {
+        set(s => ({
+          activeSession: s.activeSession?.caseId === session.caseId ? session : s.activeSession,
+          sessions: { ...s.sessions, [session.caseId]: session }
+        }));
+        notifyTabSync('doctor-consultation');
+      },
+
+      initSession: (caseId, patient, doctor, initialData) => {
+        const existing = get().sessions[caseId];
+        if (existing) {
+          set({ activeSession: existing });
+          return existing;
+        }
+
+        const newSession: ConsultationSession = {
+          caseId,
+          patientId: patient.id,
+          patientName: `${patient.firstName} ${patient.lastName}`,
+          mrdNumber: patient.mrdNumber,
+          doctorId: doctor.id,
+          doctorName: doctor.name,
+          startTime: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          complaints: initialData?.complaints || {
+            presentComplaint: '',
+            durationYears: 0,
+            durationMonths: 0,
+            durationDays: 1,
+            severity: 'MODERATE',
+            onset: 'Gradual',
+            aggravatingFactors: '',
+            relievingFactors: ''
+          },
+          vitals: initialData?.vitals || {
+            temperature: '98.6',
+            pulse: '76',
+            bpSystolic: '120',
+            bpDiastolic: '80',
+            spo2: '99',
+            weight: '68',
+            height: '168'
+          },
+          history: initialData?.history || {
+            pastMedical: '',
+            pastSurgical: '',
+            allergies: '',
+            currentMedications: ''
+          },
+          investigations: initialData?.investigations || [],
+          prescriptions: initialData?.prescriptions || [],
+          procedures: initialData?.procedures || [],
+          images: initialData?.images || [],
+          diagnosis: initialData?.diagnosis || {
+            provisional: '',
+            differential: '',
+            finalDiagnosis: '',
+            icd10Code: '',
+            treatmentPlan: '',
+            patientAdvice: '',
+            followUpDate: '',
+            followUpPurpose: '',
+            nursingInstructions: ''
+          },
+          billing: initialData?.billing || {
+            consultationFee: 500,
+            discountPercent: 0,
+            isFoc: false
+          },
+          isFinalized: false
+        };
+
+        set(s => ({
+          activeSession: newSession,
+          sessions: { ...s.sessions, [caseId]: newSession }
+        }));
+        notifyTabSync('doctor-consultation');
+        return newSession;
+      },
+
+      updateComplaints: (complaints) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, complaints: { ...s.activeSession.complaints, ...complaints } };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateVitals: (vitals) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, vitals: { ...s.activeSession.vitals, ...vitals } };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateHistory: (history) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, history: { ...s.activeSession.history, ...history } };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      addInvestigation: (item) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, investigations: [...s.activeSession.investigations, item] };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      removeInvestigation: (testId) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, investigations: s.activeSession.investigations.filter(i => i.testId !== testId) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      addPrescription: (item) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, prescriptions: [...s.activeSession.prescriptions, item] };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      removePrescription: (id) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, prescriptions: s.activeSession.prescriptions.filter(p => p.id !== id) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      addProcedure: (item) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, procedures: [...s.activeSession.procedures, item] };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      removeProcedure: (id) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, procedures: s.activeSession.procedures.filter(p => p.id !== id) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      addImage: (item) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, images: [...s.activeSession.images, item] };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      removeImage: (id) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, images: s.activeSession.images.filter(img => img.id !== id) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateDiagnosis: (diagnosis) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, diagnosis: { ...s.activeSession.diagnosis, ...diagnosis } };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateBilling: (billing) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, billing: { ...s.activeSession.billing, ...billing } };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      finalizeConsultation: () => set(s => {
+        if (!s.activeSession) return s;
+        const updated = {
+          ...s.activeSession,
+          isFinalized: true,
+          finalizedAt: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
+        };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+    }),
+    {
+      name: 'doctor-consultation',
+      storage: safeStorage,
     }
-  }),
-  updateComplaints: (complaints) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, complaints: { ...s.activeSession.complaints, ...complaints } }
-  }) : s),
-  updateVitals: (vitals) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, vitals: { ...s.activeSession.vitals, ...vitals } }
-  }) : s),
-  updateHistory: (history) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, history: { ...s.activeSession.history, ...history } }
-  }) : s),
-  addInvestigation: (item) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, investigations: [...s.activeSession.investigations, item] }
-  }) : s),
-  removeInvestigation: (testId) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, investigations: s.activeSession.investigations.filter(i => i.testId !== testId) }
-  }) : s),
-  addPrescription: (item) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, prescriptions: [...s.activeSession.prescriptions, item] }
-  }) : s),
-  removePrescription: (id) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, prescriptions: s.activeSession.prescriptions.filter(p => p.id !== id) }
-  }) : s),
-  addProcedure: (item) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, procedures: [...s.activeSession.procedures, item] }
-  }) : s),
-  removeProcedure: (id) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, procedures: s.activeSession.procedures.filter(p => p.id !== id) }
-  }) : s),
-  addImage: (item) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, images: [...s.activeSession.images, item] }
-  }) : s),
-  removeImage: (id) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, images: s.activeSession.images.filter(img => img.id !== id) }
-  }) : s),
-  updateDiagnosis: (diagnosis) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, diagnosis: { ...s.activeSession.diagnosis, ...diagnosis } }
-  }) : s),
-  updateBilling: (billing) => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, billing: { ...s.activeSession.billing, ...billing } }
-  }) : s),
-  finalizeConsultation: () => set(s => s.activeSession ? ({
-    activeSession: { ...s.activeSession, isFinalized: true, finalizedAt: '2026-09-19 10:55 AM' }
-  }) : s),
-}));
+  )
+);
 
 // ============================================================
 // Pharmacy & Dispensary Module (FEFO Engine & POS Cashiering)
@@ -1461,6 +1852,7 @@ interface PharmacyState {
   batches: DrugBatch[];
   movements: StockMovement[];
   getPrescriptionByCaseId: (caseId: string) => PrescriptionFulfillment | undefined;
+  addPrescription: (prescription: PrescriptionFulfillment) => void;
   dispensePrescription: (
     caseId: string,
     itemsToDispense: Array<{ itemId: string; dispensedQty: number }>,
@@ -1472,232 +1864,258 @@ interface PharmacyState {
   disposeBatch: (batchId: string, reason: string) => void;
 }
 
-export const usePharmacyStore = create<PharmacyState>((set, get) => ({
-  prescriptions: INITIAL_PRESCRIPTIONS,
-  batches: INITIAL_DRUG_BATCHES,
-  movements: INITIAL_STOCK_MOVEMENTS,
+export const usePharmacyStore = create<PharmacyState>()(
+  persist(
+    (set, get) => ({
+      prescriptions: INITIAL_PRESCRIPTIONS,
+      batches: INITIAL_DRUG_BATCHES,
+      movements: INITIAL_STOCK_MOVEMENTS,
 
-  getPrescriptionByCaseId: (caseId) => {
-    return get().prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
-  },
+      getPrescriptionByCaseId: (caseId) => {
+        return get().prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+      },
 
-  dispensePrescription: (caseId, itemsToDispense, paymentMode) => {
-    const state = get();
-    const prescription = state.prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
-    const invoiceNumber = `INV-PHARM-${Math.floor(10000 + Math.random() * 90000)}`;
-    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      addPrescription: (prescription) => {
+        set(s => {
+          const existingIdx = s.prescriptions.findIndex(p => p.caseId.toLowerCase() === prescription.caseId.toLowerCase());
+          if (existingIdx >= 0) {
+            const updated = [...s.prescriptions];
+            updated[existingIdx] = { ...updated[existingIdx], ...prescription };
+            return { prescriptions: updated };
+          }
+          return { prescriptions: [prescription, ...s.prescriptions] };
+        });
+        notifyTabSync('doctor-pharmacy');
+      },
 
-    let updatedBatches = [...state.batches];
-    let newMovements: StockMovement[] = [];
+      dispensePrescription: (caseId, itemsToDispense, paymentMode) => {
+        const state = get();
+        const prescription = state.prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+        const invoiceNumber = `INV-PHARM-${Math.floor(10000 + Math.random() * 90000)}`;
+        const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    // Process each item with FEFO batch deduction
-    const updatedItems = (prescription?.items || []).map(item => {
-      const match = itemsToDispense.find(i => i.itemId === item.id);
-      if (!match || match.dispensedQty <= 0) return item;
+        let updatedBatches = [...state.batches];
+        let newMovements: StockMovement[] = [];
 
-      let remainingToDeduct = match.dispensedQty;
-      let batchAllocations: Array<{ batchNumber: string; qty: number }> = [];
+        // Process each item with FEFO batch deduction
+        const updatedItems = (prescription?.items || []).map(item => {
+          const match = itemsToDispense.find(i => i.itemId === item.id);
+          if (!match || match.dispensedQty <= 0) return item;
 
-      // FEFO Sort: Find active batches for this drug sorted by earliest expiry
-      const drugBatches = updatedBatches
-        .filter(b => b.drugId === item.drugId && !b.isQuarantined && b.stockQuantity > 0)
-        .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+          let remainingToDeduct = match.dispensedQty;
+          let batchAllocations: Array<{ batchNumber: string; qty: number }> = [];
 
-      for (const batch of drugBatches) {
-        if (remainingToDeduct <= 0) break;
-        const deductFromThis = Math.min(batch.stockQuantity, remainingToDeduct);
-        batch.stockQuantity -= deductFromThis;
-        remainingToDeduct -= deductFromThis;
-        batchAllocations.push({ batchNumber: batch.batchNumber, qty: deductFromThis });
+          // FEFO Sort: Find active batches for this drug sorted by earliest expiry
+          const drugBatches = updatedBatches
+            .filter(b => b.drugId === item.drugId && !b.isQuarantined && b.stockQuantity > 0)
+            .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
 
-        newMovements.push({
-          id: `sm-${Date.now()}-${Math.random()}`,
-          drugId: item.drugId,
-          drugName: item.drugName,
-          movementType: 'DISPENSE',
-          quantity: -deductFromThis,
-          batchNumber: batch.batchNumber,
-          reference: caseId,
+          for (const batch of drugBatches) {
+            if (remainingToDeduct <= 0) break;
+            const deductFromThis = Math.min(batch.stockQuantity, remainingToDeduct);
+            batch.stockQuantity -= deductFromThis;
+            remainingToDeduct -= deductFromThis;
+            batchAllocations.push({ batchNumber: batch.batchNumber, qty: deductFromThis });
+
+            newMovements.push({
+              id: `sm-${Date.now()}-${Math.random()}`,
+              drugId: item.drugId,
+              drugName: item.drugName,
+              movementType: 'DISPENSE',
+              quantity: -deductFromThis,
+              batchNumber: batch.batchNumber,
+              reference: caseId,
+              date: nowTime,
+              performedBy: 'Suresh Shah'
+            });
+          }
+
+          // Sync overall inventory stock
+          useInventoryStore.getState().updateStock(item.drugId, -match.dispensedQty);
+
+          return {
+            ...item,
+            isDispensed: true,
+            dispensedQty: match.dispensedQty,
+            batchAllocations
+          };
+        });
+
+        // Calculate subtotal, 5% GST tax, total
+        const subtotal = updatedItems.reduce((sum, item) => sum + (item.isDispensed ? item.dispensedQty * item.unitPrice : 0), 0);
+        const tax = parseFloat((subtotal * 0.05).toFixed(2));
+        const totalPayable = parseFloat((subtotal + tax).toFixed(2));
+
+        set(s => ({
+          batches: updatedBatches,
+          movements: [...newMovements, ...s.movements],
+          prescriptions: s.prescriptions.map(p => p.caseId.toLowerCase() === caseId.toLowerCase() ? {
+            ...p,
+            status: 'DISPENSED',
+            items: updatedItems,
+            billing: {
+              subtotal,
+              tax,
+              totalPayable,
+              paymentMode,
+              invoiceNumber,
+              dispensedAt: nowTime,
+              dispensedBy: 'Suresh Shah'
+            }
+          } : p)
+        }));
+
+        // Update queue entry stage to COMPLETED / BILLING_PENDING
+        const queueStore = useQueueStore.getState();
+        const entry = queueStore.queue.find(q => q.caseNumber.toLowerCase() === caseId.toLowerCase());
+        if (entry) {
+          queueStore.updateStatus(entry.id, 'COMPLETED');
+        }
+
+        notifyTabSync('doctor-pharmacy');
+        return { invoiceNumber };
+      },
+
+      addStock: (drugId, drugName, batchNumber, expiryDate, quantity, supplier) => {
+        const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const newBatch: DrugBatch = {
+          id: `b-${Date.now()}`,
+          drugId,
+          drugName,
+          batchNumber,
+          expiryDate,
+          stockQuantity: quantity,
+          unitCost: 10,
+          supplier
+        };
+
+        const newMovement: StockMovement = {
+          id: `sm-${Date.now()}`,
+          drugId,
+          drugName,
+          movementType: 'RECEIVE',
+          quantity,
+          batchNumber,
+          reference: `Supplier Delivery (${supplier})`,
           date: nowTime,
           performedBy: 'Suresh Shah'
-        });
-      }
+        };
 
-      // Sync overall inventory stock
-      useInventoryStore.getState().updateStock(item.drugId, -match.dispensedQty);
+        // Update inventory item stock
+        useInventoryStore.getState().updateStock(drugId, quantity);
 
-      return {
-        ...item,
-        isDispensed: true,
-        dispensedQty: match.dispensedQty,
-        batchAllocations
-      };
-    });
+        set(s => ({
+          batches: [newBatch, ...s.batches],
+          movements: [newMovement, ...s.movements]
+        }));
+        notifyTabSync('doctor-pharmacy');
+      },
 
-    // Calculate subtotal, 5% GST tax, total
-    const subtotal = updatedItems.reduce((sum, item) => sum + (item.isDispensed ? item.dispensedQty * item.unitPrice : 0), 0);
-    const tax = parseFloat((subtotal * 0.05).toFixed(2));
-    const totalPayable = parseFloat((subtotal + tax).toFixed(2));
+      addNewDrugMaster: (drug) => {
+        const newId = `d-${Date.now()}`;
+        const initialQty = drug.initialStock || 0;
 
-    set(s => ({
-      batches: updatedBatches,
-      movements: [...newMovements, ...s.movements],
-      prescriptions: s.prescriptions.map(p => p.caseId.toLowerCase() === caseId.toLowerCase() ? {
-        ...p,
-        status: 'DISPENSED',
-        items: updatedItems,
-        billing: {
-          subtotal,
-          tax,
-          totalPayable,
-          paymentMode,
-          invoiceNumber,
-          dispensedAt: nowTime,
-          dispensedBy: 'Suresh Shah'
+        const newDrugItem: DrugInventoryItem = {
+          id: newId,
+          name: drug.name,
+          genericName: drug.genericName,
+          formulation: drug.formulation,
+          stock: initialQty,
+          reorderLevel: drug.reorderLevel,
+          unitPrice: drug.unitPrice,
+          alternatives: drug.alternatives || []
+        };
+
+        // Add to inventory store
+        useInventoryStore.setState(s => ({
+          inventory: [newDrugItem, ...s.inventory]
+        }));
+
+        if (initialQty > 0 && drug.batchNumber && drug.expiryDate) {
+          get().addStock(newId, drug.name, drug.batchNumber, drug.expiryDate, initialQty, drug.supplier || 'Standard Distributor');
         }
-      } : p)
-    }));
+        notifyTabSync('doctor-pharmacy');
+      },
 
-    // Update queue entry stage to COMPLETED / BILLING_PENDING
-    const queueStore = useQueueStore.getState();
-    const entry = queueStore.queue.find(q => q.caseNumber.toLowerCase() === caseId.toLowerCase());
-    if (entry) {
-      queueStore.updateStatus(entry.id, 'COMPLETED');
-    }
+      processReturn: (caseId, drugId, batchNumber, quantity, reason) => {
+        const state = get();
+        const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const batch = state.batches.find(b => b.batchNumber === batchNumber);
+        const drugName = batch?.drugName || 'Medication';
 
-    return { invoiceNumber };
-  },
+        // Re-credit batch
+        const updatedBatches = state.batches.map(b => b.batchNumber === batchNumber ? { ...b, stockQuantity: b.stockQuantity + quantity } : b);
 
-  addStock: (drugId, drugName, batchNumber, expiryDate, quantity, supplier) => {
-    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const newBatch: DrugBatch = {
-      id: `b-${Date.now()}`,
-      drugId,
-      drugName,
-      batchNumber,
-      expiryDate,
-      stockQuantity: quantity,
-      unitCost: 10,
-      supplier
-    };
+        // Update inventory item
+        useInventoryStore.getState().updateStock(drugId, quantity);
 
-    const newMovement: StockMovement = {
-      id: `sm-${Date.now()}`,
-      drugId,
-      drugName,
-      movementType: 'RECEIVE',
-      quantity,
-      batchNumber,
-      reference: `Supplier Delivery (${supplier})`,
-      date: nowTime,
-      performedBy: 'Suresh Shah'
-    };
+        // Log return movement
+        const returnMovement: StockMovement = {
+          id: `sm-${Date.now()}`,
+          drugId,
+          drugName,
+          movementType: 'RETURN',
+          quantity,
+          batchNumber,
+          reference: `Return: ${caseId} (${reason})`,
+          date: nowTime,
+          performedBy: 'Suresh Shah'
+        };
 
-    // Update inventory item stock
-    useInventoryStore.getState().updateStock(drugId, quantity);
+        // Auto-log Special Note to Patient Record
+        const patientStore = usePatientStore.getState();
+        const targetPrescription = state.prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+        if (targetPrescription) {
+          const patient = patientStore.patients.find(p => p.id === targetPrescription.patientId);
+          if (patient) {
+            const specialNote = `${new Date().toLocaleDateString('en-GB')}/Pharmacy Return: ${drugName} (Qty: ${quantity}) — ${reason}`;
+            patientStore.updatePatient(patient.id, {
+              specialNotes: [...(patient.specialNotes || []), specialNote]
+            });
+          }
+        }
 
-    set(s => ({
-      batches: [newBatch, ...s.batches],
-      movements: [newMovement, ...s.movements]
-    }));
-  },
+        set(s => ({
+          batches: updatedBatches,
+          movements: [returnMovement, ...s.movements]
+        }));
+        notifyTabSync('doctor-pharmacy');
+      },
 
-  addNewDrugMaster: (drug) => {
-    const newId = `d-${Date.now()}`;
-    const initialQty = drug.initialStock || 0;
+      disposeBatch: (batchId, reason) => {
+        const state = get();
+        const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const batch = state.batches.find(b => b.id === batchId);
+        if (!batch) return;
 
-    const newDrugItem: DrugInventoryItem = {
-      id: newId,
-      name: drug.name,
-      genericName: drug.genericName,
-      formulation: drug.formulation,
-      stock: initialQty,
-      reorderLevel: drug.reorderLevel,
-      unitPrice: drug.unitPrice,
-      alternatives: drug.alternatives || []
-    };
+        const disposedQty = batch.stockQuantity;
+        useInventoryStore.getState().updateStock(batch.drugId, -disposedQty);
 
-    // Add to inventory store
-    useInventoryStore.setState(s => ({
-      inventory: [newDrugItem, ...s.inventory]
-    }));
+        const disposalMovement: StockMovement = {
+          id: `sm-${Date.now()}`,
+          drugId: batch.drugId,
+          drugName: batch.drugName,
+          movementType: 'DISPOSAL',
+          quantity: -disposedQty,
+          batchNumber: batch.batchNumber,
+          reference: `Quarantine Write-Off (${reason})`,
+          date: nowTime,
+          performedBy: 'Suresh Shah'
+        };
 
-    if (initialQty > 0 && drug.batchNumber && drug.expiryDate) {
-      get().addStock(newId, drug.name, drug.batchNumber, drug.expiryDate, initialQty, drug.supplier || 'Standard Distributor');
-    }
-  },
-
-  processReturn: (caseId, drugId, batchNumber, quantity, reason) => {
-    const state = get();
-    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const batch = state.batches.find(b => b.batchNumber === batchNumber);
-    const drugName = batch?.drugName || 'Medication';
-
-    // Re-credit batch
-    const updatedBatches = state.batches.map(b => b.batchNumber === batchNumber ? { ...b, stockQuantity: b.stockQuantity + quantity } : b);
-
-    // Update inventory item
-    useInventoryStore.getState().updateStock(drugId, quantity);
-
-    // Log return movement
-    const returnMovement: StockMovement = {
-      id: `sm-${Date.now()}`,
-      drugId,
-      drugName,
-      movementType: 'RETURN',
-      quantity,
-      batchNumber,
-      reference: `Return: ${caseId} (${reason})`,
-      date: nowTime,
-      performedBy: 'Suresh Shah'
-    };
-
-    // Auto-log Special Note to Patient Record
-    const patientStore = usePatientStore.getState();
-    const targetPrescription = state.prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
-    if (targetPrescription) {
-      const patient = patientStore.patients.find(p => p.id === targetPrescription.patientId);
-      if (patient) {
-        const specialNote = `${new Date().toLocaleDateString('en-GB')}/Pharmacy Return: ${drugName} (Qty: ${quantity}) — ${reason}`;
-        patientStore.updatePatient(patient.id, {
-          specialNotes: [...(patient.specialNotes || []), specialNote]
-        });
+        set(s => ({
+          batches: s.batches.map(b => b.id === batchId ? { ...b, isQuarantined: true, stockQuantity: 0 } : b),
+          movements: [disposalMovement, ...s.movements]
+        }));
+        notifyTabSync('doctor-pharmacy');
       }
+    }),
+    {
+      name: 'doctor-pharmacy',
+      storage: safeStorage,
     }
-
-    set(s => ({
-      batches: updatedBatches,
-      movements: [returnMovement, ...s.movements]
-    }));
-  },
-
-  disposeBatch: (batchId, reason) => {
-    const state = get();
-    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const batch = state.batches.find(b => b.id === batchId);
-    if (!batch) return;
-
-    const disposedQty = batch.stockQuantity;
-    useInventoryStore.getState().updateStock(batch.drugId, -disposedQty);
-
-    const disposalMovement: StockMovement = {
-      id: `sm-${Date.now()}`,
-      drugId: batch.drugId,
-      drugName: batch.drugName,
-      movementType: 'DISPOSAL',
-      quantity: -disposedQty,
-      batchNumber: batch.batchNumber,
-      reference: `Quarantine Write-Off (${reason})`,
-      date: nowTime,
-      performedBy: 'Suresh Shah'
-    };
-
-    set(s => ({
-      batches: s.batches.map(b => b.id === batchId ? { ...b, isQuarantined: true, stockQuantity: 0 } : b),
-      movements: [disposalMovement, ...s.movements]
-    }));
-  }
-}));
+  )
+);
 
 // ============================================================
 // Admin & Enterprise Governance Module
@@ -2132,161 +2550,234 @@ interface AdminState {
   removeHoliday: (id: string) => void;
 }
 
-export const useAdminStore = create<AdminState>((set) => ({
-  staff: INITIAL_STAFF,
-  attendance: INITIAL_ATTENDANCE,
-  procedures: INITIAL_PROCEDURES,
-  labTests: INITIAL_LAB_TESTS,
-  consentTemplates: INITIAL_CONSENT_TEMPLATES,
-  expenses: INITIAL_EXPENSES,
-  sessions: INITIAL_SECURITY_SESSIONS,
-  securityEvents: INITIAL_SECURITY_EVENTS,
-  notifications: INITIAL_NOTIFICATION_TEMPLATES,
-  settings: INITIAL_CLINIC_SETTINGS,
-  holidays: INITIAL_HOLIDAYS,
-  isPanicLockdown: false,
+export const useAdminStore = create<AdminState>()(
+  persist(
+    (set) => ({
+      staff: INITIAL_STAFF,
+      attendance: INITIAL_ATTENDANCE,
+      procedures: INITIAL_PROCEDURES,
+      labTests: INITIAL_LAB_TESTS,
+      consentTemplates: INITIAL_CONSENT_TEMPLATES,
+      expenses: INITIAL_EXPENSES,
+      sessions: INITIAL_SECURITY_SESSIONS,
+      securityEvents: INITIAL_SECURITY_EVENTS,
+      notifications: INITIAL_NOTIFICATION_TEMPLATES,
+      settings: INITIAL_CLINIC_SETTINGS,
+      holidays: INITIAL_HOLIDAYS,
+      isPanicLockdown: false,
 
-  addStaff: (member) => {
-    const newMember: StaffMember = {
-      ...member,
-      id: `st-${Date.now()}`,
-      joinedDate: new Date().toISOString().split('T')[0]
-    };
-    set(s => ({ staff: [newMember, ...s.staff] }));
-  },
+      addStaff: (member) => {
+        const newMember: StaffMember = {
+          ...member,
+          id: `st-${Date.now()}`,
+          joinedDate: new Date().toISOString().split('T')[0]
+        };
+        set(s => ({ staff: [newMember, ...s.staff] }));
+        notifyTabSync('doctor-admin');
+      },
 
-  updateStaff: (id, updates) => {
-    set(s => ({ staff: s.staff.map(m => m.id === id ? { ...m, ...updates } : m) }));
-  },
+      updateStaff: (id, updates) => {
+        set(s => ({ staff: s.staff.map(m => m.id === id ? { ...m, ...updates } : m) }));
+        notifyTabSync('doctor-admin');
+      },
 
-  toggleStaffStatus: (id) => {
-    set(s => ({
-      staff: s.staff.map(m => m.id === id ? {
-        ...m,
-        status: m.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-      } : m)
-    }));
-  },
+      toggleStaffStatus: (id) => {
+        set(s => ({
+          staff: s.staff.map(m => m.id === id ? {
+            ...m,
+            status: m.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+          } : m)
+        }));
+        notifyTabSync('doctor-admin');
+      },
 
-  logAttendance: (record) => {
-    const newRecord: AttendanceRecord = {
-      ...record,
-      id: `att-${Date.now()}`
-    };
-    set(s => ({ attendance: [newRecord, ...s.attendance] }));
-  },
+      logAttendance: (record) => {
+        const newRecord: AttendanceRecord = {
+          ...record,
+          id: `att-${Date.now()}`
+        };
+        set(s => ({ attendance: [newRecord, ...s.attendance] }));
+        notifyTabSync('doctor-admin');
+      },
 
-  addProcedure: (proc) => {
-    const newProc: ProcedureMaster = {
-      ...proc,
-      id: `proc-${Date.now()}`
-    };
-    set(s => ({ procedures: [newProc, ...s.procedures] }));
-  },
+      addProcedure: (proc) => {
+        const newProc: ProcedureMaster = {
+          ...proc,
+          id: `proc-${Date.now()}`
+        };
+        set(s => ({ procedures: [newProc, ...s.procedures] }));
+        notifyTabSync('doctor-admin');
+      },
 
-  updateProcedure: (id, updates) => {
-    set(s => ({ procedures: s.procedures.map(p => p.id === id ? { ...p, ...updates } : p) }));
-  },
+      updateProcedure: (id, updates) => {
+        set(s => ({ procedures: s.procedures.map(p => p.id === id ? { ...p, ...updates } : p) }));
+        notifyTabSync('doctor-admin');
+      },
 
-  deleteProcedure: (id) => {
-    set(s => ({ procedures: s.procedures.filter(p => p.id !== id) }));
-  },
+      deleteProcedure: (id) => {
+        set(s => ({ procedures: s.procedures.filter(p => p.id !== id) }));
+        notifyTabSync('doctor-admin');
+      },
 
-  addLabTest: (test) => {
-    const newTest: LabTestMaster = {
-      ...test,
-      id: `lab-${Date.now()}`
-    };
-    set(s => ({ labTests: [newTest, ...s.labTests] }));
-  },
+      addLabTest: (test) => {
+        const newTest: LabTestMaster = {
+          ...test,
+          id: `lab-${Date.now()}`
+        };
+        set(s => ({ labTests: [newTest, ...s.labTests] }));
+        notifyTabSync('doctor-admin');
+      },
 
-  updateLabTest: (id, updates) => {
-    set(s => ({ labTests: s.labTests.map(t => t.id === id ? { ...t, ...updates } : t) }));
-  },
+      updateLabTest: (id, updates) => {
+        set(s => ({ labTests: s.labTests.map(t => t.id === id ? { ...t, ...updates } : t) }));
+        notifyTabSync('doctor-admin');
+      },
 
-  addExpense: (expense) => {
-    const newExpense: ClinicExpense = {
-      ...expense,
-      id: `exp-${Date.now()}`
-    };
-    set(s => ({ expenses: [newExpense, ...s.expenses] }));
-  },
+      addExpense: (expense) => {
+        const newExpense: ClinicExpense = {
+          ...expense,
+          id: `exp-${Date.now()}`
+        };
+        set(s => ({ expenses: [newExpense, ...s.expenses] }));
+        notifyTabSync('doctor-admin');
+      },
 
-  updateConsentTemplate: (id, content) => {
-    set(s => ({
-      consentTemplates: s.consentTemplates.map(c => c.id === id ? {
-        ...c,
-        content,
-        lastUpdated: new Date().toISOString().split('T')[0]
-      } : c)
-    }));
-  },
+      updateConsentTemplate: (id, content) => {
+        set(s => ({
+          consentTemplates: s.consentTemplates.map(c => c.id === id ? {
+            ...c,
+            content,
+            lastUpdated: new Date().toISOString().split('T')[0]
+          } : c)
+        }));
+        notifyTabSync('doctor-admin');
+      },
 
-  toggleNotificationTemplate: (id) => {
-    set(s => ({
-      notifications: s.notifications.map(n => n.id === id ? {
-        ...n,
-        isEnabled: !n.isEnabled
-      } : n)
-    }));
-  },
+      toggleNotificationTemplate: (id) => {
+        set(s => ({
+          notifications: s.notifications.map(n => n.id === id ? {
+            ...n,
+            isEnabled: !n.isEnabled
+          } : n)
+        }));
+        notifyTabSync('doctor-admin');
+      },
 
-  updateSettings: (newSettings) => {
-    set(s => ({ settings: { ...s.settings, ...newSettings } }));
-  },
+      updateSettings: (newSettings) => {
+        set(s => ({ settings: { ...s.settings, ...newSettings } }));
+        notifyTabSync('doctor-admin');
+      },
 
-  terminateSession: (sessionId) => {
-    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-    set(s => ({
-      sessions: s.sessions.map(sess => sess.id === sessionId ? { ...sess, status: 'TERMINATED' } : sess),
-      securityEvents: [
-        {
-          id: `ev-${Date.now()}`,
-          timestamp: nowTime,
-          eventType: 'THREAT_BLOCKED',
-          severity: 'HIGH',
-          sourceIp: s.sessions.find(x => x.id === sessionId)?.ipAddress || '0.0.0.0',
-          description: `Superadmin manually terminated session ${sessionId} (${s.sessions.find(x => x.id === sessionId)?.userName})`,
-          actionTaken: 'JWT Token Revoked & Socket Disconnected'
-        },
-        ...s.securityEvents
-      ]
-    }));
-  },
+      terminateSession: (sessionId) => {
+        const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+        set(s => ({
+          sessions: s.sessions.map(sess => sess.id === sessionId ? { ...sess, status: 'TERMINATED' } : sess),
+          securityEvents: [
+            {
+              id: `ev-${Date.now()}`,
+              timestamp: nowTime,
+              eventType: 'THREAT_BLOCKED',
+              severity: 'HIGH',
+              sourceIp: s.sessions.find(x => x.id === sessionId)?.ipAddress || '0.0.0.0',
+              description: `Superadmin manually terminated session ${sessionId} (${s.sessions.find(x => x.id === sessionId)?.userName})`,
+              actionTaken: 'JWT Token Revoked & Socket Disconnected'
+            },
+            ...s.securityEvents
+          ]
+        }));
+        notifyTabSync('doctor-admin');
+      },
 
-  triggerPanicLockdown: (activate) => {
-    const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-    set(s => ({
-      isPanicLockdown: activate,
-      securityEvents: [
-        {
-          id: `ev-${Date.now()}`,
-          timestamp: nowTime,
-          eventType: 'ANOMALOUS_ACCESS',
-          severity: 'CRITICAL',
-          sourceIp: '127.0.0.1 (Admin Console)',
-          description: activate
-            ? 'GLOBAL PANIC LOCKDOWN INITIATED: Non-admin sessions frozen, database switched to READ-ONLY.'
-            : 'GLOBAL PANIC LOCKDOWN LIFTED: Clinical terminals resumed normal operations.',
-          actionTaken: activate ? 'All Active Tokens Invalidate Except Superadmin' : 'Normal Operations Restored'
-        },
-        ...s.securityEvents
-      ]
-    }));
-  },
+      triggerPanicLockdown: (activate) => {
+        const nowTime = `${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+        set(s => ({
+          isPanicLockdown: activate,
+          securityEvents: [
+            {
+              id: `ev-${Date.now()}`,
+              timestamp: nowTime,
+              eventType: 'ANOMALOUS_ACCESS',
+              severity: 'CRITICAL',
+              sourceIp: '127.0.0.1 (Admin Console)',
+              description: activate
+                ? 'GLOBAL PANIC LOCKDOWN INITIATED: Non-admin sessions frozen, database switched to READ-ONLY.'
+                : 'GLOBAL PANIC LOCKDOWN LIFTED: Clinical terminals resumed normal operations.',
+              actionTaken: activate ? 'All Active Tokens Invalidate Except Superadmin' : 'Normal Operations Restored'
+            },
+            ...s.securityEvents
+          ]
+        }));
+        notifyTabSync('doctor-admin');
+      },
 
-  addHoliday: (holiday) => {
-    const newHol: HolidaySchedule = {
-      ...holiday,
-      id: `hol-${Date.now()}`
-    };
-    set(s => ({ holidays: [...s.holidays, newHol] }));
-  },
+      addHoliday: (holiday) => {
+        const newHol: HolidaySchedule = {
+          ...holiday,
+          id: `hol-${Date.now()}`
+        };
+        set(s => ({ holidays: [...s.holidays, newHol] }));
+        notifyTabSync('doctor-admin');
+      },
 
-  removeHoliday: (id) => {
-    set(s => ({ holidays: s.holidays.filter(h => h.id !== id) }));
+      removeHoliday: (id) => {
+        set(s => ({ holidays: s.holidays.filter(h => h.id !== id) }));
+        notifyTabSync('doctor-admin');
+      }
+    }),
+    {
+      name: 'doctor-admin',
+      storage: safeStorage,
+    }
+  )
+);
+
+// Cross-Tab & Cross-Window State Synchronization
+if (typeof window !== 'undefined') {
+  const syncStore = (key?: string | null) => {
+    try {
+      if (!key || key === 'doctor-patients') (usePatientStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-queue') (useQueueStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-appointments') (useAppointmentStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-billing') (useBillingStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-consultation') (useConsultationStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-pharmacy') (usePharmacyStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-clinical') (useClinicalStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-lab') (useLabStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-inventory') (useInventoryStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-admin') (useAdminStore as any).persist?.rehydrate?.();
+    } catch {}
+  };
+
+  window.addEventListener('storage', (e) => {
+    if (e.key) syncStore(e.key);
+  });
+
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const bc = new BroadcastChannel('doctor_medflow_sync');
+      bc.onmessage = (e) => {
+        if (e.data?.key) syncStore(e.data.key);
+      };
+    } catch {}
   }
-}));
+}
+
+export const resetAllStoresToDefault = () => {
+  if (typeof window !== 'undefined') {
+    const keys = [
+      'doctor-patients', 'doctor-queue', 'doctor-appointments',
+      'doctor-billing', 'doctor-clinical', 'doctor-lab',
+      'doctor-inventory', 'doctor-investigation-catalog',
+      'doctor-procedure-catalog', 'doctor-followup', 'doctor-leaves',
+      'doctor-chat', 'doctor-consultation', 'doctor-pharmacy',
+      'doctor-admin'
+    ];
+    keys.forEach(k => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+    window.location.reload();
+  }
+};
 
 // ============================================================
 // Helpers

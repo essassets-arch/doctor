@@ -8,11 +8,11 @@ import {
   CalendarPlus, ArrowLeft, CheckCircle2, AlertCircle,
   Clock, ShieldAlert, FileSignature, Activity, Plus, X,
   QrCode, Lock, Unlock, Edit3, Trash2, Smartphone, Send,
-  HelpCircle, Eye, FileCheck, Check, Wallet
+  HelpCircle, Eye, FileCheck, Check, Wallet, Stethoscope
 } from 'lucide-react';
 import {
   usePatientStore, useAppointmentStore, useBillingStore,
-  useClinicalStore, useLabStore, useQueueStore, useUIStore,
+  useClinicalStore, useLabStore, useQueueStore, useUIStore, useConsultationStore,
   Patient, BillRecord, BillItem, ClinicalRecord, LabDocument
 } from '@/store';
 
@@ -317,6 +317,65 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
     alert('Checkout finalized and Official Tax Invoice generated! Patient visit marked as COMPLETED.');
   };
 
+  const handleQuickSendToDoctor = () => {
+    if (!patient) return;
+    const existing = queue.find(q => q.patientId === patient.id && q.status !== 'COMPLETED' && q.status !== 'CANCELLED');
+    if (existing) {
+      updateQueueEntry(existing.id, { stage: 'DOCTOR', status: 'WAITING' });
+      addNotification({
+        type: 'success',
+        message: `${patient.firstName} ${patient.lastName} (${existing.tokenDisplay}) routed to Doctor Queue.`
+      });
+      router.push('/doctor/dashboard');
+      return;
+    }
+
+    const tokenIndex = queue.length + 1;
+    const tokenCode = `C${String(tokenIndex).padStart(3, '0')}`;
+    const caseNumber = `${tokenCode}-001-${new Date().toLocaleDateString('en-GB').replace(/\//g, '')}`;
+    const checkInTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    useQueueStore.getState().addToQueue({
+      caseNumber,
+      tokenDisplay: tokenCode,
+      patientId: patient.id,
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      doctorId: 'doc-1',
+      doctorName: 'Dr. Raj Valaki',
+      visitType: 'Consultation',
+      appointmentTime: checkInTime,
+      checkInTime,
+      age: patient.age,
+      gender: patient.gender,
+      city: patient.city || 'Surat',
+      billingStatus: 'PAID',
+      status: 'WAITING',
+      stage: 'DOCTOR',
+      vitalsRecorded: false,
+      complaintsRecorded: false,
+      isNew: false
+    });
+
+    useConsultationStore.getState().initSession(
+      caseNumber,
+      patient,
+      {
+        id: 'doc-1',
+        name: 'Dr. Raj Valaki',
+        specialization: 'General Physician',
+        initials: 'RV',
+        avatarColor: '#036d92',
+        room: 'Cabin 1'
+      }
+    );
+
+    addNotification({
+      type: 'success',
+      message: `${patient.firstName} ${patient.lastName} queued as Token ${tokenCode} for Dr. Raj Valaki!`
+    });
+    router.push('/doctor/dashboard');
+  };
+
   return (
     <div className="page-container">
       {/* Back Navigation Bar */}
@@ -422,6 +481,15 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
                 <SquareCheckBig size={14} /> Check-In Walk-In
               </button>
             </Link>
+
+            <button
+              onClick={handleQuickSendToDoctor}
+              className="btn btn-primary btn-sm"
+              style={{ background: '#036d92', borderColor: '#036d92', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+              title="Forward Patient Directly to Doctor Consultation"
+            >
+              <Stethoscope size={14} /> Send to Doctor
+            </button>
 
             <Link href={`/reception/appointments?patientId=${patient.id}`}>
               <button className="btn btn-primary btn-sm">

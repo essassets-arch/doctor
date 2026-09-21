@@ -14,7 +14,8 @@ import {
   useConsultationStore, usePatientStore, useQueueStore,
   useInventoryStore, useInvestigationCatalogStore,
   useProcedureCatalogStore, useUIStore, useBillingStore,
-  playChimeTone, Patient,
+  usePharmacyStore, useClinicalStore,
+  playChimeTone, Patient, PrescriptionFulfillmentItem,
   DrugInventoryItem, InvestigationCatalogItem, ProcedureCatalogItem
 } from '@/store';
 
@@ -26,7 +27,7 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
   const { activeSession, updateComplaints, updateVitals, updateHistory,
     addInvestigation, removeInvestigation, addPrescription, removePrescription,
     addProcedure, removeProcedure, addImage, removeImage, updateDiagnosis,
-    updateBilling, finalizeConsultation
+    updateBilling, finalizeConsultation, getSession, loadSession, initSession
   } = useConsultationStore();
 
   const { patients } = usePatientStore();
@@ -98,7 +99,48 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }, [elapsedSeconds]);
 
-  const patient = patients.find(p => p.id === activeSession?.patientId) || patients[0];
+  const activeQueueEntry = queue.find(q => q.caseNumber === caseId || q.id === caseId);
+  const patient = patients.find(p => p.id === activeQueueEntry?.patientId || p.id === activeSession?.patientId) || patients[0];
+
+  useEffect(() => {
+    if (!caseId) return;
+    const existing = getSession(caseId);
+    if (existing) {
+      loadSession(caseId);
+    } else if (activeQueueEntry) {
+      const qPatient = patients.find(p => p.id === activeQueueEntry.patientId) || patient;
+      const doc = {
+        id: activeQueueEntry.doctorId || 'doc-1',
+        name: activeQueueEntry.doctorName || 'Dr. Raj Valaki',
+        specialization: 'Dermatology',
+        initials: 'RV',
+        avatarColor: 'linear-gradient(135deg,#6366F1,#818CF8)',
+        room: 'Room 1'
+      };
+      const v = activeQueueEntry.vitals;
+      initSession(caseId, qPatient, doc, {
+        vitals: v ? {
+          temperature: String(v.temperature || '98.6'),
+          pulse: String(v.pulse || '76'),
+          bpSystolic: v.bloodPressure ? v.bloodPressure.split('/')[0] : '120',
+          bpDiastolic: v.bloodPressure ? v.bloodPressure.split('/')[1] : '80',
+          spo2: String(v.spo2 || '99'),
+          weight: String(v.weight || '70'),
+          height: String(v.height || '170'),
+        } : undefined,
+        complaints: {
+          presentComplaint: activeQueueEntry.complaints?.join(', ') || activeQueueEntry.complaintNotes || '',
+          durationYears: 0,
+          durationMonths: 0,
+          durationDays: 3,
+          severity: 'MODERATE',
+          onset: 'Gradual',
+          aggravatingFactors: '',
+          relievingFactors: ''
+        }
+      });
+    }
+  }, [caseId, activeQueueEntry, getSession, loadSession, initSession, patient, patients]);
 
   // Calculated BMI
   const weightKg = parseFloat(activeSession?.vitals.weight || '70') || 0;
@@ -227,7 +269,77 @@ export default function DoctorConsultationMasterStation({ params }: { params: Pr
       items: allBillItems
     });
 
-    // 2. Queue state transition & SSE emission
+    // 2. Add Prescription to Pharmacy Store
+    const currentPrescriptions = (activeSession?.prescriptions && activeSession.prescriptions.length > 0)
+      ? activeSession.prescriptions
+      : [
+          { id: 'rx-std-1', drugName: 'Paracetamol 650mg (Dolo)', dosage: '1 Tab SOS', frequency: '1-0-1', durationDays: 3, totalQty: 6, instructions: 'After meals for discomfort', stockStatus: 'IN_STOCK' as const }
+        ];
+
+    const rxItems: PrescriptionFulfillmentItem[] = currentPrescriptions.map((rx, idx) => ({
+      id: `rxi-${caseId}-${idx + 1}`,
+      drugId: `d-${idx + 1}`,
+      drugName: rx.drugName,
+      formulation: 'Tablet',
+      dosage: rx.dosage,
+      frequency: rx.frequency,
+      durationDays: rx.durationDays,
+      prescribedQty: rx.totalQty,
+      dispensedQty: rx.totalQty,
+      unitPrice: 15,
+      instructions: rx.instructions,
+      isDispensed: false
+    }));
+
+    const rxSubtotal = rxItems.reduce((sum, item) => sum + item.prescribedQty * item.unitPrice, 0);
+    const rxTax = parseFloat((rxSubtotal * 0.05).toFixed(2));
+
+    usePharmacyStore.getState().addPrescription({
+      id: `rx-f-${Date.now()}`,
+      caseId: caseId,
+      patientId: patient.id,
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      mrdNumber: patient.mrdNumber,
+      age: patient.age,
+      gender: patient.gender,
+      mobile: patient.mobile,
+      doctorName: 'Dr. Raj Valaki',
+      consultationDate: new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      allergies: activeSession?.history?.allergies ? [activeSession.history.allergies] : [],
+      status: 'PHARMACY_PENDING',
+      items: rxItems,
+      billing: {
+        subtotal: rxSubtotal,
+        tax: rxTax,
+        totalPayable: parseFloat((rxSubtotal + rxTax).toFixed(2))
+      }
+    });
+
+    // 3. Add Clinical Record to Clinical Store
+    useClinicalStore.getState().addRecord({
+      patientId: patient.id,
+      date: '2026-09-19',
+      doctorName: 'Dr. Raj Valaki',
+      department: 'Dermatology',
+      chiefComplaint: activeSession?.complaints.presentComplaint || 'Consultation completed',
+      diagnosis: activeSession?.diagnosis.finalDiagnosis || activeSession?.diagnosis.provisional || 'Clinical Consultation',
+      vitals: {
+        bp: `${activeSession?.vitals.bpSystolic || '120'}/${activeSession?.vitals.bpDiastolic || '80'}`,
+        pulse: activeSession?.vitals.pulse || '76',
+        temp: `${activeSession?.vitals.temperature || '98.6'}°F`,
+        weight: `${activeSession?.vitals.weight || '70'} kg`,
+        spo2: `${activeSession?.vitals.spo2 || '99'}%`
+      },
+      prescription: (activeSession?.prescriptions || []).map(p => ({
+        medicine: p.drugName,
+        dosage: p.dosage,
+        duration: `${p.durationDays} days`,
+        instructions: p.instructions
+      })),
+      followUpDate: activeSession?.diagnosis.followUpDate
+    });
+
+    // 4. Queue state transition & SSE emission
     endSessionAndSendToBilling(caseId, nextStage);
 
     // 3. Play chime

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, use } from 'react';
+import { useState, useMemo, useEffect, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -7,7 +7,19 @@ import {
   Trash2, Plus, Minus, CreditCard, Banknote, Receipt,
   Sparkles, AlertTriangle, Printer, Layers, User, Calendar, X
 } from 'lucide-react';
-import { usePharmacyStore, useInventoryStore, useUIStore } from '@/store';
+import { usePharmacyStore, useInventoryStore, useUIStore, useConsultationStore, PrescriptionFulfillment } from '@/store';
+
+interface DispenseItemState {
+  itemId: string;
+  drugId: string;
+  drugName: string;
+  formulation?: string;
+  dosage?: string;
+  unitPrice: number;
+  prescribedQty: number;
+  dispensedQty: number;
+  isOmitted: boolean;
+}
 
 export default function PatientDispensingPosPage({ params }: { params: Promise<{ caseId: string }> }) {
   const resolvedParams = use(params);
@@ -17,29 +29,89 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
   const { prescriptions, batches, dispensePrescription } = usePharmacyStore();
   const { inventory } = useInventoryStore();
   const { addNotification } = useUIStore();
+  const consultationSession = useConsultationStore(s => s.sessions[caseId] || (s.activeSession?.caseId === caseId ? s.activeSession : null));
 
-  const prescription = prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase()) || prescriptions[0];
+  const foundPrescription = prescriptions.find(p => p.caseId.toLowerCase() === caseId.toLowerCase());
+
+  const prescription = useMemo(() => {
+    if (foundPrescription) return foundPrescription;
+    if (consultationSession) {
+      const sourcePrescriptions = (consultationSession.prescriptions && consultationSession.prescriptions.length > 0)
+        ? consultationSession.prescriptions
+        : [
+            { id: 'rx-std-1', drugName: 'Paracetamol 650mg (Dolo)', dosage: '1 Tab SOS', frequency: '1-0-1', durationDays: 3, totalQty: 6, instructions: 'After meals for discomfort' }
+          ];
+
+      const rxItems = sourcePrescriptions.map((rx, idx) => ({
+        id: `rxi-${caseId}-${idx + 1}`,
+        drugId: `d-${idx + 1}`,
+        drugName: rx.drugName,
+        formulation: 'Tablet',
+        dosage: rx.dosage,
+        frequency: rx.frequency,
+        durationDays: rx.durationDays,
+        prescribedQty: rx.totalQty,
+        dispensedQty: rx.totalQty,
+        unitPrice: 15,
+        instructions: rx.instructions,
+        isDispensed: false
+      }));
+      const sub = rxItems.reduce((s, i) => s + i.prescribedQty * i.unitPrice, 0);
+      const tx = parseFloat((sub * 0.05).toFixed(2));
+      return {
+        id: `rx-dyn-${caseId}`,
+        caseId: caseId,
+        patientId: consultationSession.patientId,
+        patientName: consultationSession.patientName,
+        mrdNumber: consultationSession.mrdNumber,
+        age: 40,
+        gender: 'M' as const,
+        mobile: '9825100001',
+        doctorName: consultationSession.doctorName,
+        consultationDate: 'Today',
+        allergies: consultationSession.history?.allergies ? [consultationSession.history.allergies] : [],
+        status: 'PHARMACY_PENDING' as const,
+        items: rxItems,
+        billing: {
+          subtotal: sub,
+          tax: tx,
+          totalPayable: parseFloat((sub + tx).toFixed(2))
+        }
+      } as PrescriptionFulfillment;
+    }
+    return prescriptions[0];
+  }, [foundPrescription, consultationSession, caseId, prescriptions]);
 
   // Dispensing items state with quantity modifiers
-  const [dispenseItems, setDispenseItems] = useState<Array<{
-    itemId: string;
-    drugId: string;
-    drugName: string;
-    unitPrice: number;
-    prescribedQty: number;
-    dispensedQty: number;
-    isOmitted: boolean;
-  }>>(
+  const [dispenseItems, setDispenseItems] = useState<DispenseItemState[]>(() =>
     prescription?.items.map(item => ({
       itemId: item.id,
       drugId: item.drugId,
       drugName: item.drugName,
+      formulation: item.formulation || 'Tablet',
+      dosage: item.dosage || '1 Tab',
       unitPrice: item.unitPrice,
       prescribedQty: item.prescribedQty,
       dispensedQty: item.isDispensed ? item.dispensedQty : item.prescribedQty,
       isOmitted: false
     })) || []
   );
+
+  useEffect(() => {
+    if (prescription?.items) {
+      setDispenseItems(prescription.items.map(item => ({
+        itemId: item.id,
+        drugId: item.drugId,
+        drugName: item.drugName,
+        formulation: item.formulation || 'Tablet',
+        dosage: item.dosage || '1 Tab',
+        unitPrice: item.unitPrice,
+        prescribedQty: item.prescribedQty,
+        dispensedQty: item.isDispensed ? item.dispensedQty : item.prescribedQty,
+        isOmitted: false
+      })));
+    }
+  }, [prescription]);
 
   const [paymentMode, setPaymentMode] = useState<'CASH' | 'CARD_UPI'>('CASH');
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -183,6 +255,9 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
                 </span>
                 <span style={{ background: '#F1F5F9', color: '#475569', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
                   {prescription.mrdNumber}
+                </span>
+                <span style={{ background: '#EFF6FF', color: '#1D4ED8', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, fontFamily: 'monospace' }}>
+                  Case: {prescription.caseId}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: '#64748B', marginTop: 2, display: 'flex', gap: 14, flexWrap: 'wrap' }}>

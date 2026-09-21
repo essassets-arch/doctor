@@ -8,7 +8,7 @@ import {
   Clock, ArrowLeft, Save, AlertCircle, FileText,
   ShieldAlert, ChevronRight, Lock
 } from 'lucide-react';
-import { useQueueStore, usePatientStore, useUIStore, Patient, QueueEntry } from '@/store';
+import { useQueueStore, usePatientStore, useConsultationStore, useUIStore, Patient, QueueEntry } from '@/store';
 
 function VitalsContent() {
   const router = useRouter();
@@ -21,12 +21,34 @@ function VitalsContent() {
   const { addNotification } = useUIStore();
 
   // Find targeted patient and queue entry
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(
-    paramPatientId || queue.find(q => !q.vitalsRecorded)?.patientId || patients[0]?.id || 'pat-1'
-  );
+  const queueEntryFromCase = paramCaseId ? queue.find(q => q.caseNumber.toLowerCase() === paramCaseId.toLowerCase()) : null;
 
-  const selectedPatient = patients.find(p => p.id === selectedPatientId) || patients[0];
-  const activeQueueEntry = queue.find(q => q.patientId === selectedPatient?.id && q.status !== 'COMPLETED');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(() => {
+    if (paramCaseId) {
+      const match = queue.find(q => q.caseNumber.toLowerCase() === paramCaseId.toLowerCase());
+      if (match) return match.patientId;
+    }
+    if (paramPatientId) return paramPatientId;
+    return queue.find(q => q.stage === 'NURSING' || !q.vitalsRecorded)?.patientId || patients[0]?.id || 'pat-1';
+  });
+
+  useEffect(() => {
+    if (paramCaseId) {
+      const match = queue.find(q => q.caseNumber.toLowerCase() === paramCaseId.toLowerCase());
+      if (match) {
+        setSelectedPatientId(match.patientId);
+        return;
+      }
+    }
+    if (paramPatientId) {
+      setSelectedPatientId(paramPatientId);
+    }
+  }, [paramPatientId, paramCaseId, queue]);
+
+  const activeQueueEntry = queueEntryFromCase
+    || queue.find(q => q.patientId === selectedPatientId && q.status !== 'COMPLETED')
+    || queue[0];
+  const selectedPatient = patients.find(p => p.id === (activeQueueEntry?.patientId || selectedPatientId)) || patients[0];
 
   // Vitals State
   const [height, setHeight] = useState<string>('168');
@@ -56,6 +78,29 @@ function VitalsContent() {
     { id: 'v-1', date: '10/09/2026 10:15 AM', height: 168, weight: 69, bmi: 24.4, temp: 98.4, pulse: 78, bp: '122/82', spo2: 99, by: 'Nurse Bhavna' },
     { id: 'v-2', date: '15/08/2026 11:30 AM', height: 168, weight: 70, bmi: 24.8, temp: 98.6, pulse: 80, bp: '128/84', spo2: 98, by: 'Nurse Riya' },
   ]);
+
+  // Prefill vitals and complaints if already recorded at check-in
+  useEffect(() => {
+    if (activeQueueEntry) {
+      if (activeQueueEntry.vitals) {
+        if (activeQueueEntry.vitals.temperature) setTemperature(String(activeQueueEntry.vitals.temperature));
+        if (activeQueueEntry.vitals.pulse) setPulse(String(activeQueueEntry.vitals.pulse));
+        if (activeQueueEntry.vitals.spo2) setSpo2(String(activeQueueEntry.vitals.spo2));
+        if (activeQueueEntry.vitals.weight) setWeight(String(activeQueueEntry.vitals.weight));
+        if (activeQueueEntry.vitals.height) setHeight(String(activeQueueEntry.vitals.height));
+        if (activeQueueEntry.vitals.bloodPressure) {
+          const parts = activeQueueEntry.vitals.bloodPressure.split('/');
+          if (parts[0]) setBpSystolic(parts[0]);
+          if (parts[1]) setBpDiastolic(parts[1]);
+        }
+      }
+      if (activeQueueEntry.complaints && activeQueueEntry.complaints.length > 0) {
+        setPresentComplaint(activeQueueEntry.complaints.join(', '));
+      } else if (activeQueueEntry.complaintNotes) {
+        setPresentComplaint(activeQueueEntry.complaintNotes);
+      }
+    }
+  }, [activeQueueEntry]);
 
   // Reactive BMI Calculation
   const bmiCalculation = useMemo(() => {
@@ -127,6 +172,9 @@ function VitalsContent() {
       updateQueueEntry(activeQueueEntry.id, {
         vitalsRecorded: true,
         complaintsRecorded: true,
+        stage: 'DOCTOR',
+        complaints: [presentComplaint],
+        complaintNotes: `${presentComplaint} (${severity}, ${onset}). Aggravating: ${aggravatingFactors}. Relieving: ${relievingFactors}. Notes: ${nursingNotes}`,
         vitals: {
           height: parseFloat(height),
           weight: parseFloat(weight),
@@ -139,6 +187,47 @@ function VitalsContent() {
           recordedBy: 'Nurse Bhavna'
         }
       });
+
+      // Synchronize consultation store session
+      useConsultationStore.getState().initSession(
+        activeQueueEntry.caseNumber,
+        selectedPatient,
+        {
+          id: activeQueueEntry.doctorId || 'doc-1',
+          name: activeQueueEntry.doctorName || 'Dr. Raj Valaki',
+          specialization: 'General',
+          initials: 'DR',
+          avatarColor: '#036d92',
+          room: 'Room 1'
+        },
+        {
+          vitals: {
+            temperature: String(tempVal),
+            pulse: String(pulseVal),
+            bpSystolic: String(bpSystolic),
+            bpDiastolic: String(bpDiastolic),
+            spo2: String(spo2Val),
+            weight: String(weight),
+            height: String(height)
+          },
+          complaints: {
+            presentComplaint,
+            durationYears: durationUnit === 'Years' ? (parseInt(durationValue) || 0) : 0,
+            durationMonths: durationUnit === 'Months' ? (parseInt(durationValue) || 0) : 0,
+            durationDays: durationUnit === 'Days' ? (parseInt(durationValue) || 1) : 1,
+            severity: severity.toUpperCase() as any,
+            onset,
+            aggravatingFactors,
+            relievingFactors
+          },
+          history: {
+            pastMedical,
+            pastSurgical,
+            allergies,
+            currentMedications
+          }
+        }
+      );
     }
 
     addNotification({
@@ -633,15 +722,14 @@ function VitalsContent() {
               <div style={{ paddingTop: 10 }}>
                 <button
                   type="button"
-                  disabled={isChartLocked}
                   onClick={handleSaveVitals}
                   className="btn btn-primary btn-lg"
                   style={{
                     width: '100%', justifyContent: 'center', padding: '14px',
-                    background: isChartLocked ? '#94A3B8' : '#059669',
-                    borderColor: isChartLocked ? '#94A3B8' : '#059669',
+                    background: '#059669',
+                    borderColor: '#059669',
                     fontSize: 14, fontWeight: 800, borderRadius: 10,
-                    cursor: isChartLocked ? 'not-allowed' : 'pointer'
+                    cursor: 'pointer'
                   }}
                 >
                   <Save size={16} /> Save Vitals & Handshake to Doctor Cabin →

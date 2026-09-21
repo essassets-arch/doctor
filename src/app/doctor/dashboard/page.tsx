@@ -14,7 +14,7 @@ import {
 
 export default function DoctorDashboardPage() {
   const router = useRouter();
-  const { queue, updateStatus, setCallingEntry, resumeFromHold } = useQueueStore();
+  const { queue, doctors, updateStatus, setCallingEntry, resumeFromHold } = useQueueStore();
   const { patients } = usePatientStore();
   const { inventory } = useInventoryStore();
   const { initSession } = useConsultationStore();
@@ -22,14 +22,19 @@ export default function DoctorDashboardPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('ALL');
 
   // Filter low stock drugs
   const lowStockDrugs = inventory.filter(i => i.stock <= i.reorderLevel);
 
-  // Doctor-specific queue for Dr. Raj Valaki (doc-1)
+  // Doctor-specific queue (or All Doctors)
   const doctorQueue = useMemo(() => {
-    return queue.filter(q => q.doctorId === 'doc-1');
-  }, [queue]);
+    return queue.filter(q => {
+      if (selectedDoctorId === 'ALL') return true;
+      if (!q.doctorId) return true;
+      return q.doctorId === selectedDoctorId;
+    });
+  }, [queue, selectedDoctorId]);
 
   // Active Session patient (IN_SESSION)
   const activeSessionPatient = doctorQueue.find(q => q.status === 'IN_SESSION');
@@ -117,13 +122,19 @@ export default function DoctorDashboardPage() {
   const handleStartConsultation = (entry: QueueEntry) => {
     updateStatus(entry.id, 'IN_SESSION');
     const pat = patients.find(p => p.id === entry.patientId) || patients[0];
+    const doc = doctors.find(d => d.id === entry.doctorId) || {
+      id: entry.doctorId || 'doc-1',
+      name: entry.doctorName || 'Dr. Raj Valaki',
+      specialty: 'General Physician',
+      room: 'Cabin 1'
+    };
     initSession(entry.caseNumber, pat, {
-      id: 'doc-1',
-      name: 'Dr. Raj Valaki',
-      specialization: 'Dermatology',
-      initials: 'RV',
+      id: doc.id,
+      name: doc.name,
+      specialization: (doc as any).specialty || 'General',
+      initials: doc.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
       avatarColor: '#036d92',
-      room: 'Room 1'
+      room: (doc as any).room || 'Room 1'
     });
 
     addNotification({
@@ -138,13 +149,19 @@ export default function DoctorDashboardPage() {
   const handleResumeOnHold = (entry: QueueEntry) => {
     resumeFromHold(entry.id);
     const pat = patients.find(p => p.id === entry.patientId) || patients[0];
+    const doc = doctors.find(d => d.id === entry.doctorId) || {
+      id: entry.doctorId || 'doc-1',
+      name: entry.doctorName || 'Dr. Raj Valaki',
+      specialty: 'General Physician',
+      room: 'Cabin 1'
+    };
     initSession(entry.caseNumber, pat, {
-      id: 'doc-1',
-      name: 'Dr. Raj Valaki',
-      specialization: 'Dermatology',
-      initials: 'RV',
+      id: doc.id,
+      name: doc.name,
+      specialization: (doc as any).specialty || 'General',
+      initials: doc.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
       avatarColor: '#036d92',
-      room: 'Room 1'
+      room: (doc as any).room || 'Room 1'
     });
     addNotification({
       type: 'success',
@@ -155,6 +172,40 @@ export default function DoctorDashboardPage() {
 
   return (
     <div className="page-container">
+      <div className="page-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div>
+          <h1 className="page-title">Doctor Consultation Cockpit</h1>
+          <p className="page-subtitle">
+            {selectedDoctorId === 'ALL'
+              ? 'All Doctors • Entire Clinic OPD Queue Supervisor'
+              : selectedDoctorId === 'doc-1'
+              ? 'Cabin 1 • Dr. Raj Valaki (General Medicine & Dermatology)'
+              : selectedDoctorId === 'doc-2'
+              ? 'Cabin 2 • Dr. Anita Soni (Dermatology & Cosmetology)'
+              : selectedDoctorId === 'doc-3'
+              ? 'Cabin 3 • Dr. Priya Mehta (Pediatrics)'
+              : 'OPD Consulting Cabin'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-muted)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+            <Stethoscope size={14} color="var(--primary)" /> Doctor Filter:
+          </label>
+          <select
+            value={selectedDoctorId}
+            onChange={e => setSelectedDoctorId(e.target.value)}
+            className="form-select"
+            style={{ fontSize: 12.5, fontWeight: 700, padding: '4px 10px', minWidth: 220, background: '#FFFFFF' }}
+          >
+            <option value="ALL">All Doctors (All Active Patients)</option>
+            <option value="doc-1">Dr. Raj Valaki (Cabin 1)</option>
+            <option value="doc-2">Dr. Anita Soni (Cabin 2)</option>
+            <option value="doc-3">Dr. Priya Mehta (Cabin 3)</option>
+            <option value="doc-4">Dr. Suresh Kumar (Cabin 4)</option>
+          </select>
+        </div>
+      </div>
       {/* 3.1 Low Stock Dispensary Alert Bar */}
       {lowStockDrugs.length > 0 && (
         <div style={{

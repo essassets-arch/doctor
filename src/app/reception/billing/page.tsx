@@ -45,6 +45,7 @@ export default function BillingPage() {
 
   // Active Invoice Print Modal
   const [viewInvoice, setViewInvoice] = useState<BillRecord | null>(null);
+  const [settleToast, setSettleToast] = useState<string | null>(null);
 
   // Financial Stats
   const totalRevenue = bills.reduce((s, b) => s + b.collectedAmount, 0);
@@ -138,6 +139,13 @@ export default function BillingPage() {
           <Plus size={16} /> Create New Invoice
         </button>
       </div>
+
+      {settleToast && (
+        <div style={{ padding: '12px 18px', background: '#ECFDF5', border: '1.5px solid #10B981', color: '#065F46', borderRadius: 10, marginBottom: 16, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>✓ {settleToast}</span>
+          <button onClick={() => setSettleToast(null)} className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}>✕</button>
+        </div>
+      )}
 
       {/* Financial Metrics Cards */}
       <div className="billing-stats-grid">
@@ -274,13 +282,36 @@ export default function BillingPage() {
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        onClick={() => setViewInvoice(bill)}
-                        className="btn btn-ghost btn-sm"
-                        title="View & Print Bill Receipt"
-                      >
-                        <Printer size={14} /> Receipt
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {bill.balance > 0 && (
+                          <button
+                            onClick={() => {
+                              updateBill(bill.id, {
+                                collectedAmount: bill.netAmount,
+                                balance: 0,
+                                status: 'PAID'
+                              });
+                              setSettleToast(`Collected balance of ₹${bill.balance} for ${bill.patientName}. Invoice settled!`);
+                              addNotification({
+                                type: 'success',
+                                message: `Collected balance of ₹${bill.balance} for ${bill.patientName}. Invoice settled!`
+                              });
+                            }}
+                            className="btn btn-sm btn-primary"
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            title="Collect remaining balance"
+                          >
+                            <Wallet size={13} /> Settle ₹{bill.balance}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setViewInvoice(bill)}
+                          className="btn btn-ghost btn-sm"
+                          title="View & Print Bill Receipt"
+                        >
+                          <Printer size={14} /> Receipt
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

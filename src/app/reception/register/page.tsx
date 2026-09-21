@@ -4,17 +4,20 @@ import { useRouter } from 'next/navigation';
 import {
   UserPlus, Briefcase, Printer, CheckCircle2, RotateCcw,
   Sparkles, Calendar, Phone, Mail, MapPin, Tag, ShieldAlert,
-  CreditCard, ArrowRight, UserCheck, QrCode
+  CreditCard, ArrowRight, UserCheck, QrCode, Stethoscope
 } from 'lucide-react';
-import { usePatientStore, useUIStore, Patient, Gender } from '@/store';
+import { usePatientStore, useUIStore, useQueueStore, useConsultationStore, Patient, Gender } from '@/store';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { nextMrd, addPatient } = usePatientStore();
   const { addNotification } = useUIStore();
+  const { doctors, queue, addToQueue } = useQueueStore();
 
   const [tab, setTab] = useState<'patient' | 'mr'>('patient');
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [lastCreatedToken, setLastCreatedToken] = useState<string | null>(null);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('doc-1');
 
   // Patient Form State
   const [firstName, setFirstName] = useState('');
@@ -102,7 +105,7 @@ export default function RegisterPage() {
     setSelectedTags([]);
   };
 
-  const savePatient = (afterAction?: 'book' | 'checkin') => {
+  const savePatient = (afterAction?: 'book' | 'checkin' | 'send_to_doctor') => {
     if (!firstName.trim() || !lastName.trim() || !mobile.trim()) {
       alert('Please enter First Name, Last Name, and Mobile Number.');
       return;
@@ -127,6 +130,60 @@ export default function RegisterPage() {
       tags: selectedTags,
       isNew: true,
     });
+
+    if (afterAction === 'send_to_doctor') {
+      const q = useQueueStore.getState().queue;
+      const allDocs = useQueueStore.getState().doctors;
+      const tokenIndex = q.length + 1;
+      const tokenCode = `C${String(tokenIndex).padStart(3, '0')}`;
+      const caseNumber = `${tokenCode}-001-${new Date().toLocaleDateString('en-GB').replace(/\//g, '')}`;
+      const checkInTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const targetDoctor = allDocs.find(d => d.id === selectedDoctorId) || allDocs[0];
+
+      useQueueStore.getState().addToQueue({
+        caseNumber,
+        tokenDisplay: tokenCode,
+        patientId: created.id,
+        patientName: `${created.firstName} ${created.lastName}`,
+        doctorId: targetDoctor.id,
+        doctorName: targetDoctor.name,
+        visitType: 'Consultation',
+        appointmentTime: checkInTime,
+        checkInTime,
+        age: created.age,
+        gender: created.gender,
+        city: created.city || 'Surat',
+        billingStatus: 'PAID',
+        status: 'WAITING',
+        stage: 'DOCTOR',
+        vitalsRecorded: false,
+        complaintsRecorded: false,
+        isNew: true
+      });
+
+      useConsultationStore.getState().initSession(
+        caseNumber,
+        created,
+        {
+          id: targetDoctor.id,
+          name: targetDoctor.name,
+          specialization: targetDoctor.specialization || 'General Physician',
+          initials: targetDoctor.name.split(' ').map(w => w[0]).join('').slice(0, 2),
+          avatarColor: '#036d92',
+          room: targetDoctor.room || 'Cabin 1'
+        }
+      );
+
+      setLastCreatedToken(tokenCode);
+      addNotification({
+        type: 'success',
+        message: `Registered & queued: ${created.firstName} ${created.lastName} (Token ${tokenCode}) sent directly to ${targetDoctor.name}!`
+      });
+
+      setSuccessToast(`Patient registered! Token ${tokenCode} assigned and sent directly to ${targetDoctor.name} (${targetDoctor.room || 'Cabin 1'}). Ready in Doctor panel!`);
+      handleClear();
+      return;
+    }
 
     addNotification({
       type: 'success',
@@ -193,9 +250,33 @@ export default function RegisterPage() {
 
       {/* Success Toast */}
       {successToast && (
-        <div className="alert-banner success" style={{ marginBottom: 20 }}>
-          <CheckCircle2 size={18} />
-          <span>{successToast}</span>
+        <div className="alert-banner success" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={20} color="var(--success)" />
+            <span style={{ fontWeight: 600 }}>{successToast}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => router.push('/doctor/dashboard')}
+              className="btn btn-sm btn-primary"
+              style={{ background: '#036d92', borderColor: '#036d92', fontSize: 12 }}
+            >
+              Open Doctor Cockpit →
+            </button>
+            <button
+              onClick={() => router.push('/reception/queue')}
+              className="btn btn-sm btn-outline"
+              style={{ fontSize: 12 }}
+            >
+              View Reception Queue
+            </button>
+            <button
+              onClick={() => setSuccessToast(null)}
+              className="btn btn-ghost btn-sm btn-icon"
+            >
+              <RotateCcw size={13} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -450,6 +531,37 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              {/* Consulting Doctor Selection for Instant Queueing */}
+              <div style={{
+                padding: '12px 16px',
+                background: 'linear-gradient(135deg, rgba(3, 109, 146, 0.06), rgba(99, 102, 241, 0.06))',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(3, 109, 146, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6
+              }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, margin: 0, color: 'var(--primary)' }}>
+                  <Stethoscope size={15} /> Assign Attending Doctor (for Instant OPD Consultation Routing)
+                </label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    value={selectedDoctorId}
+                    onChange={e => setSelectedDoctorId(e.target.value)}
+                    className="form-select"
+                    style={{ flex: 1, minWidth: 260, fontWeight: 600, background: '#FFFFFF' }}
+                  >
+                    <option value="doc-1">Dr. Raj Valaki (Cabin 1 — General Medicine & Dermatology)</option>
+                    <option value="doc-2">Dr. Anita Soni (Cabin 2 — Dermatology & Cosmetology)</option>
+                    <option value="doc-3">Dr. Priya Mehta (Cabin 3 — Pediatrics & Child Care)</option>
+                    <option value="doc-4">Dr. Suresh Kumar (Cabin 4 — Surgery & Procedures)</option>
+                  </select>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Auto-generates OPD token and forwards directly to doctor's cockpit
+                  </span>
+                </div>
+              </div>
+
               {/* Action Buttons */}
               <div style={{
                 display: 'flex',
@@ -457,7 +569,9 @@ export default function RegisterPage() {
                 justifyContent: 'space-between',
                 paddingTop: 16,
                 borderTop: '1px solid var(--border)',
-                marginTop: 8
+                marginTop: 8,
+                flexWrap: 'wrap',
+                gap: 12
               }}>
                 <button
                   type="button"
@@ -467,7 +581,7 @@ export default function RegisterPage() {
                   <RotateCcw size={15} /> Clear Fields
                 </button>
 
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => savePatient()}
@@ -479,7 +593,7 @@ export default function RegisterPage() {
                   <button
                     type="button"
                     onClick={() => savePatient('book')}
-                    className="btn btn-primary"
+                    className="btn btn-outline"
                   >
                     Save & Book Appt
                   </button>
@@ -489,6 +603,22 @@ export default function RegisterPage() {
                     className="btn btn-success"
                   >
                     Save & Check-In Directly <ArrowRight size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => savePatient('send_to_doctor')}
+                    className="btn btn-primary"
+                    style={{
+                      background: 'linear-gradient(135deg, #036d92 0%, #0284C7 100%)',
+                      borderColor: '#036d92',
+                      boxShadow: '0 3px 10px rgba(3, 109, 146, 0.3)',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <Stethoscope size={16} /> Save & Send to Doctor Queue
                   </button>
                 </div>
               </div>

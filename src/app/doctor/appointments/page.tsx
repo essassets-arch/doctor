@@ -6,14 +6,72 @@ import {
   AlertCircle, ArrowRight, X, Stethoscope, RotateCcw
 } from 'lucide-react';
 import {
-  useAppointmentStore, usePatientStore, useUIStore,
+  useAppointmentStore, usePatientStore, useUIStore, useQueueStore, useConsultationStore,
   Appointment, SLOTS
 } from '@/store';
 
 export default function DoctorAppointmentsPage() {
   const { appointments, addAppointment, updateAppointment } = useAppointmentStore();
   const { patients } = usePatientStore();
+  const { queue, addToQueue } = useQueueStore();
   const { addNotification } = useUIStore();
+
+  const handleMarkArrived = (apt: Appointment) => {
+    updateAppointment(apt.id, { status: 'ARRIVED' });
+
+    const existing = queue.find(q => q.patientId === apt.patientId && q.status !== 'COMPLETED' && q.status !== 'CANCELLED');
+    if (!existing) {
+      const tokenIndex = queue.length + 1;
+      const tokenCode = `C${String(tokenIndex).padStart(3, '0')}`;
+      const caseNumber = `${tokenCode}-001-${new Date().toLocaleDateString('en-GB').replace(/\//g, '')}`;
+      const checkInTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const pat = patients.find(p => p.id === apt.patientId);
+
+      addToQueue({
+        caseNumber,
+        tokenDisplay: tokenCode,
+        patientId: apt.patientId,
+        patientName: apt.patientName,
+        doctorId: apt.doctorId || 'doc-1',
+        doctorName: apt.doctorName || 'Dr. Raj Valaki',
+        visitType: apt.visitType,
+        appointmentTime: apt.time,
+        checkInTime,
+        age: pat?.age || 30,
+        gender: pat?.gender || 'M',
+        city: pat?.city || 'Surat',
+        billingStatus: 'PAID',
+        status: 'WAITING',
+        stage: 'DOCTOR',
+        vitalsRecorded: false,
+        complaintsRecorded: false,
+        isNew: false
+      });
+
+      useConsultationStore.getState().initSession(
+        caseNumber,
+        pat || { id: apt.patientId, firstName: apt.patientName, lastName: '', mobile: '', age: 30, gender: 'M', mrdNumber: 'MRD-NEW' } as any,
+        {
+          id: apt.doctorId || 'doc-1',
+          name: apt.doctorName || 'Dr. Raj Valaki',
+          specialization: 'General Physician',
+          initials: 'RV',
+          avatarColor: '#036d92',
+          room: 'Room 1'
+        }
+      );
+
+      addNotification({
+        type: 'success',
+        message: `${apt.patientName} marked Arrived and queued for Doctor (Token ${tokenCode})!`
+      });
+    } else {
+      addNotification({
+        type: 'success',
+        message: `${apt.patientName} marked Arrived. Patient is in queue (${existing.tokenDisplay}).`
+      });
+    }
+  };
 
   const [dateFilter, setDateFilter] = useState('2026-09-19');
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,17 +254,36 @@ export default function DoctorAppointmentsPage() {
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        onClick={() => {
-                          setSelectedAptForReschedule(apt);
-                          setRescheduleDate(apt.date);
-                          setRescheduleSlot(apt.time);
-                        }}
-                        className="btn btn-outline btn-sm"
-                        style={{ borderColor: '#036d92', color: '#036d92' }}
-                      >
-                        Reschedule
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                        {apt.status === 'SCHEDULED' && (
+                          <button
+                            onClick={() => handleMarkArrived(apt)}
+                            className="btn btn-success btn-sm"
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 11, fontWeight: 700 }}
+                            title="Mark Patient Arrived and Send to Active Queue"
+                          >
+                            <CheckCircle2 size={12} /> Arrived & Queue
+                          </button>
+                        )}
+                        {apt.status === 'ARRIVED' && (
+                          <Link href="/doctor/queue">
+                            <span className="badge badge-success" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <CheckCircle2 size={12} /> In Queue →
+                            </span>
+                          </Link>
+                        )}
+                        <button
+                          onClick={() => {
+                            setSelectedAptForReschedule(apt);
+                            setRescheduleDate(apt.date);
+                            setRescheduleSlot(apt.time);
+                          }}
+                          className="btn btn-outline btn-sm"
+                          style={{ borderColor: '#036d92', color: '#036d92', padding: '4px 8px', fontSize: 11 }}
+                        >
+                          Reschedule
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -14,12 +14,13 @@ import {
 
 export default function DoctorQueuePage() {
   const router = useRouter();
-  const { queue, updateStatus, setCallingEntry, resumeFromHold } = useQueueStore();
+  const { queue, doctors, updateStatus, setCallingEntry, resumeFromHold } = useQueueStore();
   const { patients } = usePatientStore();
   const { initSession } = useConsultationStore();
   const { addNotification } = useUIStore();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState('2026-09-19');
   const [purposeFilter, setPurposeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -35,10 +36,14 @@ export default function DoctorQueuePage() {
     foc: false
   });
 
-  // Doctor-specific queue for Dr. Raj Valaki (doc-1)
+  // Doctor-specific queue (or All Doctors)
   const doctorQueue = useMemo(() => {
-    return queue.filter(q => q.doctorId === 'doc-1');
-  }, [queue]);
+    return queue.filter(q => {
+      if (selectedDoctorId === 'ALL') return true;
+      if (!q.doctorId) return true;
+      return q.doctorId === selectedDoctorId;
+    });
+  }, [queue, selectedDoctorId]);
 
   // Filtered queue
   const filteredQueue = useMemo(() => {
@@ -108,13 +113,19 @@ export default function DoctorQueuePage() {
   const handleStartConsultation = (entry: QueueEntry) => {
     updateStatus(entry.id, 'IN_SESSION');
     const pat = patients.find(p => p.id === entry.patientId) || patients[0];
+    const doc = doctors.find(d => d.id === entry.doctorId) || {
+      id: entry.doctorId || 'doc-1',
+      name: entry.doctorName || 'Dr. Raj Valaki',
+      specialty: 'General Physician',
+      room: 'Cabin 1'
+    };
     initSession(entry.caseNumber, pat, {
-      id: 'doc-1',
-      name: 'Dr. Raj Valaki',
-      specialization: 'Dermatology',
-      initials: 'RV',
+      id: doc.id,
+      name: doc.name,
+      specialization: (doc as any).specialty || 'General',
+      initials: doc.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
       avatarColor: '#036d92',
-      room: 'Room 1'
+      room: (doc as any).room || 'Room 1'
     });
 
     router.push(`/doctor/consultation/${entry.caseNumber}`);
@@ -124,19 +135,26 @@ export default function DoctorQueuePage() {
   const handleResumeOnHold = (entry: QueueEntry) => {
     resumeFromHold(entry.id);
     const pat = patients.find(p => p.id === entry.patientId) || patients[0];
+    const doc = doctors.find(d => d.id === entry.doctorId) || {
+      id: entry.doctorId || 'doc-1',
+      name: entry.doctorName || 'Dr. Raj Valaki',
+      specialty: 'General Physician',
+      room: 'Cabin 1'
+    };
     initSession(entry.caseNumber, pat, {
-      id: 'doc-1',
-      name: 'Dr. Raj Valaki',
-      specialization: 'Dermatology',
-      initials: 'RV',
+      id: doc.id,
+      name: doc.name,
+      specialization: (doc as any).specialty || 'General',
+      initials: doc.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
       avatarColor: '#036d92',
-      room: 'Room 1'
+      room: (doc as any).room || 'Room 1'
     });
     router.push(`/doctor/consultation/${entry.caseNumber}`);
   };
 
   const handleResetFilters = () => {
     setSearchQuery('');
+    setSelectedDoctorId('ALL');
     setDateFilter('2026-09-19');
     setPurposeFilter('ALL');
     setStatusFilter('ALL');
@@ -185,6 +203,24 @@ export default function DoctorQueuePage() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
+          </div>
+
+          {/* Doctor Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Stethoscope size={14} color="var(--primary)" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Doctor:</span>
+            <select
+              className="form-select"
+              style={{ width: 170, padding: '6px 10px', fontSize: 12, fontWeight: 600 }}
+              value={selectedDoctorId}
+              onChange={e => setSelectedDoctorId(e.target.value)}
+            >
+              <option value="ALL">All Doctors</option>
+              <option value="doc-1">Dr. Raj Valaki (Cabin 1)</option>
+              <option value="doc-2">Dr. Anita Soni (Cabin 2)</option>
+              <option value="doc-3">Dr. Priya Mehta (Cabin 3)</option>
+              <option value="doc-4">Dr. Suresh Kumar (Cabin 4)</option>
+            </select>
           </div>
 
           {/* Date Filter */}

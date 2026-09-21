@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   SquareCheckBig, User, Search, Stethoscope, Clock,
   CreditCard, Activity, CheckCircle2, AlertCircle, Heart,
   Printer, ArrowRight, ShieldAlert, Sparkles, Tag, X, QrCode
 } from 'lucide-react';
 import {
-  usePatientStore, useQueueStore, useUIStore,
+  usePatientStore, useQueueStore, useBillingStore, useUIStore,
   Patient, Doctor, VisitType, BillingStatus, QueueEntry
 } from '@/store';
 import PaymentModal from '@/components/PaymentModal';
@@ -19,6 +20,7 @@ function CheckInContent() {
 
   const { patients, getPatientById } = usePatientStore();
   const { queue, doctors, addToQueue } = useQueueStore();
+  const { addBill } = useBillingStore();
   const { addNotification } = useUIStore();
 
   // Selected Patient State
@@ -143,12 +145,69 @@ function CheckInContent() {
       city: selectedPatient.city || 'Surat',
       billingStatus: finalBilling,
       status: 'WAITING',
+      stage: 'NURSING',
       vitalsRecorded: recordVitals,
       complaintsRecorded: recordComplaints,
+      complaints: recordComplaints ? selectedComplaints : undefined,
+      complaintNotes: recordComplaints ? (complaintNotes.trim() || selectedComplaints.join(', ')) : undefined,
       isFoc: billingChoice === 'FOC',
+      vitals: recordVitals ? {
+        temperature: parseFloat(temp) || 98.6,
+        pulse: parseInt(pulse) || 76,
+        bloodPressure: bp || '120/80',
+        weight: parseFloat(weight) || 68,
+        spo2: parseInt(spo2) || 99,
+        recordedAt: checkInTime,
+        recordedBy: 'Reception Desk'
+      } : undefined
     };
 
     addToQueue(newEntry);
+
+    // Record billing entry if paid or pending
+    if (billingChoice === 'PAY_NOW' && feeAmount > 0) {
+      addBill({
+        patientId: selectedPatient.id,
+        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+        mrdNumber: selectedPatient.mrdNumber,
+        doctorName: selectedDoctor.name,
+        date: new Date().toISOString().split('T')[0],
+        netAmount: feeAmount,
+        collectedAmount: feeAmount,
+        balance: 0,
+        status: 'PAID',
+        paymentMode: 'UPI',
+        items: [{
+          id: `item-${Date.now()}`,
+          name: `${visitType} Advance Consultation Fee`,
+          unitPrice: feeAmount,
+          quantity: 1,
+          discount: 0,
+          total: feeAmount
+        }]
+      });
+    } else if (billingChoice === 'PAY_LATER' && feeAmount > 0) {
+      addBill({
+        patientId: selectedPatient.id,
+        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+        mrdNumber: selectedPatient.mrdNumber,
+        doctorName: selectedDoctor.name,
+        date: new Date().toISOString().split('T')[0],
+        netAmount: feeAmount,
+        collectedAmount: 0,
+        balance: feeAmount,
+        status: 'PENDING',
+        paymentMode: 'CASH',
+        items: [{
+          id: `item-${Date.now()}`,
+          name: `${visitType} Fee (Pay at Checkout)`,
+          unitPrice: feeAmount,
+          quantity: 1,
+          discount: 0,
+          total: feeAmount
+        }]
+      });
+    }
 
     addNotification({
       type: 'info',
@@ -662,6 +721,9 @@ function CheckInContent() {
                     {generatedToken.billingStatus}
                   </span>
                 </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: '#4338CA', fontWeight: 800, textAlign: 'center' }}>
+                  Case ID: <span data-testid="generated-case-id">{generatedToken.caseNumber}</span>
+                </div>
               </div>
             </div>
 
@@ -675,14 +737,13 @@ function CheckInContent() {
               >
                 Go to OPD Queue Board
               </button>
-              <button
+              <Link
+                href={`/nursing/vitals?caseId=${generatedToken.caseNumber}`}
                 className="btn btn-primary"
-                onClick={() => {
-                  window.print();
-                }}
+                onClick={() => setGeneratedToken(null)}
               >
-                <Printer size={15} /> Print Token Receipt
-              </button>
+                Proceed to Nursing Triage →
+              </Link>
             </div>
           </div>
         </div>

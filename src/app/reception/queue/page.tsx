@@ -17,7 +17,7 @@ import PaymentModal from '@/components/PaymentModal';
 
 export default function OPDQueuePage() {
   const router = useRouter();
-  const { queue, doctors, updateStatus, updateVitals, updateComplaints, cancelEntry } = useQueueStore();
+  const { queue, doctors, updateStatus, updateQueueEntry, updateVitals, updateComplaints, cancelEntry } = useQueueStore();
   const { patients } = usePatientStore();
   const { addNotification } = useUIStore();
 
@@ -402,7 +402,42 @@ export default function OPDQueuePage() {
 
                       {/* Action buttons */}
                       <td>
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {!item.checkInTime && item.status !== 'COMPLETED' && item.status !== 'CANCELLED' && (
+                            <button
+                              onClick={() => {
+                                const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                                updateQueueEntry(item.id, { checkInTime: time, status: 'WAITING' });
+                                addNotification({
+                                  type: 'success',
+                                  message: `${item.patientName} (${item.tokenDisplay}) marked Arrived at clinic.`
+                                });
+                              }}
+                              className="btn btn-success btn-sm"
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px' }}
+                              title="Mark Patient Arrived"
+                            >
+                              <CheckCircle2 size={12} /> Arrived
+                            </button>
+                          )}
+
+                          {item.status === 'WAITING' && item.stage !== 'DOCTOR' && (
+                            <button
+                              onClick={() => {
+                                updateQueueEntry(item.id, { stage: 'DOCTOR' });
+                                addNotification({
+                                  type: 'success',
+                                  message: `${item.patientName} (${item.tokenDisplay}) sent to Doctor Queue.`
+                                });
+                              }}
+                              className="btn btn-outline btn-sm"
+                              style={{ borderColor: '#036d92', color: '#036d92', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px' }}
+                              title="Send Directly to Doctor Queue"
+                            >
+                              <Stethoscope size={12} /> Send to Doctor
+                            </button>
+                          )}
+
                           {item.status === 'WAITING' && (
                             <button
                               onClick={() => handleCallPatient(item)}
