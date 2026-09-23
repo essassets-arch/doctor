@@ -292,36 +292,44 @@ export default function LabUploadPage() {
           </div>
 
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div className="avatar avatar-md" style={{
-                background: selectedPatient.gender === 'F' ? 'linear-gradient(135deg, #EC4899, #F43F5E)' : 'linear-gradient(135deg, #6366F1, #3B82F6)'
-              }}>
-                {selectedPatient.firstName[0]}{selectedPatient.lastName[0]}
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 15 }}>{selectedPatient.firstName} {selectedPatient.lastName}</div>
-                <div style={{ fontSize: 12, color: 'var(--primary)', fontFamily: 'monospace', fontWeight: 700 }}>{selectedPatient.mrdNumber}</div>
-              </div>
-            </div>
+            {selectedPatient ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div className="avatar avatar-md" style={{
+                    background: selectedPatient.gender === 'F' ? 'linear-gradient(135deg, #EC4899, #F43F5E)' : 'linear-gradient(135deg, #6366F1, #3B82F6)'
+                  }}>
+                    {selectedPatient.firstName[0]}{selectedPatient.lastName[0]}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 15 }}>{selectedPatient.firstName} {selectedPatient.lastName}</div>
+                    <div style={{ fontSize: 12, color: 'var(--primary)', fontFamily: 'monospace', fontWeight: 700 }}>{selectedPatient.mrdNumber}</div>
+                  </div>
+                </div>
 
-            <div style={{ padding: 12, background: 'var(--bg-muted)', borderRadius: 8, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Age / Gender:</span>
-                <span style={{ fontWeight: 600 }}>{selectedPatient.age} Yrs ({selectedPatient.gender})</span>
+                <div style={{ padding: 12, background: 'var(--bg-muted)', borderRadius: 8, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Age / Gender:</span>
+                    <span style={{ fontWeight: 600 }}>{selectedPatient.age} Yrs ({selectedPatient.gender})</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Blood Group:</span>
+                    <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{selectedPatient.bloodGroup || 'N/A'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Mobile:</span>
+                    <span style={{ fontWeight: 600 }}>{selectedPatient.mobile}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>City:</span>
+                    <span>{selectedPatient.city || 'Surat'}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                No patient selected. Please select a patient above to attach diagnostic documents.
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Blood Group:</span>
-                <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{selectedPatient.bloodGroup || 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Mobile:</span>
-                <span style={{ fontWeight: 600 }}>{selectedPatient.mobile}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>City:</span>
-                <span>{selectedPatient.city || 'Surat'}</span>
-              </div>
-            </div>
+            )}
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
               💡 <strong>Receptionist Note:</strong> Uploaded reports are immediately visible inside the doctor's consultation EHR tab and during active video triage.

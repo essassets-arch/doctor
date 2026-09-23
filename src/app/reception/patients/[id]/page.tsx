@@ -8,7 +8,8 @@ import {
   CalendarPlus, ArrowLeft, CheckCircle2, AlertCircle,
   Clock, ShieldAlert, FileSignature, Activity, Plus, X,
   QrCode, Lock, Unlock, Edit3, Trash2, Smartphone, Send,
-  HelpCircle, Eye, FileCheck, Check, Wallet, Stethoscope
+  HelpCircle, Eye, FileCheck, Check, Wallet, Stethoscope,
+  ArrowUp, Layers
 } from 'lucide-react';
 import {
   usePatientStore, useAppointmentStore, useBillingStore,
@@ -49,7 +50,7 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
   const patientId = resolvedParams.id;
   const router = useRouter();
 
-  const { patients, updatePatient } = usePatientStore();
+  const { patients, updatePatient, getPatientById } = usePatientStore();
   const { appointments } = useAppointmentStore();
   const { bills, addBill } = useBillingStore();
   const { records, addRecord } = useClinicalStore();
@@ -57,10 +58,11 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
   const { queue, updateQueueEntry, completeCheckout } = useQueueStore();
   const { addNotification } = useUIStore();
 
-  const patient = patients.find(p => p.id === patientId);
+  const patient = patients.find(p => p.id === patientId) || getPatientById(patientId);
 
-  // Active Tab
+  // Active Tab & View Mode
   const [activeTab, setActiveTab] = useState<'profile' | 'clinical' | 'timeline' | 'documents' | 'consent' | 'billing'>('profile');
+  const [viewMode, setViewMode] = useState<'all' | 'single'>('all');
 
   // Sync bill items from doctor consultation if available
   useEffect(() => {
@@ -79,9 +81,46 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
       const hash = window.location.hash.replace('#', '');
       if (['profile', 'clinical', 'timeline', 'documents', 'consent', 'billing'].includes(hash)) {
         setActiveTab(hash as any);
+        setTimeout(() => {
+          const el = document.getElementById(`section-${hash}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
       }
     }
   }, []);
+
+  // Auto-highlight active tab as user scrolls vertically
+  useEffect(() => {
+    if (viewMode !== 'all') return;
+
+    const sectionIds = ['profile', 'clinical', 'timeline', 'documents', 'consent', 'billing'];
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 200;
+      for (let i = sectionIds.length - 1; i >= 0; i--) {
+        const el = document.getElementById(`section-${sectionIds[i]}`);
+        if (el) {
+          const top = el.getBoundingClientRect().top + window.scrollY;
+          if (scrollPosition >= top) {
+            setActiveTab(sectionIds[i] as any);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [viewMode]);
+
+  const scrollToSection = (tabId: string) => {
+    setActiveTab(tabId as any);
+    if (viewMode === 'all') {
+      const el = document.getElementById(`section-${tabId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  };
 
   // 11.0 Session Lock Check
   const activeSessionEntry = queue.find(q => q.patientId === patientId && q.status === 'IN_SESSION');
@@ -504,39 +543,151 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
             </Link>
           </div>
         </div>
+      </div>
 
-        {/* Section 11 Navigation Tabs */}
-        <div className="tabs" style={{ padding: '0 16px', overflowX: 'auto' }}>
+      {/* Sticky Section 11 Navigation Ribbon */}
+      <div
+        style={{
+          position: 'sticky',
+          top: 62,
+          zIndex: 40,
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          padding: '8px 14px',
+          marginBottom: 20,
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap'
+        }}
+      >
+        {/* Navigation Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flex: 1, paddingBottom: 2 }}>
           {[
-            { id: 'profile', label: '11.1 Profile & Demographics', icon: User },
-            { id: 'clinical', label: '11.2 Clinical Data (Vitals & Complaints)', icon: Heart },
-            { id: 'timeline', label: `11.3 Timeline & Visits (${patientAppointments.length})`, icon: Calendar },
-            { id: 'documents', label: `11.4 Documents & Reports (${patientLabs.length})`, icon: Upload },
-            { id: 'consent', label: '11.5 Informed Consent Form', icon: FileSignature },
-            { id: 'billing', label: `11.6 Billing & Settlement (${patientBills.length})`, icon: CreditCard },
+            { id: 'profile', badge: '11.1', label: 'Profile & Demographics', icon: User, color: '#EA580C' },
+            { id: 'clinical', badge: '11.2', label: 'Clinical Data (Vitals & Complaints)', icon: Heart, color: '#EF4444' },
+            { id: 'timeline', badge: '11.3', label: `Timeline & Visits (${patientAppointments.length})`, icon: Calendar, color: '#2563EB' },
+            { id: 'documents', badge: '11.4', label: `Documents & Reports (${patientLabs.length})`, icon: Upload, color: '#7C3AED' },
+            { id: 'consent', badge: '11.5', label: 'Informed Consent Form', icon: FileSignature, color: '#059669' },
+            { id: 'billing', badge: '11.6', label: `Billing & Settlement (${patientBills.length})`, icon: CreditCard, color: '#0369A1' },
           ].map(t => {
             const Icon = t.icon;
             const active = activeTab === t.id;
             return (
               <button
                 key={t.id}
-                onClick={() => setActiveTab(t.id as any)}
-                className={`tab-item ${active ? 'active' : ''}`}
-                style={{ whiteSpace: 'nowrap' }}
+                type="button"
+                onClick={() => scrollToSection(t.id)}
+                className={`btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}`}
+                style={{
+                  whiteSpace: 'nowrap',
+                  fontSize: 12,
+                  fontWeight: active ? 800 : 600,
+                  background: active ? (viewMode === 'all' ? '#0F172A' : t.color) : 'transparent',
+                  color: active ? '#FFFFFF' : '#475569',
+                  borderColor: active ? (viewMode === 'all' ? '#0F172A' : t.color) : '#E2E8F0',
+                  padding: '6px 12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
               >
-                <Icon size={15} />
+                <span style={{
+                  background: active ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
+                  color: active ? '#FFFFFF' : t.color,
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 900
+                }}>
+                  {t.badge}
+                </span>
+                <Icon size={14} color={active ? '#FFFFFF' : t.color} />
                 <span>{t.label}</span>
               </button>
             );
           })}
         </div>
+
+        {/* View Mode Switcher & Quick Scroll Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setViewMode(viewMode === 'all' ? 'single' : 'all')}
+            className={`btn btn-sm ${viewMode === 'all' ? 'btn-success' : 'btn-outline'}`}
+            style={{ fontSize: 11.5, fontWeight: 700, padding: '5px 10px', gap: 5 }}
+            title={viewMode === 'all' ? 'All 6 sections rendered in continuous vertical scroll' : 'Switch to single tab view'}
+          >
+            <Layers size={13} />
+            {viewMode === 'all' ? 'Vertical Scroll: All Active' : 'Single Tab View'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="btn btn-ghost btn-icon btn-sm"
+            title="Scroll to Top"
+          >
+            <ArrowUp size={14} />
+          </button>
+        </div>
       </div>
 
       {/* ============================================================ */}
-      {/* 11.1 Profile Section Tab */}
+      {/* 11.1 Profile Section */}
       {/* ============================================================ */}
-      {activeTab === 'profile' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20 }}>
+      {(viewMode === 'all' || activeTab === 'profile') && (
+        <div
+          id="section-profile"
+          style={{
+            scrollMarginTop: 136,
+            marginBottom: viewMode === 'all' ? 36 : 0
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            borderLeft: '5px solid #EA580C',
+            marginBottom: 14,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: '#EA580C',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: '3px 10px',
+                borderRadius: 6
+              }}>
+                11.1
+              </span>
+              <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+                Profile & Demographics
+              </h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                • Patient Identification, Extended Demographics, Emergency Contact & Flags
+              </span>
+            </div>
+            <button onClick={() => setShowEditProfileModal(true)} className="btn btn-outline btn-sm" style={{ fontSize: 12 }}>
+              <Edit3 size={13} /> Edit Profile
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20 }}>
           <div className="card">
             <div className="card-header">
               <span className="card-title"><User size={16} color="var(--primary)" /> Complete Identification & Contact Profile</span>
@@ -645,15 +796,56 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
                 </div>
               </div>
             </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* ============================================================ */}
-      {/* 11.2 Clinical Data Tab (Complaints & Vitals) */}
+      {/* 11.2 Clinical Data (Vitals & Complaints) */}
       {/* ============================================================ */}
-      {activeTab === 'clinical' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.3fr', gap: 20 }}>
+      {(viewMode === 'all' || activeTab === 'clinical') && (
+        <div
+          id="section-clinical"
+          style={{
+            scrollMarginTop: 136,
+            marginBottom: viewMode === 'all' ? 36 : 0
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            borderLeft: '5px solid #EF4444',
+            marginBottom: 14,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: '#EF4444',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: '3px 10px',
+                borderRadius: 6
+              }}>
+                11.2
+              </span>
+              <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+                Clinical Data (Vitals & Complaints)
+              </h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                • Patient Triage Vitals, BMI Calculation & Chief Complaints
+              </span>
+            </div>
+            {vitalsSaved && <span className="badge badge-success">Vitals Recorded ✓</span>}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.3fr', gap: 20 }}>
           {/* Vitals Recording Strip */}
           <div className="card">
             <div className="card-header">
@@ -886,13 +1078,58 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* ============================================================ */}
-      {/* 11.3 Timeline / Clinical History Tab */}
+      {/* 11.3 Timeline & Visits */}
       {/* ============================================================ */}
-      {activeTab === 'timeline' && (
-        <div className="card">
+      {(viewMode === 'all' || activeTab === 'timeline') && (
+        <div
+          id="section-timeline"
+          style={{
+            scrollMarginTop: 136,
+            marginBottom: viewMode === 'all' ? 36 : 0
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            borderLeft: '5px solid #2563EB',
+            marginBottom: 14,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: '#2563EB',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: '3px 10px',
+                borderRadius: 6
+              }}>
+                11.3
+              </span>
+              <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+                Timeline & Visits ({patientAppointments.length})
+              </h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                • Chronological Clinical Encounters, Consultation Notes & Past Records
+              </span>
+            </div>
+            <Link href={`/reception/patients/${patient.id}/history`}>
+              <button className="btn btn-outline btn-sm" style={{ fontSize: 12 }}>
+                Full Audit View →
+              </button>
+            </Link>
+          </div>
+
+          <div className="card">
           <div className="card-header">
             <span className="card-title"><Calendar size={16} color="var(--primary)" /> Chronological Clinical Encounters & Visits</span>
             <Link href={`/reception/patients/${patient.id}/history`}>
@@ -955,15 +1192,58 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
 
       {/* ============================================================ */}
-      {/* 11.4 Documents & Reports Tab */}
+      {/* 11.4 Documents & Reports */}
       {/* ============================================================ */}
-      {activeTab === 'documents' && (
-        <div className="card">
+      {(viewMode === 'all' || activeTab === 'documents') && (
+        <div
+          id="section-documents"
+          style={{
+            scrollMarginTop: 136,
+            marginBottom: viewMode === 'all' ? 36 : 0
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            borderLeft: '5px solid #7C3AED',
+            marginBottom: 14,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: '#7C3AED',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: '3px 10px',
+                borderRadius: 6
+              }}>
+                11.4
+              </span>
+              <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+                Documents & Reports ({patientLabs.length})
+              </h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                • Diagnostic Reports & Clinical Documents Attached to EHR
+              </span>
+            </div>
+            <button onClick={() => setShowUploadModal(true)} className="btn btn-primary btn-sm" style={{ fontSize: 12 }}>
+              <Plus size={13} /> Ingest New Document
+            </button>
+          </div>
+
+          <div className="card">
           <div className="card-header">
             <span className="card-title"><Upload size={16} color="var(--primary)" /> Diagnostic Reports & Clinical Documents</span>
             <button onClick={() => setShowUploadModal(true)} className="btn btn-primary btn-sm">
@@ -1027,16 +1307,61 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
                   ))
                 )}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* ============================================================ */}
-      {/* 11.5 Informed Consent Tab */}
+      {/* 11.5 Informed Consent Form */}
       {/* ============================================================ */}
-      {activeTab === 'consent' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {(viewMode === 'all' || activeTab === 'consent') && (
+        <div
+          id="section-consent"
+          style={{
+            scrollMarginTop: 136,
+            marginBottom: viewMode === 'all' ? 36 : 0
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            borderLeft: '5px solid #059669',
+            marginBottom: 14,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: '#059669',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: '3px 10px',
+                borderRadius: 6
+              }}>
+                11.5
+              </span>
+              <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+                Informed Consent Form
+              </h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                • Official Medico-Legal Procedure Documentation & Multi-Language Consent
+              </span>
+            </div>
+            {consentRecorded ? (
+              <span className="badge badge-success">Consent Form Logged ✓</span>
+            ) : (
+              <span className="badge badge-warning">Signature Pending</span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Controls Bar */}
           <div className="card">
             <div className="card-body" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
@@ -1169,16 +1494,56 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
                   <Check size={15} /> Record Consent ✓
                 </button>
               </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* ============================================================ */}
-      {/* 11.6 Billing & Financial Settlement Tab */}
+      {/* 11.6 Billing & Settlement */}
       {/* ============================================================ */}
-      {activeTab === 'billing' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20 }}>
+      {(viewMode === 'all' || activeTab === 'billing') && (
+        <div
+          id="section-billing"
+          style={{
+            scrollMarginTop: 136,
+            marginBottom: 36
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            borderLeft: '5px solid #0369A1',
+            marginBottom: 14,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: '#0369A1',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: '3px 10px',
+                borderRadius: 6
+              }}>
+                11.6
+              </span>
+              <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+                Billing & Settlement ({patientBills.length})
+              </h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                • Point-of-Sale Consultation & Procedure Checkout, FOC Waivers, Tender Modes & Split Payments
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20 }}>
           {/* Left: Itemized Bill Form */}
           <div className="card">
             <div className="card-header">
@@ -1439,6 +1804,7 @@ export default function PatientHubPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* Edit Profile Modal */}

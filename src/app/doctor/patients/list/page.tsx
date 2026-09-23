@@ -119,9 +119,11 @@ export default function DoctorPatientListPage() {
                     </td>
 
                     <td>
-                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {p.firstName} {p.middleName ? p.middleName + ' ' : ''}{p.lastName}
-                      </div>
+                      <Link href={`/doctor/patients/${p.id}/history`} style={{ textDecoration: 'none' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--primary)', cursor: 'pointer' }}>
+                          {p.firstName} {p.middleName ? p.middleName + ' ' : ''}{p.lastName}
+                        </div>
+                      </Link>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         Registered: {p.createdAt}
                       </div>

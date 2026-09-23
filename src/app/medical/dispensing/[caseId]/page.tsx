@@ -49,9 +49,9 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
         formulation: 'Tablet',
         dosage: rx.dosage,
         frequency: rx.frequency,
-        durationDays: rx.durationDays,
-        prescribedQty: rx.totalQty,
-        dispensedQty: rx.totalQty,
+        durationDays: Number(rx.durationDays) || 5,
+        prescribedQty: Number(rx.totalQty) || 1,
+        dispensedQty: Number(rx.totalQty) || 1,
         unitPrice: 15,
         instructions: rx.instructions,
         isDispensed: false

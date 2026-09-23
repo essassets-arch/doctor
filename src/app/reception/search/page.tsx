@@ -164,14 +164,26 @@ export default function PatientSearchPage() {
                     <tr key={patient.id}>
                       {/* Name & MRD */}
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Link
+                          href={`/reception/patients/${patient.id}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            textDecoration: 'none',
+                            color: 'inherit',
+                            cursor: 'pointer'
+                          }}
+                          title={`Open ${patient.firstName}'s Patient Hub & Records`}
+                        >
                           <div className="avatar avatar-md" style={{
-                            background: patient.gender === 'F' ? 'linear-gradient(135deg, #EC4899, #F43F5E)' : 'linear-gradient(135deg, #6366F1, #3B82F6)'
+                            background: patient.gender === 'F' ? 'linear-gradient(135deg, #EC4899, #F43F5E)' : 'linear-gradient(135deg, #6366F1, #3B82F6)',
+                            flexShrink: 0
                           }}>
                             {initials}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 14 }}>
                               {patient.firstName} {patient.middleName ? patient.middleName + ' ' : ''}{patient.lastName}
                             </div>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
@@ -183,7 +195,7 @@ export default function PatientSearchPage() {
                               )}
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       </td>
 
                       {/* Contact */}

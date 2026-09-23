@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Users, Clock, CheckCircle2, Activity, RotateCcw, Search,
@@ -262,13 +263,13 @@ export default function DashboardPage() {
                       {entry.checkInTime || '—'}
                     </td>
                     <td>
-                      <div className="patient-row-info">
+                      <Link href={`/reception/patients/${entry.patientId}`} className="patient-row-info" style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div className="avatar avatar-sm" style={{ background: avatarGrad }}>{initials}</div>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{entry.patientName}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--primary)' }}>{entry.patientName}</div>
                           {patient && <div className="patient-mrd" style={{ marginTop: 2, fontSize: 10 }}>{patient.mrdNumber}</div>}
                         </div>
-                      </div>
+                      </Link>
                     </td>
                     <td>
                       <span className="badge badge-muted" style={{ fontSize: 11 }}>{entry.visitType}</span>

@@ -121,9 +121,13 @@ export interface Patient {
   language: 'English' | 'Gujarati' | 'Hindi';
   bloodGroup?: string;
   city?: string;
+  state?: string;
   address?: string;
   email?: string;
   emergencyContact?: string;
+  maritalStatus?: string;
+  occupation?: string;
+  allergies?: string;
   tags?: string[];
   specialNotes?: string[];
   createdAt: string;
@@ -342,7 +346,36 @@ export const usePatientStore = create<PatientState>()(
             )
         });
       },
-      getPatientById: (id) => get().patients.find(p => p.id === id),
+      getPatientById: (id) => {
+        const found = get().patients.find(p => p.id === id);
+        if (found) return found;
+        if (id === 'pat-1789991704297') {
+          return {
+            id: 'pat-1789991704297',
+            mrdNumber: 'MRD-2026-0003',
+            firstName: 'dionesh',
+            middleName: 'dionesh',
+            lastName: 'dionesh',
+            mobile: '8594897487',
+            email: 'essassets@gmail.com',
+            age: 0,
+            ageMonths: 0,
+            ageDays: 0,
+            gender: 'M',
+            language: 'English',
+            bloodGroup: 'B+',
+            city: 'Surat',
+            state: 'Gujarat',
+            address: 'Ring Road, Surat',
+            maritalStatus: 'Single',
+            occupation: 'Engineer',
+            allergies: 'None Reported',
+            createdAt: '2026-09-22',
+            isNew: true
+          };
+        }
+        return undefined;
+      },
     }),
     {
       name: 'doctor-patients',
@@ -748,11 +781,52 @@ export interface DrugInventoryItem {
   id: string;
   name: string;
   genericName: string;
+  brandName?: string;
+  manufacturer?: string;
   formulation: string;
   stock: number;
   reorderLevel: number;
   unitPrice: number;
+  slotNo?: string;
+  defaultDose?: string;
+  defaultFreq?: string;
+  defaultDay?: string;
+  defaultTotal?: string;
+  defaultNote?: string;
   alternatives?: string[];
+}
+
+export interface PrescriptionVisibility {
+  generic?: boolean;
+  brandName?: boolean;
+  manufacturer?: boolean;
+  dosage?: boolean;
+  frequency?: boolean;
+  durationDays?: boolean;
+  totalQty?: boolean;
+  instructions?: boolean;
+  slotNo?: boolean;
+  price?: boolean;
+}
+
+export interface PrescriptionItem {
+  id: string;
+  drugId?: string;
+  drugName: string;
+  genericName?: string;
+  brandName?: string;
+  manufacturer?: string;
+  dosage: string;
+  frequency: string;
+  durationDays: string | number;
+  totalQty: string | number;
+  instructions: string;
+  slotNo?: string;
+  price?: string | number;
+  timing?: string;
+  startDate?: string;
+  stockStatus?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+  visibility?: PrescriptionVisibility;
 }
 
 export interface InvestigationCatalogItem {
@@ -763,6 +837,7 @@ export interface InvestigationCatalogItem {
   unit?: string;
   normalRange?: string;
   instructions?: string;
+  specimenTube?: string;
 }
 
 export interface ProcedureCatalogItem {
@@ -788,6 +863,172 @@ export interface FollowUpTask {
   status: 'PENDING' | 'CALLED' | 'RESCHEDULED' | 'NO_SHOW';
   callLogs: { date: string; caller: string; outcome: string; notes: string }[];
 }
+
+export interface ProcedurePrescriptionItem {
+  id: string;
+  itemName: string;
+  category?: 'Syringe' | 'IV Bottle' | 'Roller Bandage' | 'Dressing / Gauze' | 'Cannula / Set' | 'Other Supply' | string;
+  quantity: number;
+  idCode?: string;
+  unit?: string;
+  instructions?: string;
+}
+
+export interface ProcedureExecutionItem {
+  id: string;
+  procedureName: string;
+  scheduledDate: string;
+  scheduledTime?: string;
+  sessionsCount?: string;
+  completedInClinic?: boolean;
+  notes?: string;
+  consentGenerated?: boolean;
+  price: number;
+  // Clinical Machine Settings & Treatment Protocol
+  therapist?: string;
+  bodyPart?: string;
+  sessionNumber?: number;
+  totalSessions?: number;
+  intervalDays?: number;
+  performanceDate?: string;
+  skinType?: string;
+  unit?: string;
+  power?: string;
+  waveLength?: string;
+  pulseDuration?: string;
+  spotSize?: string;
+  pulseImpulse?: string;
+  thickness?: string;
+  density?: string;
+  dotDensity?: string;
+  shotsFired?: string;
+  status?: 'Done' | 'Confirmed' | 'Pending' | 'Delayed' | 'Cancelled';
+  remark?: string;
+  rate?: number;
+  paymentStatus?: 'Done' | 'Pending' | 'Confirmed' | 'Partially Paid' | 'Cancelled';
+  discountPercent?: number;
+  actualPrice?: number;
+  afterDiscountPrice?: number;
+}
+
+export const DEFAULT_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
+  {
+    id: 'proc-demo-1',
+    procedureName: 'HAIR REMOVAL - DIODE',
+    scheduledDate: '25/03/2026',
+    performanceDate: '25/03/2026',
+    sessionsCount: '1/4',
+    sessionNumber: 1,
+    totalSessions: 4,
+    therapist: 'Dr Valaki',
+    bodyPart: 'FACE',
+    intervalDays: 20,
+    skinType: '2',
+    unit: '0',
+    power: '10',
+    waveLength: '100 hz',
+    pulseDuration: '10',
+    spotSize: '2.2',
+    pulseImpulse: '25',
+    thickness: '10',
+    density: '.5',
+    dotDensity: '10',
+    shotsFired: '100',
+    status: 'Done',
+    remark: 'Session 1 completed with good follicular response. Mild transient erythema.',
+    rate: 2000,
+    price: 2000,
+    paymentStatus: 'Done',
+    completedInClinic: true
+  },
+  {
+    id: 'proc-demo-2',
+    procedureName: 'HAIR REMOVAL - DIODE',
+    scheduledDate: '14/04/2026',
+    performanceDate: '',
+    sessionsCount: '2/4',
+    sessionNumber: 2,
+    totalSessions: 4,
+    therapist: 'Dr Valaki',
+    bodyPart: 'FACE',
+    intervalDays: 20,
+    skinType: '2',
+    unit: '0',
+    power: '10',
+    waveLength: '100 hz',
+    pulseDuration: '10',
+    spotSize: '2.2',
+    pulseImpulse: '25',
+    thickness: '10',
+    density: '.5',
+    dotDensity: '10',
+    shotsFired: '',
+    status: 'Confirmed',
+    remark: 'CANFORMED - PAYMENT PAY AND GIVE APPIENTMENT (Click Delay 12d or Cancel)',
+    rate: 2000,
+    price: 2000,
+    paymentStatus: 'Pending',
+    completedInClinic: false
+  },
+  {
+    id: 'proc-demo-3',
+    procedureName: 'HAIR REMOVAL - DIODE',
+    scheduledDate: '04/05/2026',
+    performanceDate: '',
+    sessionsCount: '3/4',
+    sessionNumber: 3,
+    totalSessions: 4,
+    therapist: 'Dr Valaki',
+    bodyPart: 'FACE',
+    intervalDays: 20,
+    skinType: '2',
+    unit: '0',
+    power: '10',
+    waveLength: '100 hz',
+    pulseDuration: '10',
+    spotSize: '2.2',
+    pulseImpulse: '25',
+    thickness: '10',
+    density: '.5',
+    dotDensity: '10',
+    shotsFired: '',
+    status: 'Pending',
+    remark: 'Scheduled follow-up session 3',
+    rate: 2000,
+    price: 2000,
+    paymentStatus: 'Pending',
+    completedInClinic: false
+  },
+  {
+    id: 'proc-demo-4',
+    procedureName: 'HAIR REMOVAL - DIODE',
+    scheduledDate: '24/05/2026',
+    performanceDate: '',
+    sessionsCount: '4/4',
+    sessionNumber: 4,
+    totalSessions: 4,
+    therapist: 'Dr Valaki',
+    bodyPart: 'FACE',
+    intervalDays: 20,
+    skinType: '2',
+    unit: '0',
+    power: '10',
+    waveLength: '100 hz',
+    pulseDuration: '10',
+    spotSize: '2.2',
+    pulseImpulse: '25',
+    thickness: '10',
+    density: '.5',
+    dotDensity: '10',
+    shotsFired: '',
+    status: 'Pending',
+    remark: 'Final scheduled protocol session 4',
+    rate: 2000,
+    price: 2000,
+    paymentStatus: 'Pending',
+    completedInClinic: false
+  }
+];
 
 export interface ConsultationSession {
   caseId: string;
@@ -821,7 +1062,12 @@ export interface ConsultationSession {
     pastSurgical: string;
     allergies: string;
     currentMedications: string;
+    personalHistory?: string;
     obstetricHistory?: string;
+  };
+  notes?: {
+    nursingNotes?: string;
+    patientFeedback?: string;
   };
   investigations: {
     testId: string;
@@ -831,28 +1077,13 @@ export interface ConsultationSession {
     status: 'ORDERED' | 'COMPLETED';
     resultValue?: string;
     normalRange?: string;
+    notes?: string;
+    instructions?: string;
+    specimenTube?: string;
   }[];
-  prescriptions: {
-    id: string;
-    drugName: string;
-    dosage: string;
-    frequency: string;
-    durationDays: number;
-    totalQty: number;
-    instructions: string;
-    stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
-  }[];
-  procedures: {
-    id: string;
-    procedureName: string;
-    scheduledDate: string;
-    scheduledTime: string;
-    sessionsCount: string;
-    completedInClinic: boolean;
-    notes: string;
-    consentGenerated: boolean;
-    price: number;
-  }[];
+  prescriptions: PrescriptionItem[];
+  procedurePrescriptions?: ProcedurePrescriptionItem[];
+  procedures: ProcedureExecutionItem[];
   images: {
     id: string;
     url: string;
@@ -903,25 +1134,30 @@ export interface ChatMessage {
 
 // Initial Mock Inventory
 export const DRUG_INVENTORY: DrugInventoryItem[] = [
-  { id: 'd-1', name: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', formulation: 'Capsule', stock: 8, reorderLevel: 20, unitPrice: 12, alternatives: ['Cefixime 200mg', 'Azithromycin 500mg'] },
-  { id: 'd-2', name: 'Paracetamol 650mg (Dolo)', genericName: 'Paracetamol', formulation: 'Tablet', stock: 12, reorderLevel: 50, unitPrice: 3, alternatives: ['Ibuprofen 400mg'] },
-  { id: 'd-3', name: 'Mometasone 0.1% Cream', genericName: 'Mometasone Furoate', formulation: 'Ointment', stock: 45, reorderLevel: 15, unitPrice: 145 },
-  { id: 'd-4', name: 'Bilastine 20mg (Bilaxten)', genericName: 'Bilastine', formulation: 'Tablet', stock: 35, reorderLevel: 20, unitPrice: 18 },
-  { id: 'd-5', name: 'Levocetirizine 5mg', genericName: 'Levocetirizine Dihydrochloride', formulation: 'Tablet', stock: 80, reorderLevel: 25, unitPrice: 5 },
-  { id: 'd-6', name: 'Telmisartan 40mg', genericName: 'Telmisartan', formulation: 'Tablet', stock: 40, reorderLevel: 20, unitPrice: 9 },
-  { id: 'd-7', name: 'Nitrofurantoin SR 100mg', genericName: 'Nitrofurantoin', formulation: 'Tablet', stock: 0, reorderLevel: 15, unitPrice: 16, alternatives: ['Fosfomycin 3g', 'Ofloxacin 200mg'] },
-  { id: 'd-8', name: 'Diacerein 50mg + Glucosamine', genericName: 'Diacerein + Glucosamine', formulation: 'Tablet', stock: 50, reorderLevel: 20, unitPrice: 22 },
-  { id: 'd-9', name: 'Emollient Moisturizer Lotion', genericName: 'Cetyl Alcohol + Liquid Paraffin', formulation: 'Lotion', stock: 30, reorderLevel: 10, unitPrice: 280 },
+  { id: 'd-101', name: 'TAB Flucocip 400mg (Tab fluconazone 400 mg)', genericName: 'Tab fluconazone 400 mg', brandName: 'TAB Flucocip 400mg', manufacturer: 'Cipla pvt', formulation: 'Tablet', stock: 50, reorderLevel: 15, unitPrice: 42, slotNo: 'BZX 120', defaultDose: '1 tab', defaultFreq: 'Od after mill', defaultDay: '5 day', defaultTotal: '5', defaultNote: 'Not teken with milk' },
+  { id: 'd-102', name: 'CREAM Monpic (Cream clotrimazole 1%)', genericName: 'Cream clotrimazole 1%', brandName: 'CREAM Monpic', manufacturer: 'Atopic darma', formulation: 'Cream', stock: 40, reorderLevel: 10, unitPrice: 85, slotNo: 'BYX 80', defaultDose: '1', defaultFreq: 'tds', defaultDay: '7', defaultTotal: '1', defaultNote: 'Before apply dry' },
+  { id: 'd-1', name: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', brandName: 'Amoxicillin 500mg', manufacturer: 'Cipla pvt', formulation: 'Capsule', stock: 8, reorderLevel: 20, unitPrice: 12, slotNo: 'BZX 100', defaultDose: '1', defaultFreq: 'tds', defaultDay: '7', defaultTotal: '1', defaultNote: 'Before apply dry', alternatives: ['Cefixime 200mg', 'Azithromycin 500mg'] },
+  { id: 'd-2', name: 'Paracetamol 650mg (Dolo)', genericName: 'Paracetamol 650mg', brandName: 'Dolo 650', manufacturer: 'Micro Labs', formulation: 'Tablet', stock: 12, reorderLevel: 50, unitPrice: 3, slotNo: 'BZX 102', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '3 day', defaultTotal: '6', defaultNote: 'After Food', alternatives: ['Ibuprofen 400mg'] },
+  { id: 'd-3', name: 'Mometasone 0.1% Cream', genericName: 'Mometasone Furoate', brandName: 'Elocon 0.1% Cream', manufacturer: 'Organon', formulation: 'Ointment', stock: 45, reorderLevel: 15, unitPrice: 145, slotNo: 'BYX 103', defaultDose: '1', defaultFreq: '0-0-1', defaultDay: '14 day', defaultTotal: '1', defaultNote: 'Before bedtime' },
+  { id: 'd-4', name: 'Bilastine 20mg (Bilaxten)', genericName: 'Bilastine', brandName: 'Bilaxten 20mg', manufacturer: 'Zydus', formulation: 'Tablet', stock: 35, reorderLevel: 20, unitPrice: 18, slotNo: 'BZX 104', defaultDose: '1 Tab', defaultFreq: '1-0-0', defaultDay: '10 day', defaultTotal: '10', defaultNote: 'Empty stomach (1h before food)' },
+  { id: 'd-5', name: 'Levocetirizine 5mg', genericName: 'Levocetirizine Dihydrochloride', brandName: 'Levocet 5mg', manufacturer: 'Hetero', formulation: 'Tablet', stock: 80, reorderLevel: 25, unitPrice: 5, slotNo: 'BZX 105', defaultDose: '1 Tab', defaultFreq: '0-0-1', defaultDay: '5 day', defaultTotal: '5', defaultNote: 'At bedtime' },
+  { id: 'd-6', name: 'Telmisartan 40mg', genericName: 'Telmisartan', brandName: 'Telma 40', manufacturer: 'Glenmark', formulation: 'Tablet', stock: 40, reorderLevel: 20, unitPrice: 9, slotNo: 'BZX 106', defaultDose: '1 Tab', defaultFreq: '1-0-0', defaultDay: '30 day', defaultTotal: '30', defaultNote: 'Morning after food' },
+  { id: 'd-7', name: 'Nitrofurantoin SR 100mg', genericName: 'Nitrofurantoin', brandName: 'Niftran 100mg', manufacturer: 'Sun Pharma', formulation: 'Tablet', stock: 0, reorderLevel: 15, unitPrice: 16, slotNo: 'BZX 107', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '7 day', defaultTotal: '14', defaultNote: 'With meals', alternatives: ['Fosfomycin 3g', 'Ofloxacin 200mg'] },
+  { id: 'd-8', name: 'Diacerein 50mg + Glucosamine', genericName: 'Diacerein + Glucosamine', brandName: 'Cartigen Forte', manufacturer: 'Torrent', formulation: 'Tablet', stock: 50, reorderLevel: 20, unitPrice: 22, slotNo: 'BZX 108', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '30 day', defaultTotal: '60', defaultNote: 'After food' },
+  { id: 'd-9', name: 'Emollient Moisturizer Lotion', genericName: 'Cetyl Alcohol + Liquid Paraffin', brandName: 'Moiz XL Lotion', manufacturer: 'Curatio', formulation: 'Lotion', stock: 30, reorderLevel: 10, unitPrice: 280, slotNo: 'BYX 109', defaultDose: '1', defaultFreq: '1-0-1', defaultDay: '30 day', defaultTotal: '1', defaultNote: 'Apply on damp skin' },
 ];
 
 export const INVESTIGATION_CATALOG: InvestigationCatalogItem[] = [
-  { id: 'inv-1', name: 'Complete Blood Count (CBC) with ESR', category: 'Hematology', price: 350, unit: 'g/dL', normalRange: '12.0 - 16.5 g/dL', instructions: 'Fasting preferred' },
-  { id: 'inv-2', name: 'HbA1c & Fasting Blood Sugar', category: 'Biochemistry', price: 450, unit: '%', normalRange: '< 5.7 %', instructions: '10 hrs fasting required' },
-  { id: 'inv-3', name: 'Lipid Profile Complete', category: 'Biochemistry', price: 650, unit: 'mg/dL', normalRange: '< 200 mg/dL', instructions: '12 hrs strict fasting' },
-  { id: 'inv-4', name: 'Skin Scraping for KOH Fungus Test', category: 'Microbiology', price: 300, normalRange: 'Negative for fungal hyphae', instructions: 'Clean lesion, no cream' },
-  { id: 'inv-5', name: 'Serum IgE Allergy Level', category: 'Pathology', price: 850, unit: 'IU/mL', normalRange: '< 100 IU/mL' },
-  { id: 'inv-6', name: 'X-Ray Both Knees (AP & Lateral)', category: 'Radiology', price: 600, instructions: 'Standing weight-bearing view' },
-  { id: 'inv-7', name: 'Urine Routine & Microscopic Culture', category: 'Pathology', price: 400, instructions: 'Mid-stream early morning sample' },
+  { id: 'inv-1', name: 'Complete Blood Count (CBC) with ESR', category: 'Hematology', price: 350, unit: 'g/dL', normalRange: '12.0 - 16.5 g/dL', specimenTube: 'EDTA (Purple Tube)', instructions: 'Fasting preferred' },
+  { id: 'inv-2', name: 'HbA1c & Fasting Blood Sugar', category: 'Biochemistry', price: 450, unit: '%', normalRange: '< 5.7 %', specimenTube: 'Fluoride (Grey Tube)', instructions: '10 hrs fasting required' },
+  { id: 'inv-3', name: 'Lipid Profile Complete', category: 'Biochemistry', price: 650, unit: 'mg/dL', normalRange: '< 200 mg/dL', specimenTube: 'Serum Gel (Yellow Tube)', instructions: '12 hrs strict fasting' },
+  { id: 'inv-4', name: 'Skin Scraping for KOH Fungus Test', category: 'Microbiology', price: 300, normalRange: 'Negative for fungal hyphae', specimenTube: 'Lesion Swab / Scraping', instructions: 'Clean lesion, no cream' },
+  { id: 'inv-5', name: 'Serum IgE Allergy Level', category: 'Pathology', price: 850, unit: 'IU/mL', normalRange: '< 100 IU/mL', specimenTube: 'Plain (Red Tube)' },
+  { id: 'inv-6', name: 'X-Ray Both Knees (AP & Lateral)', category: 'Radiology', price: 600, specimenTube: 'Radiology / Non-specimen', instructions: 'Standing weight-bearing view' },
+  { id: 'inv-7', name: 'Urine Routine & Microscopic Culture', category: 'Pathology', price: 400, specimenTube: 'Urine Sterile Container', instructions: 'Mid-stream early morning sample' },
+  { id: 'inv-8', name: 'ASO Titre (Anti-Streptolysin O Quantitative)', category: 'Biochemistry', price: 420, unit: 'IU/mL', normalRange: '< 200 IU/mL', specimenTube: 'Serum Gel (Yellow Tube)', instructions: 'Serum sample, fasting not required' },
+  { id: 'inv-9', name: 'Liver Function Test (LFT) Comprehensive', category: 'Biochemistry', price: 600, unit: 'U/L', normalRange: 'SGPT < 45, SGOT < 40', specimenTube: 'Serum Gel (Yellow Tube)', instructions: 'Overnight fasting' },
+  { id: 'inv-10', name: 'Renal Function Test (RFT / KFT)', category: 'Biochemistry', price: 550, unit: 'mg/dL', normalRange: 'Serum Creatinine 0.7 - 1.3', specimenTube: 'Serum Gel (Yellow Tube)', instructions: 'Adequate hydration' },
 ];
 
 export const PROCEDURE_CATALOG: ProcedureCatalogItem[] = [
@@ -947,6 +1183,7 @@ interface InventoryState {
   inventory: DrugInventoryItem[];
   getDrugByName: (name: string) => DrugInventoryItem | undefined;
   updateStock: (id: string, delta: number) => void;
+  addDrug: (drug: Omit<DrugInventoryItem, 'id'> & { id?: string }) => DrugInventoryItem;
 }
 
 export const useInventoryStore = create<InventoryState>()(
@@ -959,6 +1196,17 @@ export const useInventoryStore = create<InventoryState>()(
           inventory: s.inventory.map(i => i.id === id ? { ...i, stock: Math.max(0, i.stock + delta) } : i)
         }));
         notifyTabSync('doctor-inventory');
+      },
+      addDrug: (drug) => {
+        const newDrug: DrugInventoryItem = {
+          ...drug,
+          id: drug.id || `d-${Date.now()}`
+        };
+        set(s => ({
+          inventory: [newDrug, ...s.inventory.filter(i => i.id !== newDrug.id && i.name.toLowerCase() !== newDrug.name.toLowerCase())]
+        }));
+        notifyTabSync('doctor-inventory');
+        return newDrug;
       }
     }),
     {
@@ -970,7 +1218,7 @@ export const useInventoryStore = create<InventoryState>()(
 
 interface InvestigationCatalogState {
   catalog: InvestigationCatalogItem[];
-  addTest: (item: Omit<InvestigationCatalogItem, 'id'>) => void;
+  addTest: (item: InvestigationCatalogItem | Omit<InvestigationCatalogItem, 'id'>) => InvestigationCatalogItem;
   deleteTest: (id: string) => void;
 }
 
@@ -978,8 +1226,21 @@ export const useInvestigationCatalogStore = create<InvestigationCatalogState>()(
   persist(
     (set) => ({
       catalog: INVESTIGATION_CATALOG,
-      addTest: (item) => set(s => ({ catalog: [...s.catalog, { ...item, id: `inv-${Date.now()}` }] })),
-      deleteTest: (id) => set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }))
+      addTest: (item) => {
+        const newItem: InvestigationCatalogItem = {
+          ...item,
+          id: (item as any).id || `inv-${Date.now()}`
+        };
+        set(s => ({
+          catalog: [newItem, ...s.catalog.filter(c => c.id !== newItem.id && c.name.toLowerCase() !== newItem.name.toLowerCase())]
+        }));
+        notifyTabSync('doctor-investigation-catalog');
+        return newItem;
+      },
+      deleteTest: (id) => {
+        set(s => ({ catalog: s.catalog.filter(c => c.id !== id) }));
+        notifyTabSync('doctor-investigation-catalog');
+      }
     }),
     {
       name: 'doctor-investigation-catalog',
@@ -1092,12 +1353,21 @@ interface ConsultationState {
   updateComplaints: (complaints: Partial<ConsultationSession['complaints']>) => void;
   updateVitals: (vitals: Partial<ConsultationSession['vitals']>) => void;
   updateHistory: (history: Partial<ConsultationSession['history']>) => void;
+  updateNotes: (notes: Partial<{ nursingNotes?: string; patientFeedback?: string }>) => void;
   addInvestigation: (item: ConsultationSession['investigations'][0]) => void;
   removeInvestigation: (testId: string) => void;
-  addPrescription: (item: ConsultationSession['prescriptions'][0]) => void;
+  updateInvestigationNote: (testId: string, notes: string) => void;
+  addPrescription: (item: PrescriptionItem) => void;
   removePrescription: (id: string) => void;
-  addProcedure: (item: ConsultationSession['procedures'][0]) => void;
+  updatePrescription: (id: string, updates: Partial<PrescriptionItem>) => void;
+  togglePrescriptionVisibility: (id: string, field: keyof PrescriptionVisibility) => void;
+  addProcedurePrescription: (item: ProcedurePrescriptionItem) => void;
+  removeProcedurePrescription: (id: string) => void;
+  updateProcedurePrescription: (id: string, updates: Partial<ProcedurePrescriptionItem>) => void;
+  addProcedure: (item: ProcedureExecutionItem) => void;
   removeProcedure: (id: string) => void;
+  updateProcedure: (id: string, updates: Partial<ProcedureExecutionItem>) => void;
+  setProcedures: (procedures: ProcedureExecutionItem[]) => void;
   addImage: (item: ConsultationSession['images'][0]) => void;
   removeImage: (id: string) => void;
   updateDiagnosis: (diagnosis: Partial<ConsultationSession['diagnosis']>) => void;
@@ -1123,7 +1393,31 @@ export const useConsultationStore = create<ConsultationState>()(
       loadSession: (caseId: string) => {
         const found = get().sessions[caseId];
         if (found) {
-          set({ activeSession: found });
+          const cleanProcedurePrescriptions = (found.procedurePrescriptions || []).filter(
+            (item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx
+          );
+          const cleanPrescriptions = (found.prescriptions || []).filter(
+            (item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx && item.id !== 'rx-demo-2'
+          );
+          const currentProcs = found.procedures || [];
+          const isLegacyProcs = currentProcs.length <= 1 && (
+            currentProcs.length === 0 ||
+            currentProcs[0]?.sessionsCount?.includes('Session 1 of 6') ||
+            currentProcs[0]?.sessionsCount === '1/6' ||
+            currentProcs[0]?.procedureName?.includes('Diode Laser Hair Removal') ||
+            !currentProcs[0]?.bodyPart
+          );
+          const cleanProcedures = isLegacyProcs ? DEFAULT_TREATMENT_SESSIONS : currentProcs;
+          const cleaned = {
+            ...found,
+            procedurePrescriptions: cleanProcedurePrescriptions,
+            prescriptions: cleanPrescriptions,
+            procedures: cleanProcedures
+          };
+          set(s => ({
+            activeSession: cleaned,
+            sessions: { ...s.sessions, [caseId]: cleaned }
+          }));
           return true;
         }
         return false;
@@ -1140,8 +1434,32 @@ export const useConsultationStore = create<ConsultationState>()(
       initSession: (caseId, patient, doctor, initialData) => {
         const existing = get().sessions[caseId];
         if (existing) {
-          set({ activeSession: existing });
-          return existing;
+          const cleanProcedurePrescriptions = (existing.procedurePrescriptions || []).filter(
+            (item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx
+          );
+          const cleanPrescriptions = (existing.prescriptions || []).filter(
+            (item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx && item.id !== 'rx-demo-2'
+          );
+          const currentProcs = existing.procedures || [];
+          const isLegacyProcs = currentProcs.length <= 1 && (
+            currentProcs.length === 0 ||
+            currentProcs[0]?.sessionsCount?.includes('Session 1 of 6') ||
+            currentProcs[0]?.sessionsCount === '1/6' ||
+            currentProcs[0]?.procedureName?.includes('Diode Laser Hair Removal') ||
+            !currentProcs[0]?.bodyPart
+          );
+          const cleanProcedures = isLegacyProcs ? (initialData?.procedures?.length ? initialData.procedures : DEFAULT_TREATMENT_SESSIONS) : currentProcs;
+          const cleaned = {
+            ...existing,
+            procedurePrescriptions: cleanProcedurePrescriptions,
+            prescriptions: cleanPrescriptions,
+            procedures: cleanProcedures
+          };
+          set(s => ({
+            activeSession: cleaned,
+            sessions: { ...s.sessions, [caseId]: cleaned }
+          }));
+          return cleaned;
         }
 
         const newSession: ConsultationSession = {
@@ -1175,11 +1493,18 @@ export const useConsultationStore = create<ConsultationState>()(
             pastMedical: '',
             pastSurgical: '',
             allergies: '',
-            currentMedications: ''
+            currentMedications: '',
+            personalHistory: '',
+            obstetricHistory: ''
+          },
+          notes: initialData?.notes || {
+            nursingNotes: '',
+            patientFeedback: ''
           },
           investigations: initialData?.investigations || [],
           prescriptions: initialData?.prescriptions || [],
-          procedures: initialData?.procedures || [],
+          procedurePrescriptions: initialData?.procedurePrescriptions || [],
+          procedures: initialData?.procedures && initialData.procedures.length > 0 ? initialData.procedures : DEFAULT_TREATMENT_SESSIONS,
           images: initialData?.images || [],
           diagnosis: initialData?.diagnosis || {
             provisional: '',
@@ -1235,9 +1560,19 @@ export const useConsultationStore = create<ConsultationState>()(
         };
       }),
 
+      updateNotes: (notes) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = { ...s.activeSession, notes: { ...(s.activeSession.notes || {}), ...notes } };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
       addInvestigation: (item) => set(s => {
         if (!s.activeSession) return s;
-        const updated = { ...s.activeSession, investigations: [...s.activeSession.investigations, item] };
+        const currentInvs = s.activeSession.investigations || [];
+        const updated = { ...s.activeSession, investigations: [...currentInvs, item] };
         return {
           activeSession: updated,
           sessions: { ...s.sessions, [updated.caseId]: updated }
@@ -1246,7 +1581,21 @@ export const useConsultationStore = create<ConsultationState>()(
 
       removeInvestigation: (testId) => set(s => {
         if (!s.activeSession) return s;
-        const updated = { ...s.activeSession, investigations: s.activeSession.investigations.filter(i => i.testId !== testId) };
+        const currentInvs = s.activeSession.investigations || [];
+        const updated = { ...s.activeSession, investigations: currentInvs.filter(i => i.testId !== testId) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateInvestigationNote: (testId, notes) => set(s => {
+        if (!s.activeSession) return s;
+        const currentInvs = s.activeSession.investigations || [];
+        const updated = {
+          ...s.activeSession,
+          investigations: currentInvs.map(i => i.testId === testId ? { ...i, notes } : i)
+        };
         return {
           activeSession: updated,
           sessions: { ...s.sessions, [updated.caseId]: updated }
@@ -1255,7 +1604,9 @@ export const useConsultationStore = create<ConsultationState>()(
 
       addPrescription: (item) => set(s => {
         if (!s.activeSession) return s;
-        const updated = { ...s.activeSession, prescriptions: [...s.activeSession.prescriptions, item] };
+        const current = s.activeSession.prescriptions || [];
+        if (current.some(p => p.id === item.id)) return s;
+        const updated = { ...s.activeSession, prescriptions: [...current, item] };
         return {
           activeSession: updated,
           sessions: { ...s.sessions, [updated.caseId]: updated }
@@ -1265,6 +1616,78 @@ export const useConsultationStore = create<ConsultationState>()(
       removePrescription: (id) => set(s => {
         if (!s.activeSession) return s;
         const updated = { ...s.activeSession, prescriptions: s.activeSession.prescriptions.filter(p => p.id !== id) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updatePrescription: (id, updates) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = {
+          ...s.activeSession,
+          prescriptions: s.activeSession.prescriptions.map(p => p.id === id ? { ...p, ...updates } : p)
+        };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      togglePrescriptionVisibility: (id, field) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = {
+          ...s.activeSession,
+          prescriptions: s.activeSession.prescriptions.map(p => {
+            if (p.id !== id) return p;
+            const currentVis = p.visibility || {
+              generic: true, brandName: true, manufacturer: true, dosage: true,
+              frequency: true, durationDays: true, totalQty: true, instructions: true, slotNo: true, price: true
+            };
+            const nextVal = currentVis[field] === false ? true : false;
+            return {
+              ...p,
+              visibility: {
+                ...currentVis,
+                [field]: nextVal
+              }
+            };
+          })
+        };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      addProcedurePrescription: (item) => set(s => {
+        if (!s.activeSession) return s;
+        const current = s.activeSession.procedurePrescriptions || [];
+        if (current.some(p => p.id === item.id)) return s;
+        const updated = { ...s.activeSession, procedurePrescriptions: [...current, item] };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      removeProcedurePrescription: (id) => set(s => {
+        if (!s.activeSession) return s;
+        const current = s.activeSession.procedurePrescriptions || [];
+        const updated = { ...s.activeSession, procedurePrescriptions: current.filter(p => p.id !== id) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateProcedurePrescription: (id, updates) => set(s => {
+        if (!s.activeSession) return s;
+        const current = s.activeSession.procedurePrescriptions || [];
+        const updated = {
+          ...s.activeSession,
+          procedurePrescriptions: current.map(p => p.id === id ? { ...p, ...updates } : p)
+        };
         return {
           activeSession: updated,
           sessions: { ...s.sessions, [updated.caseId]: updated }
@@ -1282,7 +1705,33 @@ export const useConsultationStore = create<ConsultationState>()(
 
       removeProcedure: (id) => set(s => {
         if (!s.activeSession) return s;
-        const updated = { ...s.activeSession, procedures: s.activeSession.procedures.filter(p => p.id !== id) };
+        const updated = { ...s.activeSession, procedures: (s.activeSession.procedures || []).filter(p => p.id !== id) };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      updateProcedure: (id, updates) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = {
+          ...s.activeSession,
+          procedures: (s.activeSession.procedures || []).map(p =>
+            p.id === id ? { ...p, ...updates } : p
+          )
+        };
+        return {
+          activeSession: updated,
+          sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      setProcedures: (procedures) => set(s => {
+        if (!s.activeSession) return s;
+        const updated = {
+          ...s.activeSession,
+          procedures
+        };
         return {
           activeSession: updated,
           sessions: { ...s.sessions, [updated.caseId]: updated }
@@ -1757,7 +2206,7 @@ export interface LabTestMaster {
   id: string;
   name: string;
   category: 'Biochemistry' | 'Hematology' | 'Pathology' | 'Microbiology' | 'Radiology';
-  specimenTube: 'EDTA (Purple)' | 'Serum Gel (Yellow)' | 'Fluoride (Grey)' | 'Plain (Red)' | 'Urine Sterile Container';
+  specimenTube: 'EDTA (Purple)' | 'Serum Gel (Yellow)' | 'Fluoride (Grey)' | 'Plain (Red)' | 'Urine Sterile Container' | string;
   price: number;
   turnaroundHours: number;
   parameters: Array<{
@@ -2334,6 +2783,8 @@ if (typeof window !== 'undefined') {
       if (!key || key === 'doctor-clinical') (useClinicalStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-lab') (useLabStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-inventory') (useInventoryStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-investigation-catalog') (useInvestigationCatalogStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-procedure-catalog') (useProcedureCatalogStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-admin') (useAdminStore as any).persist?.rehydrate?.();
     } catch {}
   };
