@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Calendar, Clock, User, Plus, Search, CheckCircle2,
@@ -11,6 +11,11 @@ import {
 } from '@/store';
 
 export default function DoctorAppointmentsPage() {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const { appointments, addAppointment, updateAppointment } = useAppointmentStore();
   const { patients } = usePatientStore();
   const { queue, addToQueue } = useQueueStore();
@@ -147,6 +152,19 @@ export default function DoctorAppointmentsPage() {
 
     setSelectedAptForReschedule(null);
   };
+
+  if (!isMounted) {
+    return (
+      <div className="page-container" style={{ padding: '24px 0', minHeight: '80vh' }}>
+        <div className="card" style={{ padding: 40, textAlign: 'center', background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <Calendar size={28} style={{ color: '#036d92', opacity: 0.7 }} />
+            <div style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Loading doctor appointments & schedule...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">

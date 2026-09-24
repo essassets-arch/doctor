@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { usePatientStore, useUIStore, useQueueStore, useConsultationStore, Patient, Gender } from '@/store';
 
-export default function RegisterPage() {
+function RegisterPage() {
   const router = useRouter();
   const { nextMrd, addPatient } = usePatientStore();
   const { addNotification } = useUIStore();
@@ -30,10 +30,11 @@ export default function RegisterPage() {
   const [ageDays, setAgeDays] = useState<number>(0);
   const [gender, setGender] = useState<Gender>('M');
   const [language, setLanguage] = useState<'English' | 'Gujarati' | 'Hindi'>('Gujarati');
-  const [bloodGroup, setBloodGroup] = useState('B+');
-  const [city, setCity] = useState('Surat');
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
   const [email, setEmail] = useState('');
+  const [extra, setExtra] = useState({ alternateMobile: '', state: '', pincode: '', allergies: '', notes: '' });
   const [emergencyContact, setEmergencyContact] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
@@ -111,7 +112,9 @@ export default function RegisterPage() {
       return;
     }
 
+    try {
     const created = addPatient({
+      alternateMobile: extra.alternateMobile, state: extra.state, pincode: extra.pincode, allergies: extra.allergies, specialNotes: extra.notes ? [extra.notes] : [],
       firstName: firstName.trim(),
       middleName: middleName.trim() || undefined,
       lastName: lastName.trim(),
@@ -123,7 +126,7 @@ export default function RegisterPage() {
       gender,
       language,
       bloodGroup,
-      city: city.trim() || 'Surat',
+      city: city.trim(),
       address: address.trim() || undefined,
       email: email.trim() || undefined,
       emergencyContact: emergencyContact.trim() || undefined,
@@ -131,59 +134,7 @@ export default function RegisterPage() {
       isNew: true,
     });
 
-    if (afterAction === 'send_to_doctor') {
-      const q = useQueueStore.getState().queue;
-      const allDocs = useQueueStore.getState().doctors;
-      const tokenIndex = q.length + 1;
-      const tokenCode = `C${String(tokenIndex).padStart(3, '0')}`;
-      const caseNumber = `${tokenCode}-001-${new Date().toLocaleDateString('en-GB').replace(/\//g, '')}`;
-      const checkInTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const targetDoctor = allDocs.find(d => d.id === selectedDoctorId) || allDocs[0];
-
-      useQueueStore.getState().addToQueue({
-        caseNumber,
-        tokenDisplay: tokenCode,
-        patientId: created.id,
-        patientName: `${created.firstName} ${created.lastName}`,
-        doctorId: targetDoctor.id,
-        doctorName: targetDoctor.name,
-        visitType: 'Consultation',
-        appointmentTime: checkInTime,
-        checkInTime,
-        age: created.age,
-        gender: created.gender,
-        city: created.city || 'Surat',
-        billingStatus: 'PAID',
-        status: 'WAITING',
-        stage: 'DOCTOR',
-        vitalsRecorded: false,
-        complaintsRecorded: false,
-        isNew: true
-      });
-
-      useConsultationStore.getState().initSession(
-        caseNumber,
-        created,
-        {
-          id: targetDoctor.id,
-          name: targetDoctor.name,
-          specialization: targetDoctor.specialization || 'General Physician',
-          initials: targetDoctor.name.split(' ').map(w => w[0]).join('').slice(0, 2),
-          avatarColor: '#036d92',
-          room: targetDoctor.room || 'Cabin 1'
-        }
-      );
-
-      setLastCreatedToken(tokenCode);
-      addNotification({
-        type: 'success',
-        message: `Registered & queued: ${created.firstName} ${created.lastName} (Token ${tokenCode}) sent directly to ${targetDoctor.name}!`
-      });
-
-      setSuccessToast(`Patient registered! Token ${tokenCode} assigned and sent directly to ${targetDoctor.name} (${targetDoctor.room || 'Cabin 1'}). Ready in Doctor panel!`);
-      handleClear();
-      return;
-    }
+    if (afterAction === 'send_to_doctor') { router.push('/reception/checkin?patientId=' + created.id); return; }
 
     addNotification({
       type: 'success',
@@ -198,8 +149,9 @@ export default function RegisterPage() {
     } else if (afterAction === 'checkin') {
       router.push(`/reception/checkin?patientId=${created.id}`);
     } else {
-      handleClear();
+      router.push('/reception/patients/' + created.id);
     }
+    } catch (error) { alert(error instanceof Error ? error.message : 'Registration failed.'); }
   };
 
   const handleSaveMR = () => {
@@ -226,6 +178,7 @@ export default function RegisterPage() {
 
   return (
     <div className="page-container">
+      <section className="card" style={{ padding: 20, marginBottom: 16 }}><h2>Additional registration details</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>{Object.entries(extra).map(([key, value]) => <label key={key}>{key}<input className="form-input" value={value} onChange={e => setExtra({ ...extra, [key]: e.target.value })} /></label>)}</div></section>
       {/* Header */}
       <div className="page-header">
         <div>
@@ -824,3 +777,5 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+export { default } from '@/components/PatientRegistration';

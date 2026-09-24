@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import PersistenceGate from "@/components/PersistenceGate";
 
 export const metadata: Metadata = {
   title: "MedFlow OPD — Receptionist Panel",
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body><PersistenceGate>{children}</PersistenceGate></body>
     </html>
   );
 }

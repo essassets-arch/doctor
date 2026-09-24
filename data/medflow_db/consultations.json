@@ -1,0 +1,418 @@
+[
+  {
+    "caseId": "C005-001-23092026",
+    "patientId": "pat-1789991704297",
+    "patient": {
+      "id": "pat-1789991704297",
+      "mrdNumber": "MRD-2026-0001",
+      "firstName": "Harsh",
+      "middleName": "",
+      "lastName": "Prajapati",
+      "mobile": "9876543210",
+      "dob": "1998-05-15",
+      "age": 28,
+      "ageMonths": 0,
+      "ageDays": 0,
+      "gender": "M",
+      "language": "Gujarati",
+      "bloodGroup": "B+",
+      "city": "Ahmedabad",
+      "state": "Gujarat",
+      "address": "Satellite Road, Ahmedabad",
+      "allergies": "None recorded",
+      "createdAt": "2026-01-10",
+      "isNew": false
+    },
+    "doctorId": "doc-1",
+    "doctorName": "Dr. Raj Valaki",
+    "complaints": {
+      "primaryComplaint": "Facial hirsutism & active erythematous acne lesions on cheek",
+      "duration": "4 Months",
+      "severity": "Moderate",
+      "onset": "Gradual",
+      "aggravatingFactors": "Sun exposure, stress",
+      "relievingFactors": "Cold compress",
+      "notes": "Patient seeks permanent diode laser reduction and active acne treatment."
+    },
+    "vitals": {
+      "temperature": 98.4,
+      "pulse": 76,
+      "bp": "120/80",
+      "spo2": 99,
+      "weight": 72,
+      "height": 175,
+      "bmi": 23.5
+    },
+    "investigations": [
+      {
+        "testId": "inv-001",
+        "testName": "Serum Total Testosterone & DHEA-S",
+        "specimen": "Blood (Gold SST)",
+        "fasting": true,
+        "instructions": "Morning 8 AM sample",
+        "status": "Ordered",
+        "price": 800
+      }
+    ],
+    "prescriptions": [
+      {
+        "id": "rx-001",
+        "brandName": "CLINDAMYCIN GEL 1%",
+        "genericName": "Clindamycin Phosphate 1% w/w",
+        "dosage": "Pea-sized amount",
+        "frequency": "0 - 0 - 1 (Night)",
+        "duration": "1 Month",
+        "quantity": 1,
+        "foodTiming": "N/A (Topical application)",
+        "instructions": "Apply strictly on active lesions at bedtime after cleansing.",
+        "unitPrice": 160,
+        "totalPrice": 160
+      },
+      {
+        "id": "rx-002",
+        "brandName": "DOXYCYCLINE 100MG",
+        "genericName": "Doxycycline Hyclate 100mg",
+        "dosage": "1 Capsule",
+        "frequency": "1 - 0 - 0 (Morning)",
+        "duration": "15 Days",
+        "quantity": 15,
+        "foodTiming": "After Food with full glass of water",
+        "instructions": "Do not lie down immediately after ingestion.",
+        "unitPrice": 6,
+        "totalPrice": 90
+      }
+    ],
+    "treatmentProtocol": {
+      "id": "proto-c005-001",
+      "caseId": "C005-001-23092026",
+      "patientId": "pat-1789991704297",
+      "procedureName": "HAIR REMOVAL - DIODE",
+      "startDate": "2026-03-25",
+      "totalSessions": 4,
+      "intervalDays": 20,
+      "actualPrice": 10000,
+      "discountPercent": 10,
+      "afterDiscountPrice": 9000,
+      "total": 9000,
+      "ratePerSession": 2250,
+      "therapist": "Dr Valaki",
+      "bodyPart": "FACE",
+      "note": "Fitzpatrick Type II. Pre-cooling applied. SPF 50+ advised.",
+      "updatedAt": "2026-03-25T10:00:00.000Z"
+    },
+    "procedures": [
+      {
+        "id": "proc-c005-01",
+        "caseId": "C005-001-23092026",
+        "patientId": "pat-1789991704297",
+        "procedureName": "HAIR REMOVAL - DIODE",
+        "sessionNumber": 1,
+        "sessionsCount": "1/4",
+        "scheduledDate": "25/03/2026",
+        "performanceDate": "25/03/2026",
+        "status": "Done",
+        "intervalDays": 20,
+        "bodyPart": "FACE",
+        "therapist": "Dr Valaki",
+        "rate": 2250,
+        "price": 2250,
+        "paymentStatus": "Done",
+        "completedInClinic": true,
+        "skinType": "Type II",
+        "power": "24J/cm²",
+        "pulseDuration": "30ms",
+        "spotSize": "12x20mm",
+        "shotsFired": "850",
+        "remark": "Session 1 executed smoothly."
+      }
+    ],
+    "diagnosis": {
+      "provisional": "Facial Hypertrichosis & Inflammatory Papulopustular Acne",
+      "differential": "PCOS related acneiform eruption",
+      "finalDiagnosis": "Facial Hypertrichosis with Grade II Acne Vulgaris",
+      "icd10Code": "L68.0 / L70.0",
+      "status": "Confirmed",
+      "treatmentPlan": "Diode laser hair reduction (4 sessions, 20d interval) + topical Clindamycin & oral Doxycycline",
+      "patientAdvice": "Strict broad spectrum sun protection (SPF 50+ every 3h). Avoid threading/waxing.",
+      "followUpDays": "20",
+      "followUpDate": "14/04/2026",
+      "followUpPurpose": "Session 2 Laser Procedure & Acne response review"
+    },
+    "isFinalized": false
+  },
+  {
+    "caseId": "C005-002-20260924",
+    "patientId": "pat-1790245847717-102",
+    "patient": {
+      "id": "pat-1790245847717-102",
+      "mrdNumber": "MRD-2026-0004",
+      "firstName": "Meera",
+      "middleName": "Kirit",
+      "lastName": "Shah",
+      "mobile": "9825942284",
+      "dob": "1995-06-15",
+      "age": 31,
+      "ageMonths": 0,
+      "ageDays": 0,
+      "gender": "F",
+      "language": "Gujarati",
+      "bloodGroup": "B+",
+      "city": "Ahmedabad",
+      "state": "Gujarat",
+      "address": "402 Sunrise Heights, Bodakdev",
+      "allergies": "Sulfa Drugs",
+      "createdAt": "2026-09-24",
+      "isNew": true
+    },
+    "doctorId": "dr-valaki",
+    "doctorName": "Dr. Raj Valaki",
+    "status": "WAITING",
+    "vitals": {},
+    "complaints": {},
+    "investigations": [],
+    "prescriptions": [],
+    "procedures": [],
+    "diagnosis": {},
+    "images": [],
+    "isFinalized": false,
+    "previouslyPaid": 500
+  },
+  {
+    "caseId": "C005-003-20260924",
+    "patientId": "pat-1790245865296-198",
+    "patient": {
+      "id": "pat-1790245865296-198",
+      "mrdNumber": "MRD-2026-0005",
+      "firstName": "Meera",
+      "middleName": "Kirit",
+      "lastName": "Shah",
+      "mobile": "9825262451",
+      "dob": "1995-06-15",
+      "age": 31,
+      "ageMonths": 0,
+      "ageDays": 0,
+      "gender": "F",
+      "language": "Gujarati",
+      "bloodGroup": "B+",
+      "city": "Ahmedabad",
+      "state": "Gujarat",
+      "address": "402 Sunrise Heights, Bodakdev",
+      "allergies": "Sulfa Drugs",
+      "createdAt": "2026-09-24",
+      "isNew": true
+    },
+    "doctorId": "dr-valaki",
+    "doctorName": "Dr. Raj Valaki",
+    "status": "IN_SESSION",
+    "vitals": {
+      "bloodPressure": "118/76",
+      "pulse": 74,
+      "temperature": 98.4,
+      "spo2": 99,
+      "height": 165,
+      "weight": 58,
+      "bmi": 21.3
+    },
+    "complaints": {
+      "presentComplaint": "Acne breakouts and post-inflammatory hyperpigmentation on bilateral cheeks for 3 months.",
+      "historyOfPresentIllness": "Gradual onset, exacerbates with stress and cosmetic creams. No systemic complaints.",
+      "duration": "3 Months",
+      "severity": "Moderate"
+    },
+    "investigations": [
+      {
+        "id": "lab-1-1790245867111",
+        "testName": "Complete Blood Count (CBC) with Differential",
+        "specimen": "EDTA Whole Blood (Purple)",
+        "price": 450
+      },
+      {
+        "id": "lab-2-1790245867111",
+        "testName": "Serum Ferritin & Vitamin D3 Level",
+        "specimen": "Serum Gel (Yellow)",
+        "price": 400
+      }
+    ],
+    "prescriptions": [
+      {
+        "id": "rx-1-1790245867111",
+        "name": "Clindamycin Phosphate Gel 1% (20g)",
+        "brandName": "Clindac A Gel",
+        "dosage": "Topical Application",
+        "frequency": "Once Daily at Bedtime",
+        "duration": "30 Days",
+        "quantity": 2,
+        "unitPrice": 150,
+        "totalPrice": 300
+      },
+      {
+        "id": "rx-2-1790245867111",
+        "name": "Doxycycline Capsules 100mg",
+        "brandName": "Doxicip-100",
+        "dosage": "1 Capsule",
+        "frequency": "BD (Twice Daily After Food)",
+        "duration": "15 Days",
+        "quantity": 1,
+        "unitPrice": 150,
+        "totalPrice": 150
+      }
+    ],
+    "procedures": [
+      {
+        "id": "proc-diode-1790245867111",
+        "procedureName": "HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH)",
+        "bodyPart": "FACE",
+        "sessionNumber": 1,
+        "totalSessions": 1,
+        "rate": 2250,
+        "price": 2250,
+        "machineSettings": {
+          "fluence": 18,
+          "pulseWidth": 30,
+          "frequency": 10,
+          "spotSize": 12,
+          "cooling": -5
+        }
+      }
+    ],
+    "diagnosis": {
+      "finalDiagnosis": "Acne Vulgaris with Facial Post-Inflammatory Hyperpigmentation",
+      "provisional": "Acne Grade II",
+      "icdCode": "L70.0",
+      "followUpDate": "2026-10-15",
+      "clinicalNotes": "Initiating Diode Laser Sessions + Topical Anti-Acne Protocol."
+    },
+    "images": [],
+    "isFinalized": true,
+    "previouslyPaid": 500,
+    "lockedByRole": "DOCTOR",
+    "consents": [
+      {
+        "procedureId": "HAIR REMOVAL - DIODE",
+        "title": "Laser Hair Reduction Informed Consent (સંમતિ પત્રક)",
+        "signedBy": "Meera Shah",
+        "isSigned": true,
+        "signedAt": "2026-09-24T10:31:07.111Z"
+      }
+    ]
+  },
+  {
+    "caseId": "C005-004-20260924",
+    "patientId": "pat-1790245926356-559",
+    "patient": {
+      "id": "pat-1790245926356-559",
+      "mrdNumber": "MRD-2026-0006",
+      "firstName": "Meera",
+      "middleName": "Kirit",
+      "lastName": "Shah",
+      "mobile": "9825925341",
+      "dob": "1995-06-15",
+      "age": 31,
+      "ageMonths": 0,
+      "ageDays": 0,
+      "gender": "F",
+      "language": "Gujarati",
+      "bloodGroup": "B+",
+      "city": "Ahmedabad",
+      "state": "Gujarat",
+      "address": "402 Sunrise Heights, Bodakdev",
+      "allergies": "Sulfa Drugs",
+      "createdAt": "2026-09-24",
+      "isNew": true
+    },
+    "doctorId": "dr-valaki",
+    "doctorName": "Dr. Raj Valaki",
+    "status": "IN_SESSION",
+    "vitals": {
+      "bloodPressure": "118/76",
+      "pulse": 74,
+      "temperature": 98.4,
+      "spo2": 99,
+      "height": 165,
+      "weight": 58,
+      "bmi": 21.3
+    },
+    "complaints": {
+      "presentComplaint": "Acne breakouts and post-inflammatory hyperpigmentation on bilateral cheeks for 3 months.",
+      "historyOfPresentIllness": "Gradual onset, exacerbates with stress and cosmetic creams. No systemic complaints.",
+      "duration": "3 Months",
+      "severity": "Moderate"
+    },
+    "investigations": [
+      {
+        "id": "lab-1-1790245926510",
+        "testName": "Complete Blood Count (CBC) with Differential",
+        "specimen": "EDTA Whole Blood (Purple)",
+        "price": 450
+      },
+      {
+        "id": "lab-2-1790245926510",
+        "testName": "Serum Ferritin & Vitamin D3 Level",
+        "specimen": "Serum Gel (Yellow)",
+        "price": 400
+      }
+    ],
+    "prescriptions": [
+      {
+        "id": "rx-1-1790245926510",
+        "name": "Clindamycin Phosphate Gel 1% (20g)",
+        "brandName": "Clindac A Gel",
+        "dosage": "Topical Application",
+        "frequency": "Once Daily at Bedtime",
+        "duration": "30 Days",
+        "quantity": 2,
+        "unitPrice": 150,
+        "totalPrice": 300
+      },
+      {
+        "id": "rx-2-1790245926510",
+        "name": "Doxycycline Capsules 100mg",
+        "brandName": "Doxicip-100",
+        "dosage": "1 Capsule",
+        "frequency": "BD (Twice Daily After Food)",
+        "duration": "15 Days",
+        "quantity": 1,
+        "unitPrice": 150,
+        "totalPrice": 150
+      }
+    ],
+    "procedures": [
+      {
+        "id": "proc-diode-1790245926510",
+        "procedureName": "HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH)",
+        "bodyPart": "FACE",
+        "sessionNumber": 1,
+        "totalSessions": 1,
+        "rate": 2250,
+        "price": 2250,
+        "machineSettings": {
+          "fluence": 18,
+          "pulseWidth": 30,
+          "frequency": 10,
+          "spotSize": 12,
+          "cooling": -5
+        }
+      }
+    ],
+    "diagnosis": {
+      "finalDiagnosis": "Acne Vulgaris with Facial Post-Inflammatory Hyperpigmentation",
+      "provisional": "Acne Grade II",
+      "icdCode": "L70.0",
+      "followUpDate": "2026-10-15",
+      "clinicalNotes": "Initiating Diode Laser Sessions + Topical Anti-Acne Protocol."
+    },
+    "images": [],
+    "isFinalized": true,
+    "previouslyPaid": 500,
+    "lockedByRole": "DOCTOR",
+    "consents": [
+      {
+        "procedureId": "HAIR REMOVAL - DIODE",
+        "title": "Laser Hair Reduction Informed Consent (સંમતિ પત્રક)",
+        "signedBy": "Meera Shah",
+        "isSigned": true,
+        "signedAt": "2026-09-24T10:32:06.510Z"
+      }
+    ]
+  }
+]

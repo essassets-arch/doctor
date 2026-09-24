@@ -24,61 +24,13 @@ function AppointmentsContent() {
   const { addNotification } = useUIStore();
 
   const handleMarkArrived = (apt: Appointment) => {
-    updateAppointment(apt.id, { status: 'ARRIVED' });
-
-    const existingQueueEntry = queue.find(q => q.patientId === apt.patientId && q.status !== 'COMPLETED' && q.status !== 'CANCELLED');
-    if (!existingQueueEntry) {
-      const tokenIndex = queue.length + 1;
-      const tokenCode = `C${String(tokenIndex).padStart(3, '0')}`;
-      const caseNumber = `${tokenCode}-001-${new Date().toLocaleDateString('en-GB').replace(/\//g, '')}`;
-      const checkInTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const pat = getPatientById(apt.patientId);
-
-      addToQueue({
-        caseNumber,
-        tokenDisplay: tokenCode,
-        patientId: apt.patientId,
-        patientName: apt.patientName,
-        doctorId: apt.doctorId,
-        doctorName: apt.doctorName,
-        visitType: apt.visitType,
-        appointmentTime: apt.time,
-        checkInTime,
-        age: pat?.age || 30,
-        gender: pat?.gender || 'M',
-        city: pat?.city || 'Surat',
-        billingStatus: 'PAID',
-        status: 'WAITING',
-        stage: 'DOCTOR',
-        vitalsRecorded: false,
-        complaintsRecorded: false,
-        isNew: false
-      });
-
-      useConsultationStore.getState().initSession(
-        caseNumber,
-        pat || { id: apt.patientId, firstName: apt.patientName, lastName: '', mobile: '', age: 30, gender: 'M', mrdNumber: 'MRD-NEW' } as any,
-        {
-          id: apt.doctorId,
-          name: apt.doctorName,
-          specialization: 'General Physician',
-          initials: apt.doctorName.split(' ').map(w => w[0]).join('').slice(0, 2),
-          avatarColor: '#036d92',
-          room: 'Cabin 1'
-        }
-      );
-
-      addNotification({
-        type: 'success',
-        message: `${apt.patientName} marked Arrived & queued for ${apt.doctorName} (Token ${tokenCode})!`
-      });
-    } else {
-      addNotification({
-        type: 'success',
-        message: `${apt.patientName} marked Arrived. Patient is already in active queue (${existingQueueEntry.tokenDisplay}).`
-      });
-    }
+    router.push('/reception/checkin?patientId=' + apt.patientId + '&appointmentId=' + apt.id);
   };
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'book' | 'upcoming'>('book');
 
@@ -86,7 +38,7 @@ function AppointmentsContent() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(doctors[0]?.id || 'doc-1');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-09-19');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [selectedSlot, setSelectedSlot] = useState<string>('10:00');
   const [visitType, setVisitType] = useState<VisitType>('Consultation');
   const [remarks, setRemarks] = useState('');
@@ -189,6 +141,28 @@ function AppointmentsContent() {
     return list;
   }, [appointments, filterDate]);
 
+  if (!isMounted) {
+    return (
+      <div className="page-container" style={{ padding: '24px 0', minHeight: '80vh' }}>
+        <div className="page-header" style={{ marginBottom: 24 }}>
+          <div>
+            <div style={{ height: 28, width: 340, background: '#E2E8F0', borderRadius: 6, marginBottom: 8 }} />
+            <div style={{ height: 16, width: 500, background: '#F1F5F9', borderRadius: 4 }} />
+          </div>
+        </div>
+        <div className="card" style={{ padding: 48, textAlign: 'center', background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Calendar size={26} style={{ color: 'var(--primary)', opacity: 0.7 }} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>Loading appointment schedule...</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Synchronizing time slot calendar and live patient queue...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-container">
       {/* Header */}
@@ -208,6 +182,7 @@ function AppointmentsContent() {
           <button
             onClick={() => setActiveTab('upcoming')}
             className={`btn ${activeTab === 'upcoming' ? 'btn-primary' : 'btn-ghost'}`}
+            suppressHydrationWarning
           >
             <Calendar size={16} /> Upcoming Schedule ({appointments.length})
           </button>
@@ -395,7 +370,7 @@ function AppointmentsContent() {
                 {/* Interactive Time Slot Grid */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <label className="form-label required" style={{ margin: 0 }}>
+                    <label className="form-label required" style={{ margin: 0 }} suppressHydrationWarning>
                       Available Time Slots ({availableSlots.length} available)
                     </label>
                     {!doctorLeaveOnDate && (

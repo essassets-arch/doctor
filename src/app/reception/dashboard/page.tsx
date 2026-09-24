@@ -28,6 +28,7 @@ export default function DashboardPage() {
 
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('2026-09-19');
+  const [purposeFilter, setPurposeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [activeChips, setActiveChips] = useState<string[]>(['WAITING', 'IN_SESSION', 'CALLING', 'BILLING_PENDING', 'COMPLETED']);
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; entry?: QueueEntry }>({ open: false });
@@ -53,8 +54,9 @@ export default function DashboardPage() {
   const filtered = queue.filter(q => {
     const matchSearch = !search || [q.patientName, q.caseNumber, q.tokenDisplay].some(v => v.toLowerCase().includes(search.toLowerCase()));
     const matchStatus = statusFilter === 'All' || q.status === statusFilter.toUpperCase().replace(' ', '_');
+    const matchPurpose = purposeFilter === 'All' || q.visitType === purposeFilter;
     const matchChip = activeChips.includes(q.status);
-    return matchSearch && matchStatus && matchChip;
+    return matchSearch && matchStatus && matchPurpose && matchChip;
   });
 
   const stats = {
@@ -69,8 +71,10 @@ export default function DashboardPage() {
   };
 
   const resetFilters = () => {
-    setSearch(''); setStatusFilter('All');
-    setActiveChips(['WAITING', 'IN_SESSION', 'CALLING', 'COMPLETED']);
+    setSearch('');
+    setPurposeFilter('All');
+    setStatusFilter('All');
+    setActiveChips(['WAITING', 'IN_SESSION', 'CALLING', 'BILLING_PENDING', 'COMPLETED']);
     setDateFilter('2026-09-19');
   };
 
@@ -194,10 +198,18 @@ export default function DashboardPage() {
               style={{ paddingLeft: 34 }}
             />
           </div>
-          <input type="date" className="form-input" style={{ width: 150 }} value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+          <input type="date" className="form-input" style={{ width: 140 }} value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+          <select className="form-select" style={{ width: 150 }} value={purposeFilter} onChange={e => setPurposeFilter(e.target.value)}>
+            <option value="All">Purpose: All</option>
+            <option value="Consultation">Consultation</option>
+            <option value="Follow-Up">Follow-Up</option>
+            <option value="Procedure">Procedure</option>
+            <option value="Emergency">Emergency</option>
+            <option value="MR Visit">MR Visit</option>
+          </select>
           <select className="form-select" style={{ width: 140 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option>All</option>
-            {Object.values(STATUS_LABELS).map(l => <option key={l}>{l}</option>)}
+            <option value="All">Status: All</option>
+            {Object.values(STATUS_LABELS).map(l => <option key={l} value={l}>{l}</option>)}
           </select>
           <button className="btn btn-ghost btn-sm" onClick={resetFilters} title="Reset filters">
             <RotateCcw size={14} /> Reset

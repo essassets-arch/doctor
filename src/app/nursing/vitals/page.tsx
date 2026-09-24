@@ -1,4 +1,5 @@
 'use client';
+import { atomic } from '@/store/persistence';
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -47,37 +48,33 @@ function VitalsContent() {
 
   const activeQueueEntry = queueEntryFromCase
     || queue.find(q => q.patientId === selectedPatientId && q.status !== 'COMPLETED')
-    || queue[0];
-  const selectedPatient = patients.find(p => p.id === (activeQueueEntry?.patientId || selectedPatientId)) || patients[0];
+;
+  const selectedPatient = patients.find(p => p.id === (activeQueueEntry?.patientId || selectedPatientId));
 
   // Vitals State
-  const [height, setHeight] = useState<string>('168');
-  const [weight, setWeight] = useState<string>('68');
-  const [temperature, setTemperature] = useState<string>('98.6');
-  const [pulse, setPulse] = useState<string>('76');
-  const [bpSystolic, setBpSystolic] = useState<string>('120');
-  const [bpDiastolic, setBpDiastolic] = useState<string>('80');
-  const [spo2, setSpo2] = useState<string>('99');
+  const [height, setHeight] = useState<string>('');
+  const [weight, setWeight] = useState<string>('');
+  const [temperature, setTemperature] = useState<string>('');
+  const [pulse, setPulse] = useState<string>('');
+  const [bpSystolic, setBpSystolic] = useState<string>('');
+  const [bpDiastolic, setBpDiastolic] = useState<string>('');
+  const [spo2, setSpo2] = useState<string>('');
 
   // Complaints & Clinical History State
-  const [presentComplaint, setPresentComplaint] = useState('Recurrent erythematous itchy skin rash with scaling on bilateral arms');
+  const [presentComplaint, setPresentComplaint] = useState('');
   const [durationValue, setDurationValue] = useState('3');
   const [durationUnit, setDurationUnit] = useState<'Days' | 'Months' | 'Years'>('Days');
   const [severity, setSeverity] = useState<'Mild' | 'Moderate' | 'Severe'>('Moderate');
   const [onset, setOnset] = useState<'Sudden' | 'Gradual' | 'Insidious'>('Gradual');
-  const [aggravatingFactors, setAggravatingFactors] = useState('Sweating, sun exposure, dry cold weather');
-  const [relievingFactors, setRelievingFactors] = useState('Cool water bath, topical moisturizer');
-  const [pastMedical, setPastMedical] = useState('Known hypertensive for 3 years on regular medication.');
-  const [pastSurgical, setPastSurgical] = useState('Appendectomy in 2018 (uneventful).');
-  const [currentMedications, setCurrentMedications] = useState('Telmisartan 40mg (OD morning)');
-  const [allergies, setAllergies] = useState('Sulfa drugs (mild urticaria), Penicillin');
-  const [nursingNotes, setNursingNotes] = useState('Patient oriented and responsive. Mild anxiety regarding rash progression.');
+  const [aggravatingFactors, setAggravatingFactors] = useState('');
+  const [relievingFactors, setRelievingFactors] = useState('');
+  const [pastMedical, setPastMedical] = useState('');
+  const [pastSurgical, setPastSurgical] = useState('');
+  const [currentMedications, setCurrentMedications] = useState('');
+  const [allergies, setAllergies] = useState('');
+  const [nursingNotes, setNursingNotes] = useState('');
 
-  // Mock historical vitals
-  const [historicalVitals, setHistoricalVitals] = useState([
-    { id: 'v-1', date: '10/09/2026 10:15 AM', height: 168, weight: 69, bmi: 24.4, temp: 98.4, pulse: 78, bp: '122/82', spo2: 99, by: 'Nurse Bhavna' },
-    { id: 'v-2', date: '15/08/2026 11:30 AM', height: 168, weight: 70, bmi: 24.8, temp: 98.6, pulse: 80, bp: '128/84', spo2: 98, by: 'Nurse Riya' },
-  ]);
+  const [historicalVitals, setHistoricalVitals] = useState<Array<{id: string; date: string; height: number; weight: number; bmi: number; temp: number; pulse: number; bp: string; spo2: number; by: string}>>([]);
 
   // Prefill vitals and complaints if already recorded at check-in
   useEffect(() => {
@@ -146,6 +143,10 @@ function VitalsContent() {
   const isChartLocked = activeQueueEntry?.status === 'IN_SESSION';
 
   const handleSaveVitals = () => {
+    if (!activeQueueEntry || !selectedPatient || isChartLocked) { alert('Select an unlocked encounter.'); return; }
+    if ([temperature, pulse, bpSystolic, bpDiastolic, spo2].some(v => !Number.isFinite(Number(v)) || Number(v) <= 0) || Number(spo2) > 100) { alert('Enter valid positive vital values; SpO2 cannot exceed 100.'); return; }
+    try { atomic(() => {
+
     if (!temperature || !pulse || !bpSystolic || !bpDiastolic || !spo2) {
       alert('Please fill all mandatory physiological vitals (Temperature, Pulse, Blood Pressure, SpO2).');
       return;
@@ -188,6 +189,12 @@ function VitalsContent() {
         }
       });
 
+      const existingSession = useConsultationStore.getState().sessions[activeQueueEntry.caseNumber];
+      if (existingSession) useConsultationStore.getState().saveSession({ ...existingSession,
+        vitals: { temperature, pulse, bpSystolic, bpDiastolic, spo2, weight, height },
+        complaints: { ...existingSession.complaints, presentComplaint, durationDays: durationUnit === 'Days' ? Number(durationValue) : 0, durationMonths: durationUnit === 'Months' ? Number(durationValue) : 0, durationYears: durationUnit === 'Years' ? Number(durationValue) : 0, severity: severity.toUpperCase() as 'MILD' | 'MODERATE' | 'SEVERE', onset, aggravatingFactors, relievingFactors },
+        history: { ...existingSession.history, pastMedical, pastSurgical, currentMedications, allergies }, notes: { ...existingSession.notes, nursingNotes }
+      });
       // Synchronize consultation store session
       useConsultationStore.getState().initSession(
         activeQueueEntry.caseNumber,
@@ -235,7 +242,8 @@ function VitalsContent() {
       message: `Vitals & Complaints recorded for ${selectedPatient.firstName} ${selectedPatient.lastName}. Case transferred to DOCTOR queue!`
     });
 
-    router.push('/nursing/dashboard');
+    }); router.push('/nursing/dashboard');
+    } catch (error) { alert(error instanceof Error ? error.message : 'Unable to save triage.'); }
   };
 
   if (!selectedPatient) {

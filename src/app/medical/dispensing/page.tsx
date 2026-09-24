@@ -1,4 +1,5 @@
 'use client';
+import EncounterDispensing from '@/components/EncounterDispensing';
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {

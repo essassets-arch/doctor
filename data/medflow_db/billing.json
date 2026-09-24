@@ -1,0 +1,198 @@
+[
+  {
+    "id": "bill-1790243977514",
+    "caseId": "C005-001-23092026",
+    "invoiceNumber": "INV-2026-0001",
+    "patientId": "pat-1789991704297",
+    "patientName": "Harsh Prajapati",
+    "mrdNumber": "MRD-2026-0001",
+    "doctorName": "Dr. Raj Valaki",
+    "date": "2026-09-24",
+    "subtotal": 3800,
+    "netAmount": 3800,
+    "collectedAmount": 3800,
+    "balance": 0,
+    "previouslyPaid": 0,
+    "status": "PAID",
+    "items": [
+      {
+        "id": "item-cons-1790243977513",
+        "name": "Doctor OPD Consultation & Clinical Examination",
+        "unitPrice": 500,
+        "quantity": 1,
+        "discount": 0,
+        "total": 500
+      },
+      {
+        "id": "item-proc-0-1790243977513",
+        "name": "Procedure: HAIR REMOVAL - DIODE (Session 1) - FACE",
+        "unitPrice": 2250,
+        "quantity": 1,
+        "discount": 0,
+        "total": 2250
+      },
+      {
+        "id": "item-rx-0-1790243977514",
+        "name": "Pharmacy: CLINDAMYCIN GEL 1% (Pea-sized amount)",
+        "unitPrice": 160,
+        "quantity": 1,
+        "discount": 0,
+        "total": 160
+      },
+      {
+        "id": "item-rx-1-1790243977514",
+        "name": "Pharmacy: DOXYCYCLINE 100MG (1 Capsule)",
+        "unitPrice": 6,
+        "quantity": 15,
+        "discount": 0,
+        "total": 90
+      },
+      {
+        "id": "item-lab-0-1790243977514",
+        "name": "Laboratory Test: Serum Total Testosterone & DHEA-S (Blood (Gold SST))",
+        "unitPrice": 800,
+        "quantity": 1,
+        "discount": 0,
+        "total": 800
+      }
+    ],
+    "isFinalized": true,
+    "finalizedAt": "2026-09-24T09:59:44.861Z"
+  },
+  {
+    "id": "bill-1790245867183",
+    "caseId": "C005-003-20260924",
+    "invoiceNumber": "INV-2026-0002",
+    "patientId": "pat-1790245865296-198",
+    "patientName": "Meera Shah",
+    "mrdNumber": "MRD-2026-0005",
+    "doctorName": "Dr. Raj Valaki",
+    "date": "2026-09-24",
+    "subtotal": 4050,
+    "netAmount": 4050,
+    "collectedAmount": 4050,
+    "balance": 0,
+    "previouslyPaid": 500,
+    "status": "PAID",
+    "items": [
+      {
+        "id": "item-cons-1790245867182",
+        "name": "Doctor OPD Consultation & Clinical Examination",
+        "unitPrice": 500,
+        "quantity": 1,
+        "discount": 0,
+        "total": 500
+      },
+      {
+        "id": "item-proc-0-1790245867182",
+        "name": "Procedure: HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH) (Session 1) - FACE",
+        "unitPrice": 2250,
+        "quantity": 1,
+        "discount": 0,
+        "total": 2250
+      },
+      {
+        "id": "item-rx-0-1790245867182",
+        "name": "Pharmacy: Clindac A Gel (Topical Application)",
+        "unitPrice": 150,
+        "quantity": 2,
+        "discount": 0,
+        "total": 300
+      },
+      {
+        "id": "item-rx-1-1790245867182",
+        "name": "Pharmacy: Doxicip-100 (1 Capsule)",
+        "unitPrice": 150,
+        "quantity": 1,
+        "discount": 0,
+        "total": 150
+      },
+      {
+        "id": "item-lab-0-1790245867182",
+        "name": "Laboratory Test: Complete Blood Count (CBC) with Differential (EDTA Whole Blood (Purple))",
+        "unitPrice": 450,
+        "quantity": 1,
+        "discount": 0,
+        "total": 450
+      },
+      {
+        "id": "item-lab-1-1790245867182",
+        "name": "Laboratory Test: Serum Ferritin & Vitamin D3 Level (Serum Gel (Yellow))",
+        "unitPrice": 400,
+        "quantity": 1,
+        "discount": 0,
+        "total": 400
+      }
+    ],
+    "isFinalized": true,
+    "finalizedAt": "2026-09-24T10:31:07.213Z"
+  },
+  {
+    "id": "bill-1790245926558",
+    "caseId": "C005-004-20260924",
+    "invoiceNumber": "INV-2026-0003",
+    "patientId": "pat-1790245926356-559",
+    "patientName": "Meera Shah",
+    "mrdNumber": "MRD-2026-0006",
+    "doctorName": "Dr. Raj Valaki",
+    "date": "2026-09-24",
+    "subtotal": 4050,
+    "netAmount": 4050,
+    "collectedAmount": 4050,
+    "balance": 0,
+    "previouslyPaid": 500,
+    "status": "PAID",
+    "items": [
+      {
+        "id": "item-cons-1790245926556",
+        "name": "Doctor OPD Consultation & Clinical Examination",
+        "unitPrice": 500,
+        "quantity": 1,
+        "discount": 0,
+        "total": 500
+      },
+      {
+        "id": "item-proc-0-1790245926556",
+        "name": "Procedure: HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH) (Session 1) - FACE",
+        "unitPrice": 2250,
+        "quantity": 1,
+        "discount": 0,
+        "total": 2250
+      },
+      {
+        "id": "item-rx-0-1790245926556",
+        "name": "Pharmacy: Clindac A Gel (Topical Application)",
+        "unitPrice": 150,
+        "quantity": 2,
+        "discount": 0,
+        "total": 300
+      },
+      {
+        "id": "item-rx-1-1790245926556",
+        "name": "Pharmacy: Doxicip-100 (1 Capsule)",
+        "unitPrice": 150,
+        "quantity": 1,
+        "discount": 0,
+        "total": 150
+      },
+      {
+        "id": "item-lab-0-1790245926556",
+        "name": "Laboratory Test: Complete Blood Count (CBC) with Differential (EDTA Whole Blood (Purple))",
+        "unitPrice": 450,
+        "quantity": 1,
+        "discount": 0,
+        "total": 450
+      },
+      {
+        "id": "item-lab-1-1790245926556",
+        "name": "Laboratory Test: Serum Ferritin & Vitamin D3 Level (Serum Gel (Yellow))",
+        "unitPrice": 400,
+        "quantity": 1,
+        "discount": 0,
+        "total": 400
+      }
+    ],
+    "isFinalized": true,
+    "finalizedAt": "2026-09-24T10:32:06.582Z"
+  }
+]

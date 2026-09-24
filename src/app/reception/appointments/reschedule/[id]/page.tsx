@@ -52,11 +52,29 @@ export default function RescheduleAppointmentPage({ params }: { params: Promise<
     return getAvailableSlots(selectedDoctorId, newDate);
   }, [selectedDoctorId, newDate, getAvailableSlots]);
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   useEffect(() => {
     if (availableSlots.length > 0 && !availableSlots.includes(newSlot)) {
       setNewSlot(availableSlots[0]);
     }
   }, [availableSlots, newSlot]);
+
+  if (!isMounted) {
+    return (
+      <div className="page-container" style={{ padding: '24px 0', minHeight: '80vh' }}>
+        <div className="card" style={{ padding: 40, textAlign: 'center', background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <Calendar size={28} style={{ color: 'var(--primary)', opacity: 0.7 }} />
+            <div style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Loading appointment details...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!appointment) {
     return (

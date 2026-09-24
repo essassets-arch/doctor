@@ -1,5 +1,5 @@
 'use client';
-import { useState, use } from 'react';
+import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import {
   Activity, ArrowLeft, Calendar, Stethoscope, Heart,
@@ -15,11 +15,25 @@ export default function PatientClinicalHistoryPage({ params }: { params: Promise
   const { patients } = usePatientStore();
   const { records } = useClinicalStore();
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [selectedDoctor, setSelectedDoctor] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
   const patient = patients.find(p => p.id === patientId);
   const patientRecords = records.filter(r => r.patientId === patientId);
+
+  if (!isMounted) {
+    return (
+      <div className="page-container" style={{ padding: '24px 0', minHeight: '80vh' }}>
+        <div style={{ height: 18, width: 140, background: '#E2E8F0', borderRadius: 4, marginBottom: 16 }} />
+        <div className="card" style={{ height: 120, background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0', marginBottom: 20 }} />
+      </div>
+    );
+  }
 
   if (!patient) {
     return (

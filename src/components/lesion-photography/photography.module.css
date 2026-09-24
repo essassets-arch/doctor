@@ -1,0 +1,55 @@
+.workspace { color: #193247; width: 100%; min-width: 0; font-size: 14px; }
+.workspace h2 { font-size: clamp(17px, 2vw, 22px); margin: 0 0 10px; }
+.workspace h3 { font-size: 16px; margin: 0; overflow-wrap: anywhere; }
+.workspace p { color: #526779; line-height: 1.6; }
+.workspace button, .workspace select, .workspace input, .workspace textarea, .modal button, .modal select, .modal textarea { font: inherit; }
+.workspace button, .modal button { min-height: 44px; border: 1px solid #b7cbd8; border-radius: 7px; background: white; color: #16465e; padding: 8px 12px; cursor: pointer; overflow-wrap: anywhere; }
+.workspace button:hover, .modal button:hover { background: #eff8fc; }
+.workspace button[aria-pressed=true] { background: #e0f2fe; border-color: #036d92; }
+.workspace button:disabled { opacity: .55; cursor: not-allowed; }
+.workspace :focus-visible, .modal :focus-visible { outline: 3px solid #0284c7; outline-offset: 3px; }
+.workspace label { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.workspace select, .workspace input, .workspace textarea { max-width: 100%; min-height: 44px; padding: 8px; border: 1px solid #b7cbd8; border-radius: 6px; background: white; color: #193247; }
+.row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
+.workspace header { justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.badge { display: inline-block; border-radius: 20px; background: #e0f2fe; color: #075985; padding: 5px 10px; font-size: 12px; }
+.controls { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 18px; }
+.drop { width: 100%; display: grid; gap: 10px; text-align: center; border: 2px dashed #92b8ca !important; padding: 25px 12px !important; }
+.dragActive { background: #dff4fd !important; border-color: #0077a4 !important; }
+.panel { display: grid; gap: 14px; min-width: 0; background: white; border: 1px solid #d4e1e8; border-radius: 10px; padding: clamp(10px, 2vw, 20px); }
+.empty { padding: 35px 15px; text-align: center; background: #f0f5f8; border-radius: 8px; color: #526779; }
+.viewport { overflow: auto; max-height: 650px; border: 1px solid #c6d8e2; border-radius: 8px; background: #142b38; }
+.imagePlane { position: relative; width: 100%; line-height: 0; }
+.imagePlane > img { display: block; width: 100%; height: auto; user-select: none; }
+.workspace .marker, .markerDot { position: absolute; transform: translate(-50%, -50%); width: 30px; height: 30px; min-height: 30px; padding: 0; border: 2px solid white; border-radius: 50%; color: white; font-weight: 800; box-shadow: 0 1px 5px #0009; display: grid; place-items: center; line-height: 1; z-index: 2; touch-action: none; }
+.workspace .marker::after { content: ''; position: absolute; inset: -7px; border-radius: 50%; }
+.workspace .marker.selected { outline: 3px solid #facc15; outline-offset: 2px; }
+.markerDot { width: 22px; height: 22px; font-size: 11px; pointer-events: none; }
+.editor { display: grid; gap: 12px; border: 1px solid #c7dfe9; background: #f5fafc; border-radius: 8px; padding: 12px; }
+.editor label { display: grid; }
+.editor textarea { width: 100%; min-height: 80px; resize: vertical; }
+.assignments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.assignment { border: 2px dashed #bad0dd; border-radius: 8px; padding: 14px; display: grid; gap: 7px; overflow-wrap: anywhere; }
+.comparison { position: relative; height: clamp(180px, 40vw, 450px); overflow: hidden; background: #142b38; border-radius: 8px; container-type: size; }
+.comparisonLayer { position: absolute; inset: 0; display: grid; place-items: center; }
+.comparisonLayer .imagePlane { width: min(100%, calc(100cqh * var(--image-ratio))); height: auto; }
+.comparisonLayer .imagePlane > img { width: 100%; height: auto; }
+.workspace .divider { position: absolute; top: 0; bottom: 0; width: 44px; padding: 0; transform: translateX(-50%); border: 0; border-radius: 0; color: white; background: linear-gradient(90deg, transparent 20px, white 20px, white 23px, transparent 23px); text-shadow: 0 1px 4px black; font-size: 26px; touch-action: none; z-index: 4; }
+.beforeLabel, .afterLabel { position: absolute; top: 10px; padding: 5px 8px; border-radius: 4px; background: #102a43cc; color: white; font-size: 11px; z-index: 3; }
+.beforeLabel { right: 10px; }.afterLabel { left: 10px; }
+.range { display: grid !important; }.range input { width: 100%; padding: 0; accent-color: #036d92; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; }
+.presets button { font-size: 12px; flex: 1 1 75px; }
+.library { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 14px; }
+.thumbnail { display: grid; align-content: start; gap: 8px; padding: 10px; border: 2px solid #d8e5ec; border-radius: 8px; overflow-wrap: anywhere; min-width: 0; }
+.activeThumbnail { border-color: #0284c7; }
+.workspace .thumbnailImage { padding: 0; overflow: hidden; }
+.thumbnailImage img { width: 100%; height: 140px; object-fit: contain; background: #e9f0f4; display: block; }
+.thumbnail .row button { font-size: 12px; flex: 1 1 auto; }
+.thumbnail progress { width: 100%; }.thumbnail label { display: grid; }
+.error { background: #fff2ed; color: #8c3020; border: 1px solid #f6bca9; border-radius: 7px; padding: 12px; margin: 10px 0; overflow-wrap: anywhere; display: grid; gap: 8px; }
+.error ul { margin: 0; padding-left: 20px; }
+.modal { width: min(800px, calc(100vw - 24px)); max-height: 90dvh; overflow: auto; border: 1px solid #aac2d0; border-radius: 12px; padding: 18px; color: #193247; }
+.modal::backdrop { background: #0b1e32b3; }.modal .row { justify-content: space-between; margin-bottom: 15px; }
+.video { width: 100%; max-height: 65dvh; background: #142b38; }
+@media (max-width: 420px) { .assignments { grid-template-columns: 1fr; } .workspace select { width: 100%; } .workspace label { width: 100%; } }
