@@ -136,7 +136,7 @@ export const notifyTabSync = (storeKey: string) => {
 export type Gender = 'M' | 'F' | 'Other';
 export type QueueStatus = 'WAITING' | 'CALLING' | 'IN_SESSION' | 'ON_HOLD' | 'BILLING_PENDING' | 'COMPLETED' | 'CANCELLED' | 'MISSED';
 export type BillingStatus = 'PAID' | 'PARTIAL' | 'PENDING' | 'FOC';
-export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'BANK_TRANSFER';
+export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'BANK_TRANSFER' | 'INSURANCE';
 export type VisitType = 'Consultation' | 'Follow-Up' | 'Procedure' | 'Emergency' | 'MR Visit';
 export type AppointmentStatus = 'SCHEDULED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED' | 'MISSED' | 'RESCHEDULED';
 
@@ -215,6 +215,7 @@ export interface Patient {
   maritalStatus?: string;
   occupation?: string;
   allergies?: string;
+  category?: string;
   tags?: string[];
   specialNotes?: string[];
   createdAt: string;
@@ -229,6 +230,20 @@ export interface Doctor {
   initials: string;
   avatarColor: string;
   room: string;
+  email?: string;
+  phone?: string;
+  qualification?: string;
+  registrationNumber?: string;
+  consultationFee: number;
+  followUpFee?: number;
+  emergencyFee?: number;
+  teleconsultationFee?: number;
+  followUpValidityDays?: number;
+  slotDurationMins?: number;
+  schedule?: string;
+  status: 'ACTIVE' | 'ON_LEAVE' | 'INACTIVE';
+  totalConsultations?: number;
+  rating?: number;
 }
 
 export interface QueueEntry {
@@ -350,22 +365,152 @@ export interface ClinicalRecord {
 // Clinical Master Catalogs (Preserved for Clinical Operations)
 // ============================================================
 
-const DOCTORS: Doctor[] = [
-  { id: 'doc-1', name: 'Dr. Raj Valaki', specialization: 'Dermatology', initials: 'RV', avatarColor: 'linear-gradient(135deg,#6366F1,#818CF8)', room: 'Room 1' },
-  { id: 'doc-2', name: 'Dr. Anita Soni', specialization: 'General Medicine', initials: 'AS', avatarColor: 'linear-gradient(135deg,#10B981,#34D399)', room: 'Room 2' },
-  { id: 'doc-3', name: 'Dr. Priya Mehta', specialization: 'Gynecology', initials: 'PM', avatarColor: 'linear-gradient(135deg,#F59E0B,#FCD34D)', room: 'Room 3' },
-  { id: 'doc-4', name: 'Dr. Suresh Kumar', specialization: 'Orthopedics', initials: 'SK', avatarColor: 'linear-gradient(135deg,#EF4444,#FB7185)', room: 'Room 4' },
+export const DOCTORS: Doctor[] = [
+  {
+    id: 'doc-1',
+    name: 'Dr. Raj Valaki',
+    specialization: 'Dermatology & Cosmetology',
+    initials: 'RV',
+    avatarColor: 'linear-gradient(135deg,#6366F1,#818CF8)',
+    room: 'Cabin 1 (Room 101)',
+    email: 'raj.valaki@medflow.health',
+    phone: '+91 98251 00001',
+    qualification: 'MBBS, MD (Dermatology), DNB',
+    registrationNumber: 'G-48291',
+    consultationFee: 500,
+    followUpFee: 300,
+    emergencyFee: 800,
+    teleconsultationFee: 450,
+    followUpValidityDays: 7,
+    slotDurationMins: 15,
+    schedule: 'Mon–Sat: 09:00 AM – 01:00 PM & 04:00 PM – 08:00 PM',
+    status: 'ACTIVE',
+    totalConsultations: 1240,
+    rating: 4.9
+  },
+  {
+    id: 'doc-2',
+    name: 'Dr. Anita Soni',
+    specialization: 'Internal & General Medicine',
+    initials: 'AS',
+    avatarColor: 'linear-gradient(135deg,#10B981,#34D399)',
+    room: 'Cabin 2 (Room 102)',
+    email: 'anita.soni@medflow.health',
+    phone: '+91 98251 00002',
+    qualification: 'MBBS, MD (General Medicine)',
+    registrationNumber: 'G-39102',
+    consultationFee: 650,
+    followUpFee: 400,
+    emergencyFee: 900,
+    teleconsultationFee: 500,
+    followUpValidityDays: 7,
+    slotDurationMins: 15,
+    schedule: 'Mon–Sat: 10:00 AM – 02:00 PM & 05:00 PM – 08:00 PM',
+    status: 'ACTIVE',
+    totalConsultations: 980,
+    rating: 4.8
+  },
+  {
+    id: 'doc-3',
+    name: 'Dr. Priya Mehta',
+    specialization: 'Obstetrics & Gynecology',
+    initials: 'PM',
+    avatarColor: 'linear-gradient(135deg,#F59E0B,#FCD34D)',
+    room: 'Cabin 3 (Room 103)',
+    email: 'priya.mehta@medflow.health',
+    phone: '+91 98251 00003',
+    qualification: 'MBBS, MS (OBGYN), DGO',
+    registrationNumber: 'G-44189',
+    consultationFee: 600,
+    followUpFee: 350,
+    emergencyFee: 1000,
+    teleconsultationFee: 500,
+    followUpValidityDays: 10,
+    slotDurationMins: 15,
+    schedule: 'Mon–Sat: 10:00 AM – 01:00 PM',
+    status: 'ACTIVE',
+    totalConsultations: 850,
+    rating: 4.9
+  },
+  {
+    id: 'doc-4',
+    name: 'Dr. Suresh Kumar',
+    specialization: 'Orthopedics & Joint Care',
+    initials: 'SK',
+    avatarColor: 'linear-gradient(135deg,#EF4444,#FB7185)',
+    room: 'Cabin 4 (Room 104)',
+    email: 'suresh.kumar@medflow.health',
+    phone: '+91 98251 00004',
+    qualification: 'MBBS, MS (Ortho), Fellowship Arthroscopy',
+    registrationNumber: 'G-51042',
+    consultationFee: 700,
+    followUpFee: 400,
+    emergencyFee: 1200,
+    teleconsultationFee: 600,
+    followUpValidityDays: 7,
+    slotDurationMins: 20,
+    schedule: 'Mon, Wed, Fri: 09:00 AM – 02:00 PM',
+    status: 'ACTIVE',
+    totalConsultations: 1120,
+    rating: 4.7
+  },
+  {
+    id: 'doc-5',
+    name: 'Dr. Kalp Patel',
+    specialization: 'Cardiology & Critical Care',
+    initials: 'KP',
+    avatarColor: 'linear-gradient(135deg,#4338CA,#6366F1)',
+    room: 'Apex Director Suite (Room 100)',
+    email: 'kalp.patel@medflow.health',
+    phone: '+91 98251 00005',
+    qualification: 'MBBS, MD (Med), FCCP (USA)',
+    registrationNumber: 'G-29001',
+    consultationFee: 1000,
+    followUpFee: 600,
+    emergencyFee: 1500,
+    teleconsultationFee: 850,
+    followUpValidityDays: 14,
+    slotDurationMins: 20,
+    schedule: 'Tue, Thu, Sat: 09:00 AM – 01:00 PM',
+    status: 'ACTIVE',
+    totalConsultations: 2150,
+    rating: 5.0
+  },
+  {
+    id: 'doc-6',
+    name: 'Dr. Sarah Jenkins',
+    specialization: 'Aesthetic Dermatology & Laser',
+    initials: 'SJ',
+    avatarColor: 'linear-gradient(135deg,#EC4899,#F472B6)',
+    room: 'Laser Suite (Room 105)',
+    email: 'sarah.jenkins@medflow.health',
+    phone: '+91 98251 00006',
+    qualification: 'MD (Aesthetic Derm), Dip. Cosmetology (UK)',
+    registrationNumber: 'G-56199',
+    consultationFee: 800,
+    followUpFee: 500,
+    emergencyFee: 1200,
+    teleconsultationFee: 700,
+    followUpValidityDays: 7,
+    slotDurationMins: 20,
+    schedule: 'Mon–Fri: 11:00 AM – 04:00 PM',
+    status: 'ON_LEAVE',
+    totalConsultations: 640,
+    rating: 4.8
+  }
 ];
 
 const PATIENTS: Patient[] = [
-  { id: 'pat-1', mrdNumber: 'MRD-2026-0001', firstName: 'Mahesh', middleName: 'K.', lastName: 'Kumar', mobile: '9825100001', age: 45, ageMonths: 0, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1981-04-13', createdAt: '2024-01-15', lastVisit: '2026-09-10', tags: ['VIP'] },
-  { id: 'pat-2', mrdNumber: 'MRD-2026-0002', firstName: 'Anita', lastName: 'Sharma', mobile: '9825100002', age: 32, ageMonths: 3, ageDays: 5, gender: 'F', language: 'Hindi', bloodGroup: 'A+', city: 'Vadodara', dob: '1994-06-10', createdAt: '2024-03-22', lastVisit: '2026-09-15' },
-  { id: 'pat-3', mrdNumber: 'MRD-2026-0003', firstName: 'Rekha', lastName: 'Patel', mobile: '9825100003', age: 28, ageMonths: 0, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O+', city: 'Surat', dob: '1998-03-20', createdAt: '2025-01-05', lastVisit: '2026-08-28', tags: ['Diabetic'] },
-  { id: 'pat-4', mrdNumber: 'MRD-2026-0004', firstName: 'Amit', lastName: 'Shah', mobile: '9825100004', age: 55, ageMonths: 2, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'AB+', city: 'Navsari', dob: '1971-07-05', createdAt: '2023-11-10', lastVisit: '2026-09-01' },
-  { id: 'pat-5', mrdNumber: 'MRD-2026-0005', firstName: 'Sneha', lastName: 'Joshi', mobile: '9825100005', age: 24, ageMonths: 8, ageDays: 12, gender: 'F', language: 'Hindi', bloodGroup: 'B-', city: 'Surat', dob: '2001-11-25', createdAt: '2026-02-14', lastVisit: '2026-09-18', isNew: true },
-  { id: 'pat-6', mrdNumber: 'MRD-2026-0006', firstName: 'Rahul', lastName: 'Sharma', mobile: '9825100006', age: 38, ageMonths: 0, ageDays: 0, gender: 'M', language: 'English', bloodGroup: 'A-', city: 'Bharuch', dob: '1988-02-12', createdAt: '2025-05-20', lastVisit: '2026-07-30' },
-  { id: 'pat-7', mrdNumber: 'MRD-2026-0007', firstName: 'Priya', lastName: 'Desai', mobile: '9825100007', age: 41, ageMonths: 4, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O-', city: 'Surat', dob: '1985-05-14', createdAt: '2024-08-30', lastVisit: '2026-09-12' },
-  { id: 'pat-8', mrdNumber: 'MRD-2026-0008', firstName: 'Deepak', lastName: 'Trivedi', mobile: '9825100008', age: 62, ageMonths: 1, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1964-08-10', createdAt: '2023-06-01', lastVisit: '2026-09-05', tags: ['VIP', 'Diabetic'] },
+  { id: 'pat-1', mrdNumber: 'MRD-2026-0001', firstName: 'Mahesh', middleName: 'K.', lastName: 'Kumar', mobile: '9825100001', age: 45, ageMonths: 0, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1981-04-13', createdAt: '2024-01-15', lastVisit: '2026-09-10', tags: ['VIP'], category: 'VIP', allergies: 'Penicillin', address: '12, Shanti Nagar, Adajan, Surat', email: 'mahesh.k@gmail.com', emergencyContact: 'Suman Kumar (Wife) - 9825100011' },
+  { id: 'pat-2', mrdNumber: 'MRD-2026-0002', firstName: 'Anita', lastName: 'Sharma', mobile: '9825100002', age: 32, ageMonths: 3, ageDays: 5, gender: 'F', language: 'Hindi', bloodGroup: 'A+', city: 'Vadodara', dob: '1994-06-10', createdAt: '2024-03-22', lastVisit: '2026-09-15', category: 'Regular', address: '401, Nilkanth Residency, Alkapuri, Vadodara', email: 'anita.sharma@yahoo.com' },
+  { id: 'pat-3', mrdNumber: 'MRD-2026-0003', firstName: 'Rekha', lastName: 'Patel', mobile: '9825100003', age: 28, ageMonths: 0, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O+', city: 'Surat', dob: '1998-03-20', createdAt: '2025-01-05', lastVisit: '2026-08-28', tags: ['Diabetic'], category: 'Diabetic Care', address: 'Flat 302, Green Avenue, Vesu, Surat', email: 'rekha.patel@gmail.com' },
+  { id: 'pat-4', mrdNumber: 'MRD-2026-0004', firstName: 'Amit', lastName: 'Shah', mobile: '9825100004', age: 55, ageMonths: 2, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'AB+', city: 'Navsari', dob: '1971-07-05', createdAt: '2023-11-10', lastVisit: '2026-09-01', tags: ['Hypertensive'], category: 'VIP', allergies: 'Sulfonamides', address: 'B-14, Somnath Society, Lunsikui, Navsari', email: 'amit.shah71@gmail.com', emergencyContact: 'Bhavna Shah (Wife) - 9825199994' },
+  { id: 'pat-5', mrdNumber: 'MRD-2026-0005', firstName: 'Sneha', lastName: 'Joshi', mobile: '9825100005', age: 24, ageMonths: 8, ageDays: 12, gender: 'F', language: 'Hindi', bloodGroup: 'B-', city: 'Surat', dob: '2001-11-25', createdAt: '2026-02-14', lastVisit: '2026-09-18', isNew: true, category: 'Student Scheme', address: 'Room 205, Girls Hostel, SVNIT Campus, Surat' },
+  { id: 'pat-6', mrdNumber: 'MRD-2026-0006', firstName: 'Rahul', lastName: 'Sharma', mobile: '9825100006', age: 38, ageMonths: 0, ageDays: 0, gender: 'M', language: 'English', bloodGroup: 'A-', city: 'Bharuch', dob: '1988-02-12', createdAt: '2025-05-20', lastVisit: '2026-07-30', category: 'Regular', address: '78, Narmada Colony, Zadeshwar Road, Bharuch' },
+  { id: 'pat-7', mrdNumber: 'MRD-2026-0007', firstName: 'Priya', lastName: 'Desai', mobile: '9825100007', age: 41, ageMonths: 4, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O-', city: 'Surat', dob: '1985-05-14', createdAt: '2024-08-30', lastVisit: '2026-09-12', category: 'Regular', address: '503, Shivalik Apartment, Citylight, Surat' },
+  { id: 'pat-8', mrdNumber: 'MRD-2026-0008', firstName: 'Deepak', lastName: 'Trivedi', mobile: '9825100008', age: 62, ageMonths: 1, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1964-08-10', createdAt: '2023-06-01', lastVisit: '2026-09-05', tags: ['VIP', 'Diabetic'], category: 'Senior Citizen', address: 'A-12, Ambika Nagar, Palanpur Patia, Surat', emergencyContact: 'Jignesh Trivedi (Son) - 9825188888' },
+  { id: 'pat-9', mrdNumber: 'MRD-2026-0009', firstName: 'Kavita', lastName: 'Joshi', mobile: '9825100012', age: 34, ageMonths: 0, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'A+', city: 'Surat', dob: '1992-07-18', createdAt: '2025-10-12', lastVisit: '2026-09-01', tags: ['Psoriasis'], category: 'Chronic Care', address: '202, Royal Residency, Piplod, Surat' },
+  { id: 'pat-1789991704297', mrdNumber: 'MRD-2026-0019', firstName: 'Rajesh', lastName: 'Patel', mobile: '8594897487', age: 32, ageMonths: 0, ageDays: 0, gender: 'M', language: 'English', bloodGroup: 'B+', city: 'Surat', dob: '1994-09-05', createdAt: '2026-09-05', lastVisit: '2026-09-24', tags: ['VIP'], category: 'VIP', address: '402, Shivalik Heights, Adajan, Surat', email: 'essassets@gmail.com', emergencyContact: 'Kavita Patel (Wife) - 9825100099' },
 ];
 const QUEUE_ENTRIES: QueueEntry[] = [
   { id: 'q-1', caseNumber: 'C001-001-190926', tokenDisplay: 'C001', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '09:30 AM', checkInTime: '09:25 AM', age: 38, gender: 'M', city: 'Bharuch', billingStatus: 'PAID', status: 'COMPLETED', vitalsRecorded: true, complaintsRecorded: true },
@@ -384,14 +529,14 @@ const BILLS: BillRecord[] = [
   { id: 'bill-2', invoiceNumber: 'INV-2026-0088', patientId: 'pat-7', patientName: 'Priya Desai', mrdNumber: 'MRD-2026-0007', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 800, collectedAmount: 500, balance: 300, status: 'PARTIAL', paymentMode: 'UPI', items: [{ id: 'i2', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i3', name: 'PRP Treatment Session', unitPrice: 300, quantity: 1, discount: 0, total: 300 }] },
   { id: 'bill-3', invoiceNumber: 'INV-2026-0089', patientId: 'pat-4', patientName: 'Amit Shah', mrdNumber: 'MRD-2026-0004', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', netAmount: 2500, collectedAmount: 1500, balance: 1000, status: 'PARTIAL', paymentMode: 'CARD', items: [{ id: 'i4', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i5', name: 'Laser Procedure', unitPrice: 2000, quantity: 1, discount: 0, total: 2000 }] },
   { id: 'bill-4', invoiceNumber: 'INV-2026-0090', patientId: 'pat-1', patientName: 'Mahesh Kumar', mrdNumber: 'MRD-2026-0001', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'UPI', items: [{ id: 'i6', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
+  { id: 'bill-5', invoiceNumber: 'INV-2026-0091', patientId: 'pat-5', patientName: 'Sneha Joshi', mrdNumber: 'MRD-2026-0005', doctorName: 'Dr. Anita Soni', date: '2026-09-20', netAmount: 1200, collectedAmount: 0, balance: 1200, status: 'PENDING', paymentMode: 'UPI', items: [{ id: 'i7', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i8', name: 'Chemical Peel & Exfoliation Sitting', unitPrice: 700, quantity: 1, discount: 0, total: 700 }] },
+  { id: 'bill-6', invoiceNumber: 'INV-2026-0092', patientId: 'pat-3', patientName: 'Rekha Patel', mrdNumber: 'MRD-2026-0003', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', netAmount: 500, collectedAmount: 0, balance: 0, status: 'FOC', paymentMode: 'CASH', items: [{ id: 'i9', name: 'Doctor Charity / Waiver Consultation', unitPrice: 500, quantity: 1, discount: 500, total: 0 }] },
+  { id: 'bill-7', invoiceNumber: 'INV-2026-0093', patientId: 'pat-8', patientName: 'Deepak Trivedi', mrdNumber: 'MRD-2026-0008', doctorName: 'Dr. Suresh Kumar', date: '2026-09-21', netAmount: 4500, collectedAmount: 4500, balance: 0, status: 'PAID', paymentMode: 'BANK_TRANSFER', items: [{ id: 'i10', name: 'Intra-Articular Knee Joint Injection', unitPrice: 3500, quantity: 1, discount: 0, total: 3500 }, { id: 'i11', name: 'Hyaluronic Joint Viscosupplement', unitPrice: 1000, quantity: 1, discount: 0, total: 1000 }] },
+  { id: 'bill-8', invoiceNumber: 'INV-2026-0094', patientId: 'pat-1789991704297', patientName: 'Rajesh Patel', mrdNumber: 'MRD-2026-0019', doctorName: 'Dr. Raj Valaki', date: '2026-09-22', netAmount: 9000, collectedAmount: 9000, balance: 0, status: 'PAID', paymentMode: 'INSURANCE', items: [{ id: 'i12', name: 'Diode Laser Treatment Protocol 4-Sessions Package', unitPrice: 10000, quantity: 1, discount: 1000, total: 9000 }] },
+  { id: 'bill-9', invoiceNumber: 'INV-2026-0095', patientId: 'pat-2', patientName: 'Anita Sharma', mrdNumber: 'MRD-2026-0002', doctorName: 'Dr. Anita Soni', date: '2026-09-23', netAmount: 650, collectedAmount: 0, balance: 650, status: 'PENDING', paymentMode: 'CARD', items: [{ id: 'i13', name: 'Follow-Up Review Consultation', unitPrice: 400, quantity: 1, discount: 0, total: 400 }, { id: 'i14', name: 'Complete Blood Count (CBC) with ESR', unitPrice: 250, quantity: 1, discount: 0, total: 250 }] },
 ];
 
-const NOTIFICATIONS: Notification[] = [
-  { id: 'n-1', type: 'danger', message: 'NOW CALLING: Amit Shah (Token C006) — Room 3', timestamp: '10:58 AM', read: false },
-  { id: 'n-2', type: 'success', message: 'Mahesh Kumar is now IN SESSION with Dr. Raj Valaki', timestamp: '10:45 AM', read: false },
-  { id: 'n-3', type: 'info', message: 'New appointment booked: Sneha Joshi — 11:00 AM Dr. Anita Soni', timestamp: '10:30 AM', read: true },
-  { id: 'n-4', type: 'warning', message: 'Lab report pending for Rekha Patel', timestamp: '09:45 AM', read: true },
-];
+const NOTIFICATIONS: Notification[] = [];
 
 // ============================================================
 // Patient Store
@@ -772,9 +917,103 @@ export const useAppointmentStore = create<AppointmentState>()(
 // Doctor Store
 // ============================================================
 
-export const useDoctorStore = create<{ doctors: Doctor[] }>((set) => ({
-  doctors: DOCTORS,
-}));
+export interface DoctorState {
+  doctors: Doctor[];
+  addDoctor: (doctor: Omit<Doctor, 'id' | 'initials' | 'avatarColor'>) => Doctor;
+  updateDoctor: (id: string, updates: Partial<Doctor>) => void;
+  updateConsultationFee: (id: string, fees: { consultationFee: number; followUpFee?: number; emergencyFee?: number; teleconsultationFee?: number; followUpValidityDays?: number }) => void;
+  toggleDoctorStatus: (id: string) => void;
+  deleteDoctor: (id: string) => void;
+  getDoctorById: (id: string) => Doctor | undefined;
+  getDoctorFee: (doctorId: string, visitType?: string) => number;
+}
+
+export const useDoctorStore = create<DoctorState>()(
+  persist(
+    (set, get) => ({
+      doctors: DOCTORS,
+      addDoctor: (data) => {
+        const initials = data.name
+          .replace(/^Dr\.\s*/i, '')
+          .split(' ')
+          .map(p => p[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2) || 'DR';
+        const colors = [
+          'linear-gradient(135deg,#6366F1,#818CF8)',
+          'linear-gradient(135deg,#10B981,#34D399)',
+          'linear-gradient(135deg,#F59E0B,#FCD34D)',
+          'linear-gradient(135deg,#EF4444,#FB7185)',
+          'linear-gradient(135deg,#8B5CF6,#A78BFA)',
+          'linear-gradient(135deg,#EC4899,#F472B6)'
+        ];
+        const newDoctor: Doctor = {
+          ...data,
+          id: `doc-${Date.now()}`,
+          initials,
+          avatarColor: colors[get().doctors.length % colors.length],
+          status: data.status || 'ACTIVE',
+          totalConsultations: 0,
+          rating: 5.0
+        };
+        set(s => ({ doctors: [newDoctor, ...s.doctors] }));
+        notifyTabSync('doctor-directory');
+        return newDoctor;
+      },
+      updateDoctor: (id, updates) => {
+        set(s => ({
+          doctors: s.doctors.map(d => d.id === id ? { ...d, ...updates } : d)
+        }));
+        notifyTabSync('doctor-directory');
+      },
+      updateConsultationFee: (id, fees) => {
+        set(s => ({
+          doctors: s.doctors.map(d => d.id === id ? { ...d, ...fees } : d)
+        }));
+        notifyTabSync('doctor-directory');
+      },
+      toggleDoctorStatus: (id) => {
+        set(s => ({
+          doctors: s.doctors.map(d => {
+            if (d.id === id) {
+              const nextStatus = d.status === 'ACTIVE' ? 'ON_LEAVE' : 'ACTIVE';
+              return { ...d, status: nextStatus };
+            }
+            return d;
+          })
+        }));
+        notifyTabSync('doctor-directory');
+      },
+      deleteDoctor: (id) => {
+        set(s => ({ doctors: s.doctors.filter(d => d.id !== id) }));
+        notifyTabSync('doctor-directory');
+      },
+      getDoctorById: (id) => {
+        return get().doctors.find(d => d.id === id || d.name.toLowerCase() === id.toLowerCase());
+      },
+      getDoctorFee: (doctorId, visitType) => {
+        const doc = get().doctors.find(d => d.id === doctorId || d.name.toLowerCase() === doctorId.toLowerCase());
+        if (!doc) return 500;
+        if (visitType === 'Follow-Up') return doc.followUpFee ?? 300;
+        if (visitType === 'Emergency') return doc.emergencyFee ?? 800;
+        if (visitType === 'Teleconsultation' || visitType === 'Video') return doc.teleconsultationFee ?? doc.consultationFee;
+        return doc.consultationFee || 500;
+      }
+    }),
+    {
+      name: 'doctor-directory',
+      storage: safeStorage,
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          if (!state.doctors || state.doctors.length === 0) {
+            state.doctors = DOCTORS;
+          }
+        }
+      }
+    }
+  )
+);
 
 // ============================================================
 // Billing Store
@@ -812,6 +1051,13 @@ export const useBillingStore = create<BillingState>()(
     {
       name: 'doctor-billing',
       storage: safeStorage,
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          if (!state.bills || state.bills.length < 5) {
+            state.bills = BILLS;
+          }
+        }
+      }
     }
   )
 );
@@ -938,6 +1184,7 @@ export interface DrugInventoryItem {
   defaultTotal?: string;
   defaultNote?: string;
   alternatives?: string[];
+  isActive?: boolean;
 }
 
 export interface PrescriptionVisibility {
@@ -995,6 +1242,7 @@ export interface ProcedureCatalogItem {
 
 export interface FollowUpTask {
   id: string;
+  caseId?: string;
   patientId: string;
   patientName: string;
   mrdNumber: string;
@@ -1003,19 +1251,25 @@ export interface FollowUpTask {
   originalVisitDate: string;
   reason: string;
   dueDate: string;
+  followUpDays?: number | string;
+  nursingInstructions?: string;
   priority: 'High' | 'Medium' | 'Low';
-  status: 'PENDING' | 'CALLED' | 'RESCHEDULED' | 'NO_SHOW';
+  status: 'PENDING' | 'CALLED' | 'RESCHEDULED' | 'NO_SHOW' | 'COMPLETED';
   callLogs: { date: string; caller: string; outcome: string; notes: string }[];
 }
 
 export interface ProcedurePrescriptionItem {
   id: string;
+  procedureId?: string;
+  drugId?: string;
+  source?: 'PROCEDURE_MASTER' | 'DRUG_FORMULARY' | 'CUSTOM' | string;
   itemName: string;
   category?: 'Syringe' | 'IV Bottle' | 'Roller Bandage' | 'Dressing / Gauze' | 'Cannula / Set' | 'Other Supply' | string;
   quantity: number;
   idCode?: string;
   unit?: string;
   instructions?: string;
+  printOnRx?: boolean;
 }
 
 export const parseAnyDate = (dateStr: string): Date => {
@@ -1525,17 +1779,17 @@ export interface ChatMessage {
 
 // Initial Mock Inventory
 export const DRUG_INVENTORY: DrugInventoryItem[] = [
-  { id: 'd-101', name: 'TAB Flucocip 400mg (Tab fluconazone 400 mg)', genericName: 'Tab fluconazone 400 mg', brandName: 'TAB Flucocip 400mg', manufacturer: 'Cipla pvt', formulation: 'Tablet', stock: 50, reorderLevel: 15, unitPrice: 42, slotNo: 'BZX 120', defaultDose: '1 tab', defaultFreq: 'Od after mill', defaultDay: '5 day', defaultTotal: '5', defaultNote: 'Not teken with milk' },
-  { id: 'd-102', name: 'CREAM Monpic (Cream clotrimazole 1%)', genericName: 'Cream clotrimazole 1%', brandName: 'CREAM Monpic', manufacturer: 'Atopic darma', formulation: 'Cream', stock: 40, reorderLevel: 10, unitPrice: 85, slotNo: 'BYX 80', defaultDose: '1', defaultFreq: 'tds', defaultDay: '7', defaultTotal: '1', defaultNote: 'Before apply dry' },
-  { id: 'd-1', name: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', brandName: 'Amoxicillin 500mg', manufacturer: 'Cipla pvt', formulation: 'Capsule', stock: 8, reorderLevel: 20, unitPrice: 12, slotNo: 'BZX 100', defaultDose: '1', defaultFreq: 'tds', defaultDay: '7', defaultTotal: '1', defaultNote: 'Before apply dry', alternatives: ['Cefixime 200mg', 'Azithromycin 500mg'] },
-  { id: 'd-2', name: 'Paracetamol 650mg (Dolo)', genericName: 'Paracetamol 650mg', brandName: 'Dolo 650', manufacturer: 'Micro Labs', formulation: 'Tablet', stock: 12, reorderLevel: 50, unitPrice: 3, slotNo: 'BZX 102', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '3 day', defaultTotal: '6', defaultNote: 'After Food', alternatives: ['Ibuprofen 400mg'] },
-  { id: 'd-3', name: 'Mometasone 0.1% Cream', genericName: 'Mometasone Furoate', brandName: 'Elocon 0.1% Cream', manufacturer: 'Organon', formulation: 'Ointment', stock: 45, reorderLevel: 15, unitPrice: 145, slotNo: 'BYX 103', defaultDose: '1', defaultFreq: '0-0-1', defaultDay: '14 day', defaultTotal: '1', defaultNote: 'Before bedtime' },
-  { id: 'd-4', name: 'Bilastine 20mg (Bilaxten)', genericName: 'Bilastine', brandName: 'Bilaxten 20mg', manufacturer: 'Zydus', formulation: 'Tablet', stock: 35, reorderLevel: 20, unitPrice: 18, slotNo: 'BZX 104', defaultDose: '1 Tab', defaultFreq: '1-0-0', defaultDay: '10 day', defaultTotal: '10', defaultNote: 'Empty stomach (1h before food)' },
-  { id: 'd-5', name: 'Levocetirizine 5mg', genericName: 'Levocetirizine Dihydrochloride', brandName: 'Levocet 5mg', manufacturer: 'Hetero', formulation: 'Tablet', stock: 80, reorderLevel: 25, unitPrice: 5, slotNo: 'BZX 105', defaultDose: '1 Tab', defaultFreq: '0-0-1', defaultDay: '5 day', defaultTotal: '5', defaultNote: 'At bedtime' },
-  { id: 'd-6', name: 'Telmisartan 40mg', genericName: 'Telmisartan', brandName: 'Telma 40', manufacturer: 'Glenmark', formulation: 'Tablet', stock: 40, reorderLevel: 20, unitPrice: 9, slotNo: 'BZX 106', defaultDose: '1 Tab', defaultFreq: '1-0-0', defaultDay: '30 day', defaultTotal: '30', defaultNote: 'Morning after food' },
-  { id: 'd-7', name: 'Nitrofurantoin SR 100mg', genericName: 'Nitrofurantoin', brandName: 'Niftran 100mg', manufacturer: 'Sun Pharma', formulation: 'Tablet', stock: 0, reorderLevel: 15, unitPrice: 16, slotNo: 'BZX 107', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '7 day', defaultTotal: '14', defaultNote: 'With meals', alternatives: ['Fosfomycin 3g', 'Ofloxacin 200mg'] },
-  { id: 'd-8', name: 'Diacerein 50mg + Glucosamine', genericName: 'Diacerein + Glucosamine', brandName: 'Cartigen Forte', manufacturer: 'Torrent', formulation: 'Tablet', stock: 50, reorderLevel: 20, unitPrice: 22, slotNo: 'BZX 108', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '30 day', defaultTotal: '60', defaultNote: 'After food' },
-  { id: 'd-9', name: 'Emollient Moisturizer Lotion', genericName: 'Cetyl Alcohol + Liquid Paraffin', brandName: 'Moiz XL Lotion', manufacturer: 'Curatio', formulation: 'Lotion', stock: 30, reorderLevel: 10, unitPrice: 280, slotNo: 'BYX 109', defaultDose: '1', defaultFreq: '1-0-1', defaultDay: '30 day', defaultTotal: '1', defaultNote: 'Apply on damp skin' },
+  { id: 'd-101', name: 'TAB Flucocip 400mg (Tab fluconazone 400 mg)', genericName: 'Tab fluconazone 400 mg', brandName: 'TAB Flucocip 400mg', manufacturer: 'Cipla pvt', formulation: 'Tablet', stock: 50, reorderLevel: 15, unitPrice: 42, slotNo: 'BZX 120', defaultDose: '1 tab', defaultFreq: 'Od after mill', defaultDay: '5 day', defaultTotal: '5', defaultNote: 'Not teken with milk', isActive: true },
+  { id: 'd-102', name: 'CREAM Monpic (Cream clotrimazole 1%)', genericName: 'Cream clotrimazole 1%', brandName: 'CREAM Monpic', manufacturer: 'Atopic darma', formulation: 'Cream', stock: 40, reorderLevel: 10, unitPrice: 85, slotNo: 'BYX 80', defaultDose: '1', defaultFreq: 'tds', defaultDay: '7', defaultTotal: '1', defaultNote: 'Before apply dry', isActive: true },
+  { id: 'd-1', name: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', brandName: 'Amoxicillin 500mg', manufacturer: 'Cipla pvt', formulation: 'Capsule', stock: 8, reorderLevel: 20, unitPrice: 12, slotNo: 'BZX 100', defaultDose: '1', defaultFreq: 'tds', defaultDay: '7', defaultTotal: '1', defaultNote: 'Before apply dry', alternatives: ['Cefixime 200mg', 'Azithromycin 500mg'], isActive: true },
+  { id: 'd-2', name: 'Paracetamol 650mg (Dolo)', genericName: 'Paracetamol 650mg', brandName: 'Dolo 650', manufacturer: 'Micro Labs', formulation: 'Tablet', stock: 12, reorderLevel: 50, unitPrice: 3, slotNo: 'BZX 102', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '3 day', defaultTotal: '6', defaultNote: 'After Food', alternatives: ['Ibuprofen 400mg'], isActive: true },
+  { id: 'd-3', name: 'Mometasone 0.1% Cream', genericName: 'Mometasone Furoate', brandName: 'Elocon 0.1% Cream', manufacturer: 'Organon', formulation: 'Ointment', stock: 45, reorderLevel: 15, unitPrice: 145, slotNo: 'BYX 103', defaultDose: '1', defaultFreq: '0-0-1', defaultDay: '14 day', defaultTotal: '1', defaultNote: 'Before bedtime', isActive: true },
+  { id: 'd-4', name: 'Bilastine 20mg (Bilaxten)', genericName: 'Bilastine', brandName: 'Bilaxten 20mg', manufacturer: 'Zydus', formulation: 'Tablet', stock: 35, reorderLevel: 20, unitPrice: 18, slotNo: 'BZX 104', defaultDose: '1 Tab', defaultFreq: '1-0-0', defaultDay: '10 day', defaultTotal: '10', defaultNote: 'Empty stomach (1h before food)', isActive: true },
+  { id: 'd-5', name: 'Levocetirizine 5mg', genericName: 'Levocetirizine Dihydrochloride', brandName: 'Levocet 5mg', manufacturer: 'Hetero', formulation: 'Tablet', stock: 80, reorderLevel: 25, unitPrice: 5, slotNo: 'BZX 105', defaultDose: '1 Tab', defaultFreq: '0-0-1', defaultDay: '5 day', defaultTotal: '5', defaultNote: 'At bedtime', isActive: true },
+  { id: 'd-6', name: 'Telmisartan 40mg', genericName: 'Telmisartan', brandName: 'Telma 40', manufacturer: 'Glenmark', formulation: 'Tablet', stock: 40, reorderLevel: 20, unitPrice: 9, slotNo: 'BZX 106', defaultDose: '1 Tab', defaultFreq: '1-0-0', defaultDay: '30 day', defaultTotal: '30', defaultNote: 'Morning after food', isActive: true },
+  { id: 'd-7', name: 'Nitrofurantoin SR 100mg', genericName: 'Nitrofurantoin', brandName: 'Niftran 100mg', manufacturer: 'Sun Pharma', formulation: 'Tablet', stock: 0, reorderLevel: 15, unitPrice: 16, slotNo: 'BZX 107', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '7 day', defaultTotal: '14', defaultNote: 'With meals', alternatives: ['Fosfomycin 3g', 'Ofloxacin 200mg'], isActive: true },
+  { id: 'd-8', name: 'Diacerein 50mg + Glucosamine', genericName: 'Diacerein + Glucosamine', brandName: 'Cartigen Forte', manufacturer: 'Torrent', formulation: 'Tablet', stock: 50, reorderLevel: 20, unitPrice: 22, slotNo: 'BZX 108', defaultDose: '1 Tab', defaultFreq: '1-0-1', defaultDay: '30 day', defaultTotal: '60', defaultNote: 'After food', isActive: true },
+  { id: 'd-9', name: 'Emollient Moisturizer Lotion', genericName: 'Cetyl Alcohol + Liquid Paraffin', brandName: 'Moiz XL Lotion', manufacturer: 'Curatio', formulation: 'Lotion', stock: 30, reorderLevel: 10, unitPrice: 280, slotNo: 'BYX 109', defaultDose: '1', defaultFreq: '1-0-1', defaultDay: '30 day', defaultTotal: '1', defaultNote: 'Apply on damp skin', isActive: true },
 ];
 
 export const INVESTIGATION_CATALOG: InvestigationCatalogItem[] = [
@@ -1560,7 +1814,98 @@ export const PROCEDURE_CATALOG: ProcedureCatalogItem[] = [
   { id: 'proc-6', name: 'Sterile Wound Dressing & Debridement', category: 'Nursing OPD', price: 250, durationMins: 15, requiresConsent: false },
 ];
 
-export const FOLLOWUP_TASKS: FollowUpTask[] = [];
+export const FOLLOWUP_TASKS: FollowUpTask[] = [
+  {
+    id: 'fu-c006',
+    caseId: 'C006-001-190926',
+    patientId: 'pat-4',
+    patientName: 'Amit Shah',
+    mrdNumber: 'MRD-2026-0004',
+    mobile: '9825100004',
+    doctorName: 'Dr. Raj Valaki',
+    originalVisitDate: '2026-09-19',
+    reason: 'Assess clinical clearance of fungal lesions',
+    dueDate: '2026-09-26',
+    followUpDays: 7,
+    nursingInstructions: 'Call patient at day 5 to verify compliance and assess clinical clearance of fungal lesions',
+    priority: 'High',
+    status: 'PENDING',
+    callLogs: []
+  },
+  {
+    id: 'fu-1',
+    caseId: 'C001-001-190926',
+    patientId: 'pat-1',
+    patientName: 'Mahesh Kumar',
+    mrdNumber: 'MRD-2026-0001',
+    mobile: '9825100001',
+    doctorName: 'Dr. Raj Valaki',
+    originalVisitDate: '2026-09-10',
+    reason: 'Review contact dermatitis recovery & allergy response',
+    dueDate: '2026-09-19',
+    followUpDays: 7,
+    nursingInstructions: 'Check pruritus relief and inquire if redness subsiding with Mometasone cream',
+    priority: 'High',
+    status: 'PENDING',
+    callLogs: [
+      { date: '2026-09-17', caller: 'Staff Nurse Rekha', outcome: 'ANSWERED', notes: 'Patient reports mild redness remaining; advised to continue cream.' }
+    ]
+  },
+  {
+    id: 'fu-2',
+    caseId: 'C003-001-190926',
+    patientId: 'pat-3',
+    patientName: 'Rekha Patel',
+    mrdNumber: 'MRD-2026-0003',
+    mobile: '9825100003',
+    doctorName: 'Dr. Raj Valaki',
+    originalVisitDate: '2026-08-28',
+    reason: 'Diode Laser Session 2 of 6 check-up',
+    dueDate: '2026-09-19',
+    followUpDays: 21,
+    nursingInstructions: 'Check for skin crusting or post-inflammatory pigment changes; confirm next laser sitting date',
+    priority: 'Medium',
+    status: 'PENDING',
+    callLogs: []
+  },
+  {
+    id: 'fu-3',
+    caseId: 'C008-001-190926',
+    patientId: 'pat-8',
+    patientName: 'Deepak Trivedi',
+    mrdNumber: 'MRD-2026-0008',
+    mobile: '9825100008',
+    doctorName: 'Dr. Suresh Kumar',
+    originalVisitDate: '2026-09-05',
+    reason: 'Knee OA Joint Injection tolerance check',
+    dueDate: '2026-09-22',
+    followUpDays: 14,
+    nursingInstructions: 'Verify range of motion and absence of swelling or effusion post intra-articular injection',
+    priority: 'Medium',
+    status: 'PENDING',
+    callLogs: []
+  },
+  {
+    id: 'fu-4',
+    caseId: 'C012-001-190926',
+    patientId: 'pat-12',
+    patientName: 'Kavita Joshi',
+    mrdNumber: 'MRD-2026-0012',
+    mobile: '9825100012',
+    doctorName: 'Dr. Raj Valaki',
+    originalVisitDate: '2026-09-01',
+    reason: 'Severe Psoriasis biologic therapy monitoring',
+    dueDate: '2026-09-15',
+    followUpDays: 14,
+    nursingInstructions: 'Urgent compliance check - verify CBC and liver enzyme blood draw completed',
+    priority: 'High',
+    status: 'NO_SHOW',
+    callLogs: [
+      { date: '2026-09-16', caller: 'Front Desk Riya', outcome: 'NO_ANSWER', notes: 'Call rang full, no response.' },
+      { date: '2026-09-17', caller: 'Front Desk Riya', outcome: 'BUSY', notes: 'Number returned line busy signal.' }
+    ]
+  }
+];
 
 export const DOCTOR_LEAVES: DoctorLeave[] = [
   { id: 'l-1', doctorId: 'doc-1', startDate: '2026-09-25', endDate: '2026-09-27', reason: 'National Dermatology Conference (DERMACON 2026)', type: 'Conference', status: 'APPROVED' },
@@ -1575,6 +1920,9 @@ interface InventoryState {
   getDrugByName: (name: string) => DrugInventoryItem | undefined;
   updateStock: (id: string, delta: number) => void;
   addDrug: (drug: Omit<DrugInventoryItem, 'id'> & { id?: string }) => DrugInventoryItem;
+  updateDrug: (id: string, updates: Partial<DrugInventoryItem>) => void;
+  toggleDrugActive: (id: string) => void;
+  deleteDrug: (id: string) => void;
 }
 
 export const useInventoryStore = create<InventoryState>()(
@@ -1591,13 +1939,32 @@ export const useInventoryStore = create<InventoryState>()(
       addDrug: (drug) => {
         const newDrug: DrugInventoryItem = {
           ...drug,
-          id: drug.id || `d-${Date.now()}`
+          id: drug.id || `d-${Date.now()}`,
+          isActive: drug.isActive !== undefined ? drug.isActive : true
         };
         set(s => ({
           inventory: [newDrug, ...s.inventory.filter(i => i.id !== newDrug.id && i.name.toLowerCase() !== newDrug.name.toLowerCase())]
         }));
         notifyTabSync('doctor-inventory');
         return newDrug;
+      },
+      updateDrug: (id, updates) => {
+        set(s => ({
+          inventory: s.inventory.map(i => i.id === id ? { ...i, ...updates } : i)
+        }));
+        notifyTabSync('doctor-inventory');
+      },
+      toggleDrugActive: (id) => {
+        set(s => ({
+          inventory: s.inventory.map(i => i.id === id ? { ...i, isActive: i.isActive === false ? true : false } : i)
+        }));
+        notifyTabSync('doctor-inventory');
+      },
+      deleteDrug: (id) => {
+        set(s => ({
+          inventory: s.inventory.filter(i => i.id !== id)
+        }));
+        notifyTabSync('doctor-inventory');
       }
     }),
     {
@@ -1664,22 +2031,140 @@ interface FollowUpState {
   tasks: FollowUpTask[];
   addCallLog: (taskId: string, log: { caller: string; outcome: string; notes: string }) => void;
   updateStatus: (taskId: string, status: FollowUpTask['status']) => void;
+  addTask: (task: Omit<FollowUpTask, 'id' | 'callLogs'> & { id?: string; callLogs?: FollowUpTask['callLogs'] }) => FollowUpTask;
+  upsertConsultationTask: (data: {
+    caseId?: string;
+    patientId: string;
+    patientName: string;
+    mrdNumber: string;
+    mobile: string;
+    doctorName: string;
+    originalVisitDate?: string;
+    reason?: string;
+    dueDate?: string;
+    followUpDays?: number | string;
+    nursingInstructions?: string;
+    priority?: 'High' | 'Medium' | 'Low';
+    status?: FollowUpTask['status'];
+  }) => FollowUpTask;
+  rescheduleTask: (taskId: string, newDueDate: string, notes?: string) => void;
+  deleteTask: (taskId: string) => void;
 }
 
 export const useFollowUpStore = create<FollowUpState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       tasks: FOLLOWUP_TASKS,
-      addCallLog: (taskId, log) => set(s => ({
-        tasks: s.tasks.map(t => t.id === taskId ? {
-          ...t,
-          status: log.outcome === 'ANSWERED' ? 'CALLED' : t.status,
-          callLogs: [{ ...log, date: '2026-09-19' }, ...t.callLogs]
-        } : t)
-      })),
-      updateStatus: (taskId, status) => set(s => ({
-        tasks: s.tasks.map(t => t.id === taskId ? { ...t, status } : t)
-      }))
+      addCallLog: (taskId, log) => {
+        set(s => ({
+          tasks: s.tasks.map(t => {
+            if (t.id !== taskId) return t;
+            let newStatus: FollowUpTask['status'] = t.status;
+            if (log.outcome === 'ANSWERED') newStatus = 'CALLED';
+            else if (log.outcome === 'RESCHEDULED') newStatus = 'RESCHEDULED';
+            else if (log.outcome === 'NO_ANSWER' || log.outcome === 'SWITCHED_OFF') newStatus = 'NO_SHOW';
+            else if (log.outcome === 'COMPLETED') newStatus = 'COMPLETED';
+            return {
+              ...t,
+              status: newStatus,
+              callLogs: [{ ...log, date: formatToDDMMYYYY(new Date()) }, ...t.callLogs]
+            };
+          })
+        }));
+        notifyTabSync('doctor-followup');
+      },
+      updateStatus: (taskId, status) => {
+        set(s => ({
+          tasks: s.tasks.map(t => t.id === taskId ? { ...t, status } : t)
+        }));
+        notifyTabSync('doctor-followup');
+      },
+      addTask: (task) => {
+        const newTask: FollowUpTask = {
+          ...task,
+          id: task.id || `fu-${Date.now()}`,
+          callLogs: task.callLogs || []
+        };
+        set(s => ({ tasks: [newTask, ...s.tasks] }));
+        notifyTabSync('doctor-followup');
+        return newTask;
+      },
+      upsertConsultationTask: (data) => {
+        let resultTask: FollowUpTask | null = null;
+        set(s => {
+          const existingIndex = s.tasks.findIndex(t =>
+            (data.caseId && t.caseId === data.caseId) ||
+            (data.caseId && t.id === `fu-${data.caseId}`) ||
+            (t.patientId === data.patientId && (t.dueDate === data.dueDate || t.caseId === data.caseId))
+          );
+
+          if (existingIndex >= 0) {
+            const existing = s.tasks[existingIndex];
+            const updated: FollowUpTask = {
+              ...existing,
+              caseId: data.caseId || existing.caseId,
+              patientName: data.patientName || existing.patientName,
+              mrdNumber: data.mrdNumber || existing.mrdNumber,
+              mobile: data.mobile || existing.mobile,
+              doctorName: data.doctorName || existing.doctorName,
+              reason: data.reason || existing.reason,
+              dueDate: data.dueDate || existing.dueDate,
+              followUpDays: data.followUpDays !== undefined ? data.followUpDays : existing.followUpDays,
+              nursingInstructions: data.nursingInstructions !== undefined ? data.nursingInstructions : existing.nursingInstructions,
+              priority: data.priority || existing.priority,
+              status: data.status || existing.status,
+            };
+            resultTask = updated;
+            const updatedTasks = [...s.tasks];
+            updatedTasks[existingIndex] = updated;
+            return { tasks: updatedTasks };
+          } else {
+            const newTask: FollowUpTask = {
+              id: `fu-${data.caseId || Date.now()}`,
+              caseId: data.caseId,
+              patientId: data.patientId,
+              patientName: data.patientName,
+              mrdNumber: data.mrdNumber,
+              mobile: data.mobile,
+              doctorName: data.doctorName || 'Dr. Raj Valaki',
+              originalVisitDate: data.originalVisitDate || formatToDDMMYYYY(new Date()),
+              reason: data.reason || 'Follow-up clinical assessment',
+              dueDate: data.dueDate || formatToDDMMYYYY(new Date(Date.now() + 7 * 86400000)),
+              followUpDays: data.followUpDays || 7,
+              nursingInstructions: data.nursingInstructions || '',
+              priority: data.priority || 'Medium',
+              status: data.status || 'PENDING',
+              callLogs: []
+            };
+            resultTask = newTask;
+            return { tasks: [newTask, ...s.tasks] };
+          }
+        });
+        notifyTabSync('doctor-followup');
+        return resultTask!;
+      },
+      rescheduleTask: (taskId, newDueDate, notes) => {
+        set(s => ({
+          tasks: s.tasks.map(t => {
+            if (t.id !== taskId) return t;
+            const updatedLogs = notes ? [
+              { date: formatToDDMMYYYY(new Date()), caller: 'Dr. Raj Valaki', outcome: 'RESCHEDULED', notes },
+              ...t.callLogs
+            ] : t.callLogs;
+            return {
+              ...t,
+              dueDate: newDueDate,
+              status: 'RESCHEDULED',
+              callLogs: updatedLogs
+            };
+          })
+        }));
+        notifyTabSync('doctor-followup');
+      },
+      deleteTask: (taskId) => {
+        set(s => ({ tasks: s.tasks.filter(t => t.id !== taskId) }));
+        notifyTabSync('doctor-followup');
+      }
     }),
     {
       name: 'doctor-followup',
@@ -3120,12 +3605,12 @@ export const useConsultationStore = create<ConsultationState>()(
         // Exclude heavy clinicalProcedures from localStorage since they are canonically stored on the REST API
         const strippedSessions: Record<string, ConsultationSession> = {};
         for (const [k, v] of Object.entries(state.sessions || {})) {
-          const { clinicalProcedures, ...rest } = v;
+          const { clinicalProcedures, ...rest } = (v as any);
           strippedSessions[k] = rest as ConsultationSession;
         }
         let strippedActiveSession = state.activeSession;
         if (strippedActiveSession) {
-          const { clinicalProcedures, ...rest } = strippedActiveSession;
+          const { clinicalProcedures, ...rest } = (strippedActiveSession as any);
           strippedActiveSession = rest as ConsultationSession;
         }
         return {
@@ -3402,10 +3887,18 @@ export const usePharmacyStore = create<PharmacyState>()(
           id: newId,
           name: drug.name,
           genericName: drug.genericName,
+          brandName: (drug as any).brandName || drug.name,
+          manufacturer: (drug as any).manufacturer || drug.supplier || 'Cipla pvt',
           formulation: drug.formulation,
           stock: initialQty,
           reorderLevel: drug.reorderLevel,
           unitPrice: drug.unitPrice,
+          defaultDose: (drug as any).defaultDose || '1 tab',
+          defaultFreq: (drug as any).defaultFreq || '1-0-1',
+          defaultDay: (drug as any).defaultDay || '5 day',
+          defaultTotal: (drug as any).defaultTotal || '5',
+          defaultNote: (drug as any).defaultNote || 'After food',
+          isActive: (drug as any).isActive !== undefined ? (drug as any).isActive : true,
           alternatives: drug.alternatives || []
         };
 
@@ -3418,6 +3911,7 @@ export const usePharmacyStore = create<PharmacyState>()(
           get().addStock(newId, drug.name, drug.batchNumber, drug.expiryDate, initialQty, drug.supplier || 'Standard Distributor');
         }
         notifyTabSync('doctor-pharmacy');
+        notifyTabSync('doctor-inventory');
       },
 
       processReturn: (caseId, drugId, batchNumber, quantity, reason) => {
@@ -3544,25 +4038,87 @@ export interface ProcedureMaster {
   linkedConsumables: Array<{ drugId: string; drugName: string; quantity: number }>;
   preInstructions: string;
   postInstructions: string;
+  isActive?: boolean;
 }
 
-export interface LabTestMaster {
+export interface LabTestParameter {
+  id: string;
+  labTestId: string;
+  name: string;
+  code?: string;
+  dataType: 'Numeric' | 'Text' | 'Select';
+  unit?: string;
+  referenceRange?: string;
+  maleMin?: number;
+  maleMax?: number;
+  femaleMin?: number;
+  femaleMax?: number;
+  childMin?: number;
+  childMax?: number;
+  min?: number;
+  max?: number;
+  decimalPrecision?: number;
+  optionsJson?: string[];
+  resultEntryType?: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface LabTest {
   id: string;
   name: string;
-  category: 'Biochemistry' | 'Hematology' | 'Pathology' | 'Microbiology' | 'Radiology';
-  specimenTube: 'EDTA (Purple)' | 'Serum Gel (Yellow)' | 'Fluoride (Grey)' | 'Plain (Red)' | 'Urine Sterile Container' | string;
+  code: string;
+  category: 'Hematology' | 'Biochemistry' | 'Pathology' | 'Radiology' | 'Microbiology' | string;
+  department?: string;
+  specimen: string;
+  container?: string;
+  specimenTube?: string;
+  method?: string;
+  turnaroundTime?: string;
+  turnaroundHours?: number;
   price: number;
-  turnaroundHours: number;
-  parameters: Array<{
-    name: string;
-    unit: string;
-    maleMin: number;
-    maleMax: number;
-    femaleMin: number;
-    femaleMax: number;
-    criticalLow?: number;
-    criticalHigh?: number;
-  }>;
+  unit?: string;
+  normalRange?: string;
+  isOrderable: boolean;
+  requiresFasting?: boolean;
+  defaultPriority?: 'Routine' | 'Urgent' | 'STAT';
+  instructions?: string;
+  clinicalIndicationRequired?: boolean;
+  doctorNotesAllowed?: boolean;
+  parameters: LabTestParameter[];
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type LabTestMaster = LabTest;
+
+export interface LabOrderItem {
+  id: string;
+  labOrderId: string;
+  labTestId: string;
+  testName: string;
+  code?: string;
+  category?: string;
+  specimen?: string;
+  price: number;
+  status: 'ORDERED' | 'SAMPLE_COLLECTED' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
+  instructions?: string;
+}
+
+export interface LabOrder {
+  id: string;
+  orderNumber: string;
+  patientId: string;
+  patientName: string;
+  consultationId: string;
+  doctorId: string;
+  doctorName: string;
+  priority: 'Routine' | 'Urgent' | 'STAT';
+  clinicalNotes?: string;
+  status: 'ORDERED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  orderedAt: string;
+  items: LabOrderItem[];
 }
 
 export interface ConsentTemplate {
@@ -3673,6 +4229,7 @@ export const INITIAL_PROCEDURES: ProcedureMaster[] = [
     requiresConsent: true,
     requiresNursing: true,
     requiresRoom: true,
+    isActive: true,
     linkedConsumables: [
       { drugId: 'd-9', drugName: 'Emollient Moisturizer Lotion', quantity: 1 }
     ],
@@ -3689,6 +4246,7 @@ export const INITIAL_PROCEDURES: ProcedureMaster[] = [
     requiresConsent: true,
     requiresNursing: true,
     requiresRoom: true,
+    isActive: true,
     linkedConsumables: [
       { drugId: 'd-1', drugName: 'Amoxicillin 500mg', quantity: 6 }
     ],
@@ -3705,6 +4263,7 @@ export const INITIAL_PROCEDURES: ProcedureMaster[] = [
     requiresConsent: true,
     requiresNursing: true,
     requiresRoom: true,
+    isActive: true,
     linkedConsumables: [
       { drugId: 'd-8', drugName: 'Diacerein 50mg + Glucosamine', quantity: 1 }
     ],
@@ -3721,6 +4280,7 @@ export const INITIAL_PROCEDURES: ProcedureMaster[] = [
     requiresConsent: false,
     requiresNursing: true,
     requiresRoom: false,
+    isActive: false,
     linkedConsumables: [],
     preInstructions: 'Instill wax-softening drops 3 days prior to appointment.',
     postInstructions: 'Keep ears dry for 24 hours. Report dizziness immediately.'
@@ -3735,6 +4295,7 @@ export const INITIAL_PROCEDURES: ProcedureMaster[] = [
     requiresConsent: false,
     requiresNursing: true,
     requiresRoom: false,
+    isActive: false,
     linkedConsumables: [
       { drugId: 'd-3', drugName: 'Mometasone 0.1% Cream', quantity: 1 }
     ],
@@ -3743,54 +4304,434 @@ export const INITIAL_PROCEDURES: ProcedureMaster[] = [
   }
 ];
 
-export const INITIAL_LAB_TESTS: LabTestMaster[] = [
+export const INITIAL_LAB_TESTS: LabTest[] = [
   {
     id: 'lab-1',
     name: 'Complete Blood Count (CBC) with ESR',
+    code: 'LAB-CBC',
     category: 'Hematology',
-    specimenTube: 'EDTA (Purple)',
-    price: 450,
+    department: 'Clinical Hematology',
+    specimen: 'Whole Blood',
+    container: 'EDTA (Purple Tube)',
+    specimenTube: 'EDTA (Purple Tube)',
+    method: 'Automated 5-Part Cell Counter',
+    turnaroundTime: '4 Hours',
     turnaroundHours: 4,
+    price: 350,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Fasting preferred but not mandatory. Mix gently after collection.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
     parameters: [
-      { name: 'Hemoglobin', unit: 'g/dL', maleMin: 13.0, maleMax: 17.5, femaleMin: 12.0, femaleMax: 15.5, criticalLow: 7.0, criticalHigh: 20.0 },
-      { name: 'Total WBC Count', unit: 'cells/mcL', maleMin: 4000, maleMax: 11000, femaleMin: 4000, femaleMax: 11000, criticalLow: 2000, criticalHigh: 30000 },
-      { name: 'Platelet Count', unit: 'lakh/mcL', maleMin: 1.5, maleMax: 4.5, femaleMin: 1.5, femaleMax: 4.5, criticalLow: 0.5, criticalHigh: 10.0 }
+      { id: 'p-cbc-1', labTestId: 'lab-1', name: 'Hemoglobin', code: 'HGB', dataType: 'Numeric', unit: 'g/dL', referenceRange: '13.0 - 17.5 g/dL', maleMin: 13.0, maleMax: 17.5, femaleMin: 12.0, femaleMax: 15.5, childMin: 11.0, childMax: 14.0, min: 2, max: 25, decimalPrecision: 1, displayOrder: 1, isActive: true },
+      { id: 'p-cbc-2', labTestId: 'lab-1', name: 'RBC Count', code: 'RBC', dataType: 'Numeric', unit: 'million/µL', referenceRange: '4.5 - 5.9 million/µL', maleMin: 4.5, maleMax: 5.9, femaleMin: 4.0, femaleMax: 5.2, childMin: 3.8, childMax: 5.0, min: 1, max: 10, decimalPrecision: 2, displayOrder: 2, isActive: true },
+      { id: 'p-cbc-3', labTestId: 'lab-1', name: 'Total WBC Count', code: 'WBC', dataType: 'Numeric', unit: '/µL', referenceRange: '4,000 - 11,000 /µL', maleMin: 4000, maleMax: 11000, femaleMin: 4000, femaleMax: 11000, childMin: 5000, childMax: 13000, min: 500, max: 50000, decimalPrecision: 0, displayOrder: 3, isActive: true },
+      { id: 'p-cbc-4', labTestId: 'lab-1', name: 'Platelet Count', code: 'PLT', dataType: 'Numeric', unit: 'lakh/µL', referenceRange: '1.5 - 4.5 lakh/µL', maleMin: 1.5, maleMax: 4.5, femaleMin: 1.5, femaleMax: 4.5, childMin: 1.5, childMax: 4.5, min: 0.1, max: 10.0, decimalPrecision: 1, displayOrder: 4, isActive: true },
+      { id: 'p-cbc-5', labTestId: 'lab-1', name: 'Hematocrit (PCV)', code: 'HCT', dataType: 'Numeric', unit: '%', referenceRange: '40 - 52 %', maleMin: 40, maleMax: 52, femaleMin: 36, femaleMax: 48, min: 10, max: 70, decimalPrecision: 1, displayOrder: 5, isActive: true },
+      { id: 'p-cbc-6', labTestId: 'lab-1', name: 'Mean Corpuscular Volume (MCV)', code: 'MCV', dataType: 'Numeric', unit: 'fL', referenceRange: '80 - 100 fL', maleMin: 80, maleMax: 100, femaleMin: 80, femaleMax: 100, min: 50, max: 130, decimalPrecision: 1, displayOrder: 6, isActive: true },
+      { id: 'p-cbc-7', labTestId: 'lab-1', name: 'Mean Corpuscular Hemoglobin (MCH)', code: 'MCH', dataType: 'Numeric', unit: 'pg', referenceRange: '27 - 33 pg', maleMin: 27, maleMax: 33, femaleMin: 27, femaleMax: 33, min: 15, max: 45, decimalPrecision: 1, displayOrder: 7, isActive: true },
+      { id: 'p-cbc-8', labTestId: 'lab-1', name: 'MCHC', code: 'MCHC', dataType: 'Numeric', unit: 'g/dL', referenceRange: '32 - 36 g/dL', maleMin: 32, maleMax: 36, femaleMin: 32, femaleMax: 36, min: 20, max: 45, decimalPrecision: 1, displayOrder: 8, isActive: true },
+      { id: 'p-cbc-9', labTestId: 'lab-1', name: 'ESR (Westergren)', code: 'ESR', dataType: 'Numeric', unit: 'mm/hr', referenceRange: '0 - 15 mm/hr', maleMin: 0, maleMax: 15, femaleMin: 0, femaleMax: 20, min: 0, max: 150, decimalPrecision: 0, displayOrder: 9, isActive: true }
     ]
   },
   {
     id: 'lab-2',
-    name: 'Fasting Blood Sugar (FBS) & HbA1c',
+    name: 'Blood Sugar (Fasting Glucose)',
+    code: 'LAB-BS',
     category: 'Biochemistry',
-    specimenTube: 'Fluoride (Grey)',
-    price: 600,
-    turnaroundHours: 6,
+    department: 'Clinical Biochemistry',
+    specimen: 'Blood / Fluoride Plasma',
+    container: 'Fluoride (Grey Tube)',
+    specimenTube: 'Fluoride (Grey Tube)',
+    method: 'Hexokinase Photometric Assay',
+    turnaroundTime: '3 Hours',
+    turnaroundHours: 3,
+    price: 100,
+    isOrderable: true,
+    requiresFasting: true,
+    defaultPriority: 'Routine',
+    instructions: 'Strict 8–10 hours overnight fasting required. Water allowed.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
     parameters: [
-      { name: 'Fasting Glucose', unit: 'mg/dL', maleMin: 70, maleMax: 100, femaleMin: 70, femaleMax: 100, criticalLow: 50, criticalHigh: 400 },
-      { name: 'HbA1c', unit: '%', maleMin: 4.0, maleMax: 5.6, femaleMin: 4.0, femaleMax: 5.6, criticalHigh: 12.0 }
+      { id: 'p-bs-1', labTestId: 'lab-2', name: 'Fasting Blood Glucose', code: 'GLU-F', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '70 - 99 mg/dL', maleMin: 70, maleMax: 99, femaleMin: 70, femaleMax: 99, childMin: 60, childMax: 100, min: 20, max: 600, decimalPrecision: 0, displayOrder: 1, isActive: true }
     ]
   },
   {
     id: 'lab-3',
-    name: 'Lipid Profile Screen',
+    name: 'Liver Function Test (LFT)',
+    code: 'LAB-LFT',
     category: 'Biochemistry',
-    specimenTube: 'Serum Gel (Yellow)',
-    price: 850,
-    turnaroundHours: 8,
+    department: 'Clinical Biochemistry',
+    specimen: 'Serum',
+    container: 'Serum Gel (Yellow Tube)',
+    specimenTube: 'Serum Gel (Yellow Tube)',
+    method: 'Automated Spectrophotometry',
+    turnaroundTime: '6 Hours',
+    turnaroundHours: 6,
+    price: 600,
+    isOrderable: true,
+    requiresFasting: true,
+    defaultPriority: 'Routine',
+    instructions: '10 hours overnight fasting recommended. Avoid alcohol 24 hrs prior.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
     parameters: [
-      { name: 'Total Cholesterol', unit: 'mg/dL', maleMin: 125, maleMax: 200, femaleMin: 125, femaleMax: 200 },
-      { name: 'Triglycerides', unit: 'mg/dL', maleMin: 50, maleMax: 150, femaleMin: 50, femaleMax: 150 },
-      { name: 'HDL Cholesterol', unit: 'mg/dL', maleMin: 40, maleMax: 60, femaleMin: 50, femaleMax: 70 }
+      { id: 'p-lft-1', labTestId: 'lab-3', name: 'Bilirubin Total', code: 'TBIL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '0.2 - 1.2 mg/dL', maleMin: 0.2, maleMax: 1.2, femaleMin: 0.2, femaleMax: 1.2, decimalPrecision: 2, displayOrder: 1, isActive: true },
+      { id: 'p-lft-2', labTestId: 'lab-3', name: 'Bilirubin Direct', code: 'DBIL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '0.0 - 0.3 mg/dL', maleMin: 0.0, maleMax: 0.3, femaleMin: 0.0, femaleMax: 0.3, decimalPrecision: 2, displayOrder: 2, isActive: true },
+      { id: 'p-lft-3', labTestId: 'lab-3', name: 'Bilirubin Indirect', code: 'IBIL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '0.2 - 0.9 mg/dL', maleMin: 0.2, maleMax: 0.9, femaleMin: 0.2, femaleMax: 0.9, decimalPrecision: 2, displayOrder: 3, isActive: true },
+      { id: 'p-lft-4', labTestId: 'lab-3', name: 'SGOT / AST', code: 'AST', dataType: 'Numeric', unit: 'U/L', referenceRange: '10 - 40 U/L', maleMin: 10, maleMax: 40, femaleMin: 9, femaleMax: 32, decimalPrecision: 0, displayOrder: 4, isActive: true },
+      { id: 'p-lft-5', labTestId: 'lab-3', name: 'SGPT / ALT', code: 'ALT', dataType: 'Numeric', unit: 'U/L', referenceRange: '10 - 45 U/L', maleMin: 10, maleMax: 45, femaleMin: 7, femaleMax: 35, decimalPrecision: 0, displayOrder: 5, isActive: true },
+      { id: 'p-lft-6', labTestId: 'lab-3', name: 'Alkaline Phosphatase (ALP)', code: 'ALP', dataType: 'Numeric', unit: 'U/L', referenceRange: '44 - 147 U/L', maleMin: 44, maleMax: 147, femaleMin: 44, femaleMax: 147, decimalPrecision: 0, displayOrder: 6, isActive: true },
+      { id: 'p-lft-7', labTestId: 'lab-3', name: 'Total Protein', code: 'TP', dataType: 'Numeric', unit: 'g/dL', referenceRange: '6.4 - 8.3 g/dL', maleMin: 6.4, maleMax: 8.3, femaleMin: 6.4, femaleMax: 8.3, decimalPrecision: 1, displayOrder: 7, isActive: true },
+      { id: 'p-lft-8', labTestId: 'lab-3', name: 'Serum Albumin', code: 'ALB', dataType: 'Numeric', unit: 'g/dL', referenceRange: '3.5 - 5.0 g/dL', maleMin: 3.5, maleMax: 5.0, femaleMin: 3.5, femaleMax: 5.0, decimalPrecision: 1, displayOrder: 8, isActive: true },
+      { id: 'p-lft-9', labTestId: 'lab-3', name: 'Serum Globulin', code: 'GLOB', dataType: 'Numeric', unit: 'g/dL', referenceRange: '2.3 - 3.4 g/dL', maleMin: 2.3, maleMax: 3.4, femaleMin: 2.3, femaleMax: 3.4, decimalPrecision: 1, displayOrder: 9, isActive: true },
+      { id: 'p-lft-10', labTestId: 'lab-3', name: 'A/G Ratio', code: 'AGR', dataType: 'Numeric', unit: 'ratio', referenceRange: '1.1 - 2.2', maleMin: 1.1, maleMax: 2.2, femaleMin: 1.1, femaleMax: 2.2, decimalPrecision: 2, displayOrder: 10, isActive: true }
     ]
   },
   {
     id: 'lab-4',
-    name: 'Serum Creatinine & eGFR',
+    name: 'Lipid Profile Screen',
+    code: 'LAB-LIPID',
     category: 'Biochemistry',
-    specimenTube: 'Serum Gel (Yellow)',
-    price: 350,
-    turnaroundHours: 3,
+    department: 'Clinical Biochemistry',
+    specimen: 'Serum',
+    container: 'Serum Gel (Yellow Tube)',
+    specimenTube: 'Serum Gel (Yellow Tube)',
+    method: 'Enzymatic Colorimetric Assay',
+    turnaroundTime: '6 Hours',
+    turnaroundHours: 6,
+    price: 650,
+    isOrderable: true,
+    requiresFasting: true,
+    defaultPriority: 'Routine',
+    instructions: '12 hours strict fasting required.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
     parameters: [
-      { name: 'Serum Creatinine', unit: 'mg/dL', maleMin: 0.7, maleMax: 1.3, femaleMin: 0.6, femaleMax: 1.1, criticalHigh: 4.0 }
+      { id: 'p-lip-1', labTestId: 'lab-4', name: 'Total Cholesterol', code: 'CHOL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '125 - 200 mg/dL', maleMin: 125, maleMax: 200, femaleMin: 125, femaleMax: 200, decimalPrecision: 0, displayOrder: 1, isActive: true },
+      { id: 'p-lip-2', labTestId: 'lab-4', name: 'Triglycerides', code: 'TRIG', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '50 - 150 mg/dL', maleMin: 50, maleMax: 150, femaleMin: 50, femaleMax: 150, decimalPrecision: 0, displayOrder: 2, isActive: true },
+      { id: 'p-lip-3', labTestId: 'lab-4', name: 'HDL Cholesterol', code: 'HDL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '40 - 60 mg/dL', maleMin: 40, maleMax: 60, femaleMin: 50, femaleMax: 70, decimalPrecision: 0, displayOrder: 3, isActive: true },
+      { id: 'p-lip-4', labTestId: 'lab-4', name: 'LDL Cholesterol', code: 'LDL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '< 100 mg/dL', maleMin: 0, maleMax: 100, femaleMin: 0, femaleMax: 100, decimalPrecision: 0, displayOrder: 4, isActive: true },
+      { id: 'p-lip-5', labTestId: 'lab-4', name: 'VLDL Cholesterol', code: 'VLDL', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '10 - 30 mg/dL', maleMin: 10, maleMax: 30, femaleMin: 10, femaleMax: 30, decimalPrecision: 0, displayOrder: 5, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-5',
+    name: 'Renal Function Test (RFT / KFT)',
+    code: 'LAB-RFT',
+    category: 'Biochemistry',
+    department: 'Clinical Biochemistry',
+    specimen: 'Serum',
+    container: 'Serum Gel (Yellow Tube)',
+    specimenTube: 'Serum Gel (Yellow Tube)',
+    method: 'Jaffe & Enzymatic Rate Method',
+    turnaroundTime: '4 Hours',
+    turnaroundHours: 4,
+    price: 550,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Maintain normal hydration before test.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-rft-1', labTestId: 'lab-5', name: 'Blood Urea', code: 'UREA', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '15 - 40 mg/dL', maleMin: 15, maleMax: 40, femaleMin: 15, femaleMax: 40, decimalPrecision: 1, displayOrder: 1, isActive: true },
+      { id: 'p-rft-2', labTestId: 'lab-5', name: 'Serum Creatinine', code: 'CREAT', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '0.7 - 1.3 mg/dL', maleMin: 0.7, maleMax: 1.3, femaleMin: 0.6, femaleMax: 1.1, decimalPrecision: 2, displayOrder: 2, isActive: true },
+      { id: 'p-rft-3', labTestId: 'lab-5', name: 'Serum Uric Acid', code: 'URIC', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '3.5 - 7.2 mg/dL', maleMin: 3.5, maleMax: 7.2, femaleMin: 2.6, femaleMax: 6.0, decimalPrecision: 1, displayOrder: 3, isActive: true },
+      { id: 'p-rft-4', labTestId: 'lab-5', name: 'Blood Urea Nitrogen (BUN)', code: 'BUN', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '7 - 20 mg/dL', maleMin: 7, maleMax: 20, femaleMin: 7, femaleMax: 20, decimalPrecision: 1, displayOrder: 4, isActive: true },
+      { id: 'p-rft-5', labTestId: 'lab-5', name: 'eGFR', code: 'EGFR', dataType: 'Numeric', unit: 'mL/min/1.73m²', referenceRange: '> 90 mL/min', maleMin: 90, maleMax: 140, femaleMin: 90, femaleMax: 140, decimalPrecision: 0, displayOrder: 5, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-6',
+    name: 'Skin Scraping for KOH Fungus Test',
+    code: 'LAB-KOH',
+    category: 'Microbiology',
+    department: 'Clinical Microbiology',
+    specimen: 'Lesion Scraping / Skin Scale',
+    container: 'Sterile Container',
+    specimenTube: 'Sterile Container',
+    method: '10% KOH Wet Mount Microscopy',
+    turnaroundTime: '2 Hours',
+    turnaroundHours: 2,
+    price: 300,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Clean active lesion border with 70% alcohol. Do not apply topical antifungal creams 48h prior.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-koh-1', labTestId: 'lab-6', name: 'Fungal Hyphae & Spores', code: 'KOH-FUNG', dataType: 'Text', referenceRange: 'Negative / Not Seen', resultEntryType: 'Microscopy', displayOrder: 1, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-7',
+    name: 'Serum Total IgE Allergy Level',
+    code: 'LAB-IGE',
+    category: 'Pathology',
+    department: 'Immunopathology',
+    specimen: 'Serum',
+    container: 'Plain (Red Tube)',
+    specimenTube: 'Plain (Red Tube)',
+    method: 'Chemiluminescence Immunoassay (CLIA)',
+    turnaroundTime: '8 Hours',
+    turnaroundHours: 8,
+    price: 850,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Fasting not required.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-ige-1', labTestId: 'lab-7', name: 'Total Serum IgE', code: 'IGE', dataType: 'Numeric', unit: 'IU/mL', referenceRange: '< 100 IU/mL', maleMin: 0, maleMax: 100, femaleMin: 0, femaleMax: 100, childMin: 0, childMax: 60, min: 0, max: 2000, decimalPrecision: 1, displayOrder: 1, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-8',
+    name: 'Blood Group & Rh Typing',
+    code: 'LAB-BG',
+    category: 'Hematology',
+    department: 'Transfusion Medicine',
+    specimen: 'Whole Blood',
+    container: 'EDTA (Purple Tube)',
+    specimenTube: 'EDTA (Purple Tube)',
+    method: 'Agglutination Slide & Tube Method',
+    turnaroundTime: '2 Hours',
+    turnaroundHours: 2,
+    price: 150,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Fasting not required.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-bg-1', labTestId: 'lab-8', name: 'ABO Blood Group', code: 'ABO', dataType: 'Select', optionsJson: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'], displayOrder: 1, isActive: true },
+      { id: 'p-bg-2', labTestId: 'lab-8', name: 'Rh Factor', code: 'RH', dataType: 'Select', optionsJson: ['Positive', 'Negative'], displayOrder: 2, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-9',
+    name: 'HbA1c & Glycated Hemoglobin',
+    code: 'LAB-HBA1C',
+    category: 'Biochemistry',
+    department: 'Clinical Biochemistry',
+    specimen: 'Whole Blood',
+    container: 'EDTA (Purple Tube)',
+    specimenTube: 'EDTA (Purple Tube)',
+    method: 'HPLC Ion-Exchange Chromatography',
+    turnaroundTime: '4 Hours',
+    turnaroundHours: 4,
+    price: 450,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Reflects 3-month average glucose. Fasting not required.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-hba-1', labTestId: 'lab-9', name: 'HbA1c Glycated Hemoglobin', code: 'HBA1C', dataType: 'Numeric', unit: '%', referenceRange: '4.0 - 5.6 % (Non-diabetic)', maleMin: 4.0, maleMax: 5.6, femaleMin: 4.0, femaleMax: 5.6, min: 3.0, max: 18.0, decimalPrecision: 1, displayOrder: 1, isActive: true },
+      { id: 'p-hba-2', labTestId: 'lab-9', name: 'Estimated Average Glucose (eAG)', code: 'EAG', dataType: 'Numeric', unit: 'mg/dL', referenceRange: '< 114 mg/dL', maleMin: 68, maleMax: 114, femaleMin: 68, femaleMax: 114, min: 50, max: 500, decimalPrecision: 0, displayOrder: 2, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-10',
+    name: 'Urine Routine & Microscopic Culture',
+    code: 'LAB-URINE',
+    category: 'Pathology',
+    department: 'Clinical Pathology',
+    specimen: 'Urine',
+    container: 'Urine Sterile Container',
+    specimenTube: 'Urine Sterile Container',
+    method: 'Automated Flow Cytometry & Microscopy',
+    turnaroundTime: '3 Hours',
+    turnaroundHours: 3,
+    price: 250,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Mid-stream early morning clean catch sample.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-urn-1', labTestId: 'lab-10', name: 'Color', code: 'COL', dataType: 'Text', referenceRange: 'Pale Yellow', displayOrder: 1, isActive: true },
+      { id: 'p-urn-2', labTestId: 'lab-10', name: 'Appearance', code: 'APP', dataType: 'Text', referenceRange: 'Clear', displayOrder: 2, isActive: true },
+      { id: 'p-urn-3', labTestId: 'lab-10', name: 'pH', code: 'PH', dataType: 'Numeric', referenceRange: '5.0 - 7.5', maleMin: 5.0, maleMax: 7.5, femaleMin: 5.0, femaleMax: 7.5, decimalPrecision: 1, displayOrder: 3, isActive: true },
+      { id: 'p-urn-4', labTestId: 'lab-10', name: 'Specific Gravity', code: 'SG', dataType: 'Numeric', referenceRange: '1.005 - 1.030', maleMin: 1.005, maleMax: 1.030, femaleMin: 1.005, femaleMax: 1.030, decimalPrecision: 3, displayOrder: 4, isActive: true },
+      { id: 'p-urn-5', labTestId: 'lab-10', name: 'Urine Protein', code: 'PROT', dataType: 'Text', referenceRange: 'Nil / Negative', displayOrder: 5, isActive: true },
+      { id: 'p-urn-6', labTestId: 'lab-10', name: 'Urine Glucose', code: 'GLU', dataType: 'Text', referenceRange: 'Nil / Negative', displayOrder: 6, isActive: true },
+      { id: 'p-urn-7', labTestId: 'lab-10', name: 'Pus Cells (WBCs)', code: 'PUS', dataType: 'Numeric', unit: '/HPF', referenceRange: '0 - 5 /HPF', maleMin: 0, maleMax: 5, femaleMin: 0, femaleMax: 5, decimalPrecision: 0, displayOrder: 7, isActive: true },
+      { id: 'p-urn-8', labTestId: 'lab-10', name: 'RBCs', code: 'RBC', dataType: 'Numeric', unit: '/HPF', referenceRange: '0 - 2 /HPF', maleMin: 0, maleMax: 2, femaleMin: 0, femaleMax: 2, decimalPrecision: 0, displayOrder: 8, isActive: true },
+      { id: 'p-urn-9', labTestId: 'lab-10', name: 'Epithelial Cells', code: 'EPI', dataType: 'Numeric', unit: '/HPF', referenceRange: '1 - 4 /HPF', maleMin: 1, maleMax: 4, femaleMin: 1, femaleMax: 4, decimalPrecision: 0, displayOrder: 9, isActive: true },
+      { id: 'p-urn-10', labTestId: 'lab-10', name: 'Crystals / Casts', code: 'CAST', dataType: 'Text', referenceRange: 'Absent', displayOrder: 10, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-11',
+    name: 'Thyroid Function Profile (T3, T4, TSH)',
+    code: 'LAB-TFT',
+    category: 'Biochemistry',
+    department: 'Endocrinology & Biochemistry',
+    specimen: 'Serum',
+    container: 'Serum Gel (Yellow Tube)',
+    specimenTube: 'Serum Gel (Yellow Tube)',
+    method: 'Chemiluminescence Immunoassay (CLIA)',
+    turnaroundTime: '6 Hours',
+    turnaroundHours: 6,
+    price: 550,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Morning sample preferred before taking thyroid medication.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-tft-1', labTestId: 'lab-11', name: 'Total Triiodothyronine (T3)', code: 'T3', dataType: 'Numeric', unit: 'ng/dL', referenceRange: '60 - 200 ng/dL', maleMin: 60, maleMax: 200, femaleMin: 60, femaleMax: 200, decimalPrecision: 1, displayOrder: 1, isActive: true },
+      { id: 'p-tft-2', labTestId: 'lab-11', name: 'Total Thyroxine (T4)', code: 'T4', dataType: 'Numeric', unit: 'µg/dL', referenceRange: '4.5 - 12.0 µg/dL', maleMin: 4.5, maleMax: 12.0, femaleMin: 4.5, femaleMax: 12.0, decimalPrecision: 1, displayOrder: 2, isActive: true },
+      { id: 'p-tft-3', labTestId: 'lab-11', name: 'TSH Ultra-Sensitive', code: 'TSH', dataType: 'Numeric', unit: 'µIU/mL', referenceRange: '0.35 - 4.94 µIU/mL', maleMin: 0.35, maleMax: 4.94, femaleMin: 0.35, femaleMax: 4.94, decimalPrecision: 2, displayOrder: 3, isActive: true }
+    ]
+  },
+  {
+    id: 'lab-12',
+    name: 'Serum Electrolytes (Na, K, Cl)',
+    code: 'LAB-LYTES',
+    category: 'Biochemistry',
+    department: 'Clinical Biochemistry',
+    specimen: 'Serum',
+    container: 'Serum Gel (Yellow Tube)',
+    specimenTube: 'Serum Gel (Yellow Tube)',
+    method: 'Ion Selective Electrode (ISE)',
+    turnaroundTime: '2 Hours',
+    turnaroundHours: 2,
+    price: 450,
+    isOrderable: true,
+    requiresFasting: false,
+    defaultPriority: 'Routine',
+    instructions: 'Non-hemolyzed serum sample required.',
+    clinicalIndicationRequired: false,
+    doctorNotesAllowed: true,
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-25T00:00:00.000Z',
+    parameters: [
+      { id: 'p-lyt-1', labTestId: 'lab-12', name: 'Serum Sodium (Na+)', code: 'NA', dataType: 'Numeric', unit: 'mEq/L', referenceRange: '136 - 145 mEq/L', maleMin: 136, maleMax: 145, femaleMin: 136, femaleMax: 145, decimalPrecision: 0, displayOrder: 1, isActive: true },
+      { id: 'p-lyt-2', labTestId: 'lab-12', name: 'Serum Potassium (K+)', code: 'K', dataType: 'Numeric', unit: 'mEq/L', referenceRange: '3.5 - 5.1 mEq/L', maleMin: 3.5, maleMax: 5.1, femaleMin: 3.5, femaleMax: 5.1, decimalPrecision: 1, displayOrder: 2, isActive: true },
+      { id: 'p-lyt-3', labTestId: 'lab-12', name: 'Serum Chloride (Cl-)', code: 'CL', dataType: 'Numeric', unit: 'mEq/L', referenceRange: '98 - 107 mEq/L', maleMin: 98, maleMax: 107, femaleMin: 98, femaleMax: 107, decimalPrecision: 0, displayOrder: 3, isActive: true }
+    ]
+  }
+];
+
+export const INITIAL_LAB_ORDERS: LabOrder[] = [
+  {
+    id: 'ord-101',
+    orderNumber: 'LAB-ORD-90214',
+    patientId: 'p-1',
+    patientName: 'Rahul Sharma',
+    consultationId: 'C001-001-190926',
+    doctorId: 'doc-1',
+    doctorName: 'Dr. Raj Valaki',
+    priority: 'Routine',
+    clinicalNotes: 'Suspected acute dermatitis, evaluate total IgE and eosinophils',
+    status: 'IN_PROGRESS',
+    orderedAt: '2026-09-24T10:15:00.000Z',
+    items: [
+      {
+        id: 'item-101-1',
+        labOrderId: 'ord-101',
+        labTestId: 'lab-1',
+        testName: 'Complete Blood Count (CBC) with ESR',
+        code: 'LAB-CBC',
+        category: 'Hematology',
+        specimen: 'Whole Blood',
+        price: 350,
+        status: 'SAMPLE_COLLECTED'
+      },
+      {
+        id: 'item-101-2',
+        labOrderId: 'ord-101',
+        labTestId: 'lab-7',
+        testName: 'Serum Total IgE Allergy Level',
+        code: 'LAB-IGE',
+        category: 'Pathology',
+        specimen: 'Serum',
+        price: 850,
+        status: 'PROCESSING'
+      }
+    ]
+  },
+  {
+    id: 'ord-102',
+    orderNumber: 'LAB-ORD-90215',
+    patientId: 'p-3',
+    patientName: 'Mahesh Kumar',
+    consultationId: 'C003-001-190926',
+    doctorId: 'doc-1',
+    doctorName: 'Dr. Raj Valaki',
+    priority: 'Urgent',
+    clinicalNotes: 'Pre-procedure clearance and glycemic assessment',
+    status: 'ORDERED',
+    orderedAt: '2026-09-25T09:30:00.000Z',
+    items: [
+      {
+        id: 'item-102-1',
+        labOrderId: 'ord-102',
+        labTestId: 'lab-2',
+        testName: 'Blood Sugar (Fasting Glucose)',
+        code: 'LAB-BS',
+        category: 'Biochemistry',
+        specimen: 'Blood / Fluoride Plasma',
+        price: 100,
+        status: 'ORDERED'
+      },
+      {
+        id: 'item-102-2',
+        labOrderId: 'ord-102',
+        labTestId: 'lab-3',
+        testName: 'Liver Function Test (LFT)',
+        code: 'LAB-LFT',
+        category: 'Biochemistry',
+        specimen: 'Serum',
+        price: 600,
+        status: 'ORDERED'
+      }
     ]
   }
 ];
@@ -3911,10 +4852,17 @@ interface AdminState {
   addProcedure: (proc: Omit<ProcedureMaster, 'id'>) => void;
   updateProcedure: (id: string, updates: Partial<ProcedureMaster>) => void;
   deleteProcedure: (id: string) => void;
+  toggleProcedureStatus: (id: string) => void;
 
-  // Lab Tests
-  addLabTest: (test: Omit<LabTestMaster, 'id'>) => void;
+  // Lab Tests (Single Source of Truth Catalog)
+  addLabTest: (test: Omit<LabTestMaster, 'id'>) => LabTestMaster;
   updateLabTest: (id: string, updates: Partial<LabTestMaster>) => void;
+  deleteLabTest: (id: string) => void;
+  toggleLabTestStatus: (id: string) => void;
+  toggleLabTestOrderable: (id: string) => void;
+  addLabTestParameter: (labTestId: string, param: Omit<LabTestParameter, 'id' | 'labTestId'>) => void;
+  updateLabTestParameter: (labTestId: string, paramId: string, updates: Partial<LabTestParameter>) => void;
+  removeLabTestParameter: (labTestId: string, paramId: string) => void;
 
   // Expenses
   addExpense: (expense: Omit<ClinicExpense, 'id'>) => void;
@@ -3986,7 +4934,8 @@ export const useAdminStore = create<AdminState>()(
       addProcedure: (proc) => {
         const newProc: ProcedureMaster = {
           ...proc,
-          id: `proc-${Date.now()}`
+          id: `proc-${Date.now()}`,
+          isActive: proc.isActive !== undefined ? proc.isActive : true
         };
         set(s => ({ procedures: [newProc, ...s.procedures] }));
         notifyTabSync('doctor-admin');
@@ -4002,17 +4951,105 @@ export const useAdminStore = create<AdminState>()(
         notifyTabSync('doctor-admin');
       },
 
-      addLabTest: (test) => {
-        const newTest: LabTestMaster = {
-          ...test,
-          id: `lab-${Date.now()}`
-        };
-        set(s => ({ labTests: [newTest, ...s.labTests] }));
+      toggleProcedureStatus: (id) => {
+        set(s => ({
+          procedures: s.procedures.map(p => p.id === id ? { ...p, isActive: p.isActive === false ? true : false } : p)
+        }));
         notifyTabSync('doctor-admin');
       },
 
+      addLabTest: (test) => {
+        const newTest: LabTestMaster = {
+          ...test,
+          id: `lab-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        set(s => ({ labTests: [newTest, ...s.labTests] }));
+        notifyTabSync('doctor-admin');
+        try {
+          if (newTest.isActive && newTest.isOrderable) {
+            useInvestigationCatalogStore.getState().addTest({
+              id: newTest.id,
+              name: newTest.name,
+              category: newTest.category as any,
+              price: newTest.price,
+              unit: newTest.unit || 'Standard',
+              normalRange: newTest.normalRange || 'Standard',
+              specimenTube: newTest.container || newTest.specimenTube,
+              instructions: newTest.instructions
+            });
+          }
+        } catch {}
+        return newTest;
+      },
+
       updateLabTest: (id, updates) => {
-        set(s => ({ labTests: s.labTests.map(t => t.id === id ? { ...t, ...updates } : t) }));
+        set(s => ({
+          labTests: s.labTests.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      deleteLabTest: (id) => {
+        set(s => ({ labTests: s.labTests.filter(t => t.id !== id) }));
+        notifyTabSync('doctor-admin');
+        try {
+          useInvestigationCatalogStore.getState().deleteTest(id);
+        } catch {}
+      },
+
+      toggleLabTestStatus: (id) => {
+        set(s => ({
+          labTests: s.labTests.map(t => t.id === id ? { ...t, isActive: !t.isActive, updatedAt: new Date().toISOString() } : t)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      toggleLabTestOrderable: (id) => {
+        set(s => ({
+          labTests: s.labTests.map(t => t.id === id ? { ...t, isOrderable: !t.isOrderable, updatedAt: new Date().toISOString() } : t)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      addLabTestParameter: (labTestId, param) => {
+        const newParam: LabTestParameter = {
+          ...param,
+          id: `p-${Date.now()}`,
+          labTestId,
+          displayOrder: param.displayOrder ?? 99,
+          isActive: param.isActive ?? true
+        };
+        set(s => ({
+          labTests: s.labTests.map(t => t.id === labTestId ? {
+            ...t,
+            parameters: [...(t.parameters || []), newParam],
+            updatedAt: new Date().toISOString()
+          } : t)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      updateLabTestParameter: (labTestId, paramId, updates) => {
+        set(s => ({
+          labTests: s.labTests.map(t => t.id === labTestId ? {
+            ...t,
+            parameters: (t.parameters || []).map(p => p.id === paramId ? { ...p, ...updates } : p),
+            updatedAt: new Date().toISOString()
+          } : t)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      removeLabTestParameter: (labTestId, paramId) => {
+        set(s => ({
+          labTests: s.labTests.map(t => t.id === labTestId ? {
+            ...t,
+            parameters: (t.parameters || []).filter(p => p.id !== paramId),
+            updatedAt: new Date().toISOString()
+          } : t)
+        }));
         notifyTabSync('doctor-admin');
       },
 
@@ -4114,6 +5151,64 @@ export const useAdminStore = create<AdminState>()(
   )
 );
 
+export interface LabOrderState {
+  orders: LabOrder[];
+  createLabOrder: (order: Omit<LabOrder, 'id' | 'orderNumber' | 'orderedAt'>) => LabOrder;
+  updateOrderStatus: (orderId: string, status: LabOrder['status']) => void;
+  updateOrderItemStatus: (orderId: string, itemId: string, status: LabOrderItem['status']) => void;
+  getOrdersByConsultation: (consultationId: string) => LabOrder[];
+  getOrdersByPatient: (patientId: string) => LabOrder[];
+}
+
+export const useLabOrderStore = create<LabOrderState>()(
+  persist(
+    (set, get) => ({
+      orders: INITIAL_LAB_ORDERS,
+      createLabOrder: (order) => {
+        const orderNumber = `LAB-ORD-${Date.now().toString().slice(-5)}`;
+        const newOrder: LabOrder = {
+          ...order,
+          id: `ord-${Date.now()}`,
+          orderNumber,
+          orderedAt: new Date().toISOString(),
+          items: order.items.map((item, idx) => ({
+            ...item,
+            id: item.id || `item-${Date.now()}-${idx}`
+          }))
+        };
+        set(s => ({ orders: [newOrder, ...s.orders] }));
+        notifyTabSync('doctor-lab-orders');
+        return newOrder;
+      },
+      updateOrderStatus: (orderId, status) => {
+        set(s => ({
+          orders: s.orders.map(o => o.id === orderId ? { ...o, status } : o)
+        }));
+        notifyTabSync('doctor-lab-orders');
+      },
+      updateOrderItemStatus: (orderId, itemId, status) => {
+        set(s => ({
+          orders: s.orders.map(o => o.id === orderId ? {
+            ...o,
+            items: o.items.map(i => i.id === itemId ? { ...i, status } : i)
+          } : o)
+        }));
+        notifyTabSync('doctor-lab-orders');
+      },
+      getOrdersByConsultation: (consultationId) => {
+        return get().orders.filter(o => o.consultationId === consultationId);
+      },
+      getOrdersByPatient: (patientId) => {
+        return get().orders.filter(o => o.patientId === patientId);
+      }
+    }),
+    {
+      name: 'doctor-lab-orders',
+      storage: safeStorage,
+    }
+  )
+);
+
 // Cross-Tab & Cross-Window State Synchronization
 if (typeof window !== 'undefined') {
   const syncStore = (key?: string | null) => {
@@ -4126,6 +5221,7 @@ if (typeof window !== 'undefined') {
       if (!key || key === 'doctor-pharmacy') (usePharmacyStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-clinical') (useClinicalStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-lab') (useLabStore as any).persist?.rehydrate?.();
+      if (!key || key === 'doctor-lab-orders') (useLabOrderStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-inventory') (useInventoryStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-investigation-catalog') (useInvestigationCatalogStore as any).persist?.rehydrate?.();
       if (!key || key === 'doctor-procedure-catalog') (useProcedureCatalogStore as any).persist?.rehydrate?.();
@@ -4152,7 +5248,7 @@ export const resetAllStoresToDefault = () => {
   if (typeof window !== 'undefined') {
     const keys = [
       'doctor-patients', 'doctor-queue', 'doctor-appointments',
-      'doctor-billing', 'doctor-clinical', 'doctor-lab',
+      'doctor-billing', 'doctor-clinical', 'doctor-lab', 'doctor-lab-orders',
       'doctor-inventory', 'doctor-investigation-catalog',
       'doctor-procedure-catalog', 'doctor-followup', 'doctor-leaves',
       'doctor-chat', 'doctor-consultation', 'doctor-pharmacy',

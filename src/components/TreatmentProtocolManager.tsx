@@ -415,7 +415,11 @@ export default function TreatmentProtocolManager({
       border: '1.5px solid #0284C7',
       boxShadow: '0 4px 20px rgba(2, 132, 199, 0.08)',
       overflow: 'hidden',
-      marginBottom: 24
+      marginBottom: 24,
+      width: '100%',
+      maxWidth: '100%',
+      minWidth: 0,
+      boxSizing: 'border-box'
     }}>
       {/* Synchronization Status Bar */}
       <div style={{
@@ -476,10 +480,10 @@ export default function TreatmentProtocolManager({
       {/* ============================================================ */}
       {/* LEVEL 1: TREATMENT PROTOCOL */}
       {/* ============================================================ */}
-      <div style={{ padding: '16px 20px', background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+      <div style={{ padding: '16px 20px', background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
         
         {/* Protocol Control Bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10, width: '100%', maxWidth: '100%', minWidth: 0 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 900, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
               Level 1: Treatment Protocol Configuration
@@ -815,7 +819,11 @@ export default function TreatmentProtocolManager({
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: 10,
-          fontSize: 12
+          fontSize: 12,
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0369A1', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, color: '#0C4A6E' }}>
@@ -887,9 +895,9 @@ export default function TreatmentProtocolManager({
       {/* LEVEL 2: SESSION EXECUTION (Unlocked when schedule is confirmed) */}
       {/* ============================================================ */}
       {showLevel2 && (
-        <div id="level-2-execution-section" style={{ padding: '18px 20px', background: '#FFFFFF' }}>
+        <div id="level-2-execution-section" style={{ padding: '18px 20px', background: '#FFFFFF', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           {/* Header & View Switcher */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10, width: '100%', maxWidth: '100%', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: 15, fontWeight: 900, color: '#0F172A', margin: 0 }}>
                 Level 2: Session Execution &amp; Laser Machine Settings ({sessionData.procedures.length})
@@ -1561,11 +1569,21 @@ export default function TreatmentProtocolManager({
         {/* VIEW 2: 22-COLUMN SPREADSHEET TABLE */}
         {/* ============================================================ */}
         {viewMode === 'table' && (
-          <div style={{ overflowX: 'auto', border: '1px solid #CBD5E1', borderRadius: 8 }}>
+          <div style={{
+            overflowX: 'auto',
+            border: '1.5px solid #CBD5E1',
+            borderRadius: 8,
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            WebkitOverflowScrolling: 'touch',
+            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)',
+            background: '#FFFFFF'
+          }}>
             <table style={{ width: '100%', minWidth: 1600, borderCollapse: 'collapse', fontSize: 11.5 }}>
               <thead>
                 <tr style={{ background: '#0369A1', color: '#FFFFFF', textAlign: 'left', fontWeight: 800 }}>
-                  <th style={{ padding: '8px 10px' }}>SESSION</th>
+                  <th style={{ padding: '8px 10px', position: 'sticky', left: 0, zIndex: 3, background: '#0369A1', minWidth: 65, boxShadow: '2px 0 5px rgba(0,0,0,0.1)' }}>SESSION</th>
                   <th style={{ padding: '8px 10px' }}>F/U DATE</th>
                   <th style={{ padding: '8px 10px' }}>PERFORMANCE DATE</th>
                   <th style={{ padding: '8px 10px' }}>PROCEDURE</th>
@@ -1592,9 +1610,23 @@ export default function TreatmentProtocolManager({
               <tbody>
                 {sessionData.procedures.map((session, idx) => {
                   const isDone = session.status === 'Done';
+                  const rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
                   return (
-                    <tr key={session.id || idx} style={{ borderBottom: '1px solid #E2E8F0', background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
-                      <td style={{ padding: '6px 10px', fontWeight: 900, color: '#0369A1' }}>{session.sessionsCount || `${idx + 1}/4`}</td>
+                    <tr key={session.id || idx} style={{ borderBottom: '1px solid #E2E8F0', background: rowBg }}>
+                      <td style={{
+                        padding: '6px 10px',
+                        fontWeight: 900,
+                        color: '#0369A1',
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 2,
+                        background: rowBg,
+                        borderRight: '1.5px solid #CBD5E1',
+                        boxShadow: '2px 0 5px rgba(0,0,0,0.05)',
+                        minWidth: 65
+                      }}>
+                        {session.sessionsCount || `${idx + 1}/4`}
+                      </td>
                       <td style={{ padding: '6px 8px' }}>
                         <input
                           type="text"
@@ -1763,7 +1795,11 @@ export default function TreatmentProtocolManager({
               justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
-              gap: 12
+              gap: 12,
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: '#0F172A' }}>

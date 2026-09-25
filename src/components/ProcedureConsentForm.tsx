@@ -1154,7 +1154,11 @@ CLINICAL ARCHIVE RECORD STATUS:
         borderRadius: 12,
         border: '2px solid #036d92',
         boxShadow: '0 4px 20px rgba(3, 109, 146, 0.1)',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box'
       }}
     >
       {/* 1. Header Bar: Title, Procedure Binding Indicator, Language Toggles & Xerox Badge (NO-PRINT) */}
@@ -1231,9 +1235,11 @@ CLINICAL ARCHIVE RECORD STATUS:
                 {isCollapsed ? 'Collapsed' : 'Expanded'}
               </span>
             </div>
-            <div style={{ fontSize: 11.5, color: '#E0F2FE', marginTop: 2 }}>
-              Active Procedure: <strong>{effectiveProcedureName}</strong> • Target:{' '}
-              <strong>{patient.bodyPart || 'FACE'}</strong> • 12 Standard Clinical Lessons Available
+            <div style={{ fontSize: 11.5, color: '#E0F2FE', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>Active Procedure: <strong>{effectiveProcedureName}</strong> • Target: <strong>{patient.bodyPart || 'FACE'}</strong></span>
+              <span style={{ background: 'rgba(255, 255, 255, 0.22)', padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+                Master Source: /admin/consent-forms
+              </span>
             </div>
           </div>
         </div>

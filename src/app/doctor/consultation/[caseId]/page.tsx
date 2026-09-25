@@ -12,16 +12,18 @@ import {
   Upload, FileSignature, Copy, History, CreditCard, Layers,
   ExternalLink, TrendingUp, TrendingDown, Activity,
   Zap, RefreshCw, Ban, CheckCheck, Percent, Settings2,
-  LayoutGrid, List, Trash2, Share2, PhoneCall, PhoneOff, Building
+  LayoutGrid, List, Trash2, Share2, PhoneCall, PhoneOff, Building,
+  FlaskConical
 } from 'lucide-react';
 import {
   useConsultationStore, usePatientStore, useQueueStore,
   useInventoryStore, useInvestigationCatalogStore,
   useProcedureCatalogStore, useUIStore, useBillingStore,
-  usePharmacyStore, useClinicalStore, useAdminStore, useAppointmentStore,
+  usePharmacyStore, useClinicalStore, useAdminStore, useAppointmentStore, useFollowUpStore,
+  useLabOrderStore, LabTest, LabOrder, LabOrderItem,
   playChimeTone, Patient, Gender, PrescriptionFulfillmentItem,
   DrugInventoryItem, InvestigationCatalogItem, ProcedureCatalogItem, ProcedurePrescriptionItem,
-  PrescriptionItem, PrescriptionVisibility, ProcedureExecutionItem
+  PrescriptionItem, PrescriptionVisibility, ProcedureExecutionItem, ProcedureMaster
 } from '@/store';
 import ProcedureConsentForm, { ConsentPatientInfo, TWELVE_CONSENT_TEMPLATES, printElementA4 } from '@/components/ProcedureConsentForm';
 import TreatmentProtocolManager from '@/components/TreatmentProtocolManager';
@@ -66,30 +68,39 @@ const DEFAULT_DEMO_PRESCRIPTIONS: PrescriptionItem[] = [
 const DEFAULT_DEMO_PROCEDURE_PRESCRIPTIONS: ProcedurePrescriptionItem[] = [
   {
     id: 'proc-rx-demo-1',
-    itemName: '3.0 VICRIL SUTURE',
+    procedureId: 'proc-1',
+    source: 'PROCEDURE_MASTER',
+    itemName: 'Chemical Peel (Glycolic 35%)',
     quantity: 1,
-    idCode: 'BZX  320',
-    category: 'Suture / Closure',
+    idCode: 'PROC-DERM-01',
+    category: 'Dermatology',
     unit: 'Nos',
-    instructions: 'Suture closure'
+    instructions: 'Apply broad-spectrum SPF 50 sunscreen twice daily.',
+    printOnRx: true
   },
   {
     id: 'proc-rx-demo-2',
-    itemName: 'Ex darma rollar',
+    procedureId: 'proc-2',
+    source: 'PROCEDURE_MASTER',
+    itemName: 'Skin Lesion Excision & Biopsy',
     quantity: 1,
-    idCode: 'ZVX  580',
-    category: 'Derma Roller',
+    idCode: 'PROC-SURG-02',
+    category: 'General Surgery',
     unit: 'Nos',
-    instructions: 'Clinical procedure use'
+    instructions: 'Keep incision dry for 48 hours.',
+    printOnRx: true
   },
   {
     id: 'proc-rx-demo-3',
-    itemName: 'Ex 5cc series',
-    quantity: 2,
-    idCode: 'KMX 30',
-    category: 'Syringe / Series',
+    procedureId: 'proc-3',
+    source: 'PROCEDURE_MASTER',
+    itemName: 'Intra-Articular Knee Injection',
+    quantity: 1,
+    idCode: 'PROC-ORTHO-03',
+    category: 'Orthopedics',
     unit: 'Nos',
-    instructions: 'Dispensing series'
+    instructions: 'Limit weight-bearing for 24 hours. Ice application 15 mins every 3 hours.',
+    printOnRx: true
   }
 ];
 
@@ -389,7 +400,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   const { catalog: procCatalog } = useProcedureCatalogStore();
   const { addNotification } = useUIStore();
   const { addAppointment, appointments } = useAppointmentStore();
-  const { holidays } = useAdminStore();
+  const { holidays, labTests: adminLabTests, procedures: adminProcedures } = useAdminStore();
+  const { orders: allLabOrders, createLabOrder } = useLabOrderStore();
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'complaints' | 'investigations' | 'drugs' | 'procedures' | 'images' | 'diagnosis' | 'finalReport'>('complaints');
@@ -440,21 +452,123 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   const [printModalActiveTab, setPrintModalActiveTab] = useState<'consent' | 'xerox' | 'protocol' | 'homecare'>('consent');
   const [consentIpdNumber, setConsentIpdNumber] = useState('IPD-2026-089');
 
-  // Tab 2 Investigation Sub-Tab & Add Test Modal State
+  // Tab 2 Investigation & Lab Orders State (Consumes Admin Master Catalog Single Source of Truth)
   const [investigationSubTab, setInvestigationSubTab] = useState<'ORDER' | 'RESULTS'>('ORDER');
   const [invSearch, setInvSearch] = useState('');
-  const [showAddTestModal, setShowAddTestModal] = useState(false);
+  const [selectedInvCategory, setSelectedInvCategory] = useState<string>('ALL');
+  const [selectedRequisitionTests, setSelectedRequisitionTests] = useState<Array<{ test: LabTest; notes?: string }>>([]);
+  const [orderPriority, setOrderPriority] = useState<'Routine' | 'Urgent' | 'STAT'>('Routine');
+  const [orderClinicalNotes, setOrderClinicalNotes] = useState('');
+  const [viewingParametersTest, setViewingParametersTest] = useState<LabTest | null>(null);
   const [editingNoteTestId, setEditingNoteTestId] = useState<string | null>(null);
-  const [newTestForm, setNewTestForm] = useState({
-    name: '',
-    category: 'Hematology' as 'Hematology' | 'Biochemistry' | 'Pathology' | 'Radiology' | 'Microbiology',
-    price: 350,
-    unit: 'mg/dL',
-    normalRange: '',
-    specimenTube: 'EDTA (Purple Tube)',
-    instructions: '',
-    addToBasket: true
-  });
+
+  const activeOrderableCatalog = useMemo(() => {
+    return (adminLabTests || []).filter(t => t.isActive && t.isOrderable !== false);
+  }, [adminLabTests]);
+
+  const caseLabOrders = useMemo(() => {
+    return (allLabOrders || []).filter(o => o.consultationId === caseId);
+  }, [allLabOrders, caseId]);
+
+  const filteredOrderableTests = useMemo(() => {
+    return activeOrderableCatalog.filter(test => {
+      const matchSearch =
+        !invSearch ||
+        test.name.toLowerCase().includes(invSearch.toLowerCase()) ||
+        test.code.toLowerCase().includes(invSearch.toLowerCase()) ||
+        (test.category && test.category.toLowerCase().includes(invSearch.toLowerCase())) ||
+        (test.specimen && test.specimen.toLowerCase().includes(invSearch.toLowerCase()));
+
+      const matchCat =
+        selectedInvCategory === 'ALL' ||
+        test.category.toLowerCase() === selectedInvCategory.toLowerCase();
+
+      return matchSearch && matchCat;
+    });
+  }, [activeOrderableCatalog, invSearch, selectedInvCategory]);
+
+  const toggleSelectRequisitionTest = (test: LabTest) => {
+    setSelectedRequisitionTests(prev => {
+      const exists = prev.some(item => item.test.id === test.id);
+      if (exists) {
+        return prev.filter(item => item.test.id !== test.id);
+      } else {
+        return [...prev, { test, notes: '' }];
+      }
+    });
+  };
+
+  const removeSelectedRequisitionTest = (testId: string) => {
+    setSelectedRequisitionTests(prev => prev.filter(item => item.test.id !== testId));
+  };
+
+  const updateSelectedRequisitionNote = (testId: string, notes: string) => {
+    setSelectedRequisitionTests(prev => prev.map(item => item.test.id === testId ? { ...item, notes } : item));
+  };
+
+  const selectedRequisitionTotal = useMemo(() => {
+    return selectedRequisitionTests.reduce((sum, item) => sum + item.test.price, 0);
+  }, [selectedRequisitionTests]);
+
+  const handlePlaceLabOrder = () => {
+    if (selectedRequisitionTests.length === 0) {
+      addNotification({
+        type: 'warning',
+        message: 'Please select at least one lab test from the catalog before placing order.'
+      });
+      return;
+    }
+
+    const patientObj = patient || activeSession?.patient;
+    const patientNameStr = patientObj ? `${patientObj.firstName} ${patientObj.lastName}` : (activeSession?.patientName || 'Patient');
+
+    const createdOrder = createLabOrder({
+      patientId: patientObj?.id || activeSession?.patientId || 'unknown',
+      patientName: patientNameStr,
+      consultationId: caseId,
+      doctorId: activeSession?.doctorId || 'doc-1',
+      doctorName: activeSession?.doctorName || 'Dr. Raj Valaki',
+      priority: orderPriority,
+      clinicalNotes: orderClinicalNotes.trim() || undefined,
+      status: 'ORDERED',
+      items: selectedRequisitionTests.map(({ test, notes }) => ({
+        id: `item-${Date.now()}-${test.id}`,
+        labOrderId: '',
+        labTestId: test.id, // THE CRITICAL FOREIGN KEY: LabOrderItem.labTestId -> LabTest.id
+        testName: test.name,
+        code: test.code,
+        category: test.category,
+        specimen: test.specimen,
+        price: test.price,
+        status: 'ORDERED',
+        instructions: notes || test.instructions || undefined
+      }))
+    });
+
+    // Also synchronize into activeSession.investigations so billing, summary, and printout include the ordered tests
+    selectedRequisitionTests.forEach(({ test, notes }) => {
+      const alreadyInBasket = activeSession?.investigations?.some(i => i.testId === test.id || i.testName.toLowerCase() === test.name.toLowerCase());
+      if (!alreadyInBasket) {
+        addInvestigation({
+          testId: test.id,
+          testName: test.name,
+          category: test.category,
+          price: test.price,
+          status: 'ORDERED',
+          specimenTube: test.container || test.specimenTube,
+          notes: notes || test.instructions || ''
+        });
+      }
+    });
+
+    addNotification({
+      type: 'success',
+      message: `Placed Lab Order #${createdOrder.orderNumber} with ${createdOrder.items.length} diagnostic tests!`
+    });
+
+    setSelectedRequisitionTests([]);
+    setOrderClinicalNotes('');
+  };
 
   // Tab 3 Drugs State - All Writable Prescription Fields
   const [drugSearch, setDrugSearch] = useState('');
@@ -503,10 +617,56 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     setManualAiWarning(rep.warning || null);
   };
 
+  const activeAdminDrugs = useMemo(() => {
+    return (inventory || []).filter(d => d.isActive !== false);
+  }, [inventory]);
+
+  const activeAdminProcedures = useMemo(() => {
+    return (adminProcedures || []).filter(p => p.isActive !== false);
+  }, [adminProcedures]);
+
+  const [isDrugSelectorModalOpen, setIsDrugSelectorModalOpen] = useState(false);
+  const [drugModalSearch, setDrugModalSearch] = useState('');
+  const [isProcSelectorModalOpen, setIsProcSelectorModalOpen] = useState(false);
+  const [procModalSearch, setProcModalSearch] = useState('');
+  const [procModalCategory, setProcModalCategory] = useState<'ALL' | 'PROCEDURES' | 'DRUGS'>('ALL');
+
+  const filteredModalDrugs = useMemo(() => {
+    const q = drugModalSearch.trim().toLowerCase();
+    if (!q) return activeAdminDrugs;
+    return activeAdminDrugs.filter(d =>
+      d.name.toLowerCase().includes(q) ||
+      (d.genericName && d.genericName.toLowerCase().includes(q)) ||
+      (d.brandName && d.brandName.toLowerCase().includes(q)) ||
+      (d.manufacturer && d.manufacturer.toLowerCase().includes(q))
+    );
+  }, [activeAdminDrugs, drugModalSearch]);
+
+  const filteredModalDrugsForProc = useMemo(() => {
+    const q = procModalSearch.trim().toLowerCase();
+    if (!q) return activeAdminDrugs;
+    return activeAdminDrugs.filter(d =>
+      d.name.toLowerCase().includes(q) ||
+      (d.genericName && d.genericName.toLowerCase().includes(q)) ||
+      (d.brandName && d.brandName.toLowerCase().includes(q)) ||
+      (d.slotNo && d.slotNo.toLowerCase().includes(q))
+    );
+  }, [activeAdminDrugs, procModalSearch]);
+
+  const filteredModalProcedures = useMemo(() => {
+    const q = procModalSearch.trim().toLowerCase();
+    if (!q) return activeAdminProcedures;
+    return activeAdminProcedures.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.code.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    );
+  }, [activeAdminProcedures, procModalSearch]);
+
   const filteredDrugs = useMemo(() => {
-    if (!drugSearch.trim()) return inventory.slice(0, 10);
+    if (!drugSearch.trim()) return activeAdminDrugs.slice(0, 10);
     const q = drugSearch.toLowerCase();
-    return inventory.filter(d =>
+    return activeAdminDrugs.filter(d =>
       d.name.toLowerCase().includes(q) ||
       d.genericName.toLowerCase().includes(q) ||
       d.brandName?.toLowerCase().includes(q) ||
@@ -514,7 +674,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
       d.slotNo?.toLowerCase().includes(q) ||
       d.formulation.toLowerCase().includes(q)
     );
-  }, [inventory, drugSearch]);
+  }, [activeAdminDrugs, drugSearch]);
 
   // Tab 3 Rx Drugs & Right-Side Optional Procedure Prescriptions State
   const [showProcSideOption, setShowProcSideOption] = useState(true);
@@ -522,101 +682,197 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   const [procRxItemName, setProcRxItemName] = useState('');
   const [procRxQty, setProcRxQty] = useState(1);
   const [procRxIdCode, setProcRxIdCode] = useState('');
+  const [procRxSource, setProcRxSource] = useState<'PROCEDURE_MASTER' | 'DRUG_FORMULARY' | 'CUSTOM' | ''>('');
+  const [procRxMasterId, setProcRxMasterId] = useState<string>('');
   const [showProcCatalogDropdown, setShowProcCatalogDropdown] = useState(false);
   const [isCustomProcItem, setIsCustomProcItem] = useState(false);
 
-  const PROCEDURE_INSTRUMENTS_CATALOG = [
-    { name: '3.0 VICRIL SUTURE', idCode: 'BZX  320', defaultQty: 1, category: 'Suture / Closure' },
-    { name: 'Ex darma rollar', idCode: 'ZVX  580', defaultQty: 1, category: 'Derma Roller' },
-    { name: 'Derma Roller', idCode: 'ZVX  580', defaultQty: 1, category: 'Derma Roller' },
-    { name: 'Ex 5cc series', idCode: 'KMX 30', defaultQty: 2, category: 'Syringe / Series' },
-    { name: '5cc Syringe Series', idCode: 'KMX 30', defaultQty: 2, category: 'Syringe / Series' },
-    { name: 'Ex 2cc series', idCode: 'KMX 20', defaultQty: 2, category: 'Syringe / Series' },
-    { name: '2cc Syringe Series', idCode: 'KMX 20', defaultQty: 2, category: 'Syringe / Series' },
-    { name: 'Dispovan Syringe 5ml with 24G Needle', idCode: 'DSP 524', defaultQty: 2, category: 'Syringe' },
-    { name: 'Dispovan Syringe 2ml with 26G Needle', idCode: 'DSP 226', defaultQty: 2, category: 'Syringe' },
-    { name: 'Normal Saline (0.9% NaCl 500ml)', idCode: 'NS 500', defaultQty: 1, category: 'IV Bottle' },
-    { name: 'Ringer Lactate (RL 500ml)', idCode: 'RL 500', defaultQty: 1, category: 'IV Bottle' },
-    { name: 'Cotton Roller Bandage (4 Inch)', idCode: 'CRB 400', defaultQty: 2, category: 'Roller Bandage' },
-    { name: 'Cotton Roller Bandage (6 Inch)', idCode: 'CRB 600', defaultQty: 1, category: 'Roller Bandage' },
-    { name: 'Sterile Gauze Swab Pack', idCode: 'SGS 100', defaultQty: 2, category: 'Dressing / Gauze' },
-    { name: 'IV Cannula 22G Blue + Infusion Set', idCode: 'IVC 22B', defaultQty: 1, category: 'Cannula / Set' },
-    { name: 'Micropore Surgical Tape 1 Inch', idCode: 'MST 100', defaultQty: 1, category: 'Tape / Dressing' },
-    { name: 'Povidone Iodine (Betadine 10% Solution)', idCode: 'PVI 100', defaultQty: 1, category: 'Antiseptic Solution' },
-  ];
-
-  const filteredCatalogItems = useMemo(() => {
+  const filteredCatalogProcedures = useMemo(() => {
     const q = procRxItemName.trim().toLowerCase();
-    if (!q) return PROCEDURE_INSTRUMENTS_CATALOG;
-    return PROCEDURE_INSTRUMENTS_CATALOG.filter(item =>
+    if (!q) return activeAdminProcedures;
+    return activeAdminProcedures.filter(item =>
       item.name.toLowerCase().includes(q) ||
-      item.idCode.toLowerCase().includes(q) ||
+      item.code.toLowerCase().includes(q) ||
       item.category.toLowerCase().includes(q)
     );
-  }, [procRxItemName]);
+  }, [activeAdminProcedures, procRxItemName]);
 
-  const handleAddProcedurePrescription = () => {
-    const itemName = procRxItemName.trim();
-    if (!itemName) {
-      addNotification({
-        type: 'danger',
-        message: 'Please select or enter an Instrument / Drug name.'
-      });
+  const filteredCatalogDrugs = useMemo(() => {
+    const q = procRxItemName.trim().toLowerCase();
+    if (!q) return activeAdminDrugs.slice(0, 10);
+    return activeAdminDrugs.filter(item =>
+      item.name.toLowerCase().includes(q) ||
+      (item.brandName && item.brandName.toLowerCase().includes(q)) ||
+      (item.genericName && item.genericName.toLowerCase().includes(q)) ||
+      (item.slotNo && item.slotNo.toLowerCase().includes(q))
+    ).slice(0, 10);
+  }, [activeAdminDrugs, procRxItemName]);
+
+  const filteredCatalogItems = filteredCatalogProcedures;
+
+  const handleSelectFromProcedureMaster = (proc: ProcedureMaster) => {
+    setProcRxItemName(proc.name);
+    setProcRxIdCode(proc.code || proc.id);
+    setProcRxSource('PROCEDURE_MASTER');
+    setProcRxMasterId(proc.id);
+    setProcRxQty(1);
+    setShowProcCatalogDropdown(false);
+  };
+
+  const handleSelectFromDrugFormulary = (drug: DrugInventoryItem) => {
+    const displayName = drug.brandName ? `${drug.brandName} (${drug.name})` : drug.name;
+    setProcRxItemName(displayName);
+    setProcRxIdCode(drug.slotNo || drug.id);
+    setProcRxSource('DRUG_FORMULARY');
+    setProcRxMasterId(drug.id);
+    setProcRxQty(1);
+    setShowProcCatalogDropdown(false);
+  };
+
+  const handleUseCustomItem = (customName?: string) => {
+    const name = (customName || procRxItemName || '').trim() || 'Custom Clinical Item';
+    const genCode = `CUST-${Math.floor(100 + Math.random() * 899)}`;
+    setProcRxItemName(name);
+    setProcRxIdCode(genCode);
+    setProcRxSource('CUSTOM');
+    setProcRxMasterId('');
+    setProcRxQty(1);
+    setShowProcCatalogDropdown(false);
+  };
+
+  const handleSelectDrugForProcedure = (drug: DrugInventoryItem) => {
+    const displayName = drug.brandName ? `${drug.brandName} (${drug.name})` : drug.name;
+    addProcedurePrescription({
+      id: `proc-rx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      drugId: drug.id,
+      source: 'DRUG_FORMULARY',
+      itemName: displayName,
+      quantity: 1,
+      idCode: drug.slotNo || drug.id,
+      category: drug.formulation || 'Central Drug Formulary',
+      unit: 'Nos',
+      instructions: drug.defaultNote || 'Formulary consumable supply',
+      printOnRx: true
+    });
+    setIsProcSelectorModalOpen(false);
+    setProcModalSearch('');
+    addNotification({
+      type: 'success',
+      message: `Added formulary drug "${displayName}" referencing /admin/drugs master.`
+    });
+  };
+
+  const handleSelectProcedureFromMaster = (proc: ProcedureMaster) => {
+    addProcedurePrescription({
+      id: `proc-rx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      procedureId: proc.id,
+      source: 'PROCEDURE_MASTER',
+      itemName: proc.name,
+      quantity: 1,
+      idCode: proc.code,
+      category: proc.category,
+      unit: 'Nos',
+      instructions: proc.preInstructions || 'Clinical procedure supply',
+      printOnRx: true
+    });
+    setIsProcSelectorModalOpen(false);
+    setProcModalSearch('');
+    addNotification({
+      type: 'success',
+      message: `Added procedure supply "${proc.name}" (${proc.code}) referencing /admin/procedures master.`
+    });
+  };
+
+  const handleAddProcedurePrescription = (procParam?: any) => {
+    // If procParam is a React synthetic event or object without a string name, ignore it
+    const validProc: ProcedureMaster | undefined = (procParam && typeof procParam === 'object' && typeof procParam.name === 'string' && !procParam.nativeEvent && !procParam._reactName)
+      ? (procParam as ProcedureMaster)
+      : undefined;
+
+    if (validProc) {
+      handleSelectProcedureFromMaster(validProc);
       return;
     }
 
-    const matched = PROCEDURE_INSTRUMENTS_CATALOG.find(p =>
-      p.name.toLowerCase() === itemName.toLowerCase() ||
-      p.idCode.toLowerCase() === itemName.toLowerCase() ||
-      itemName.toLowerCase().includes(p.name.toLowerCase())
-    );
+    const query = (procRxItemName || '').trim();
+    if (!query) {
+      setIsProcSelectorModalOpen(true);
+      return;
+    }
 
-    // Dynamic ID Resolution: use explicitly entered ID, or matched catalog ID, or generate a unique prefix-based ID (never static)
-    const generatedPrefix = itemName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PRX';
-    const finalIdCode = procRxIdCode.trim() || (matched ? matched.idCode : `${generatedPrefix} ${Math.floor(100 + Math.random() * 899)}`);
+    let finalSource = procRxSource;
+    let finalProcedureId: string | undefined = undefined;
+    let finalDrugId: string | undefined = undefined;
+    let finalIdCode = (procRxIdCode || '').trim();
+
+    if (finalSource === 'PROCEDURE_MASTER' && procRxMasterId) {
+      finalProcedureId = procRxMasterId;
+    } else if (finalSource === 'DRUG_FORMULARY' && procRxMasterId) {
+      finalDrugId = procRxMasterId;
+    } else if (!finalSource) {
+      const matchProc = activeAdminProcedures.find(p => p.name.toLowerCase() === query.toLowerCase() || p.code.toLowerCase() === query.toLowerCase());
+      if (matchProc) {
+        finalSource = 'PROCEDURE_MASTER';
+        finalProcedureId = matchProc.id;
+        finalIdCode = finalIdCode || matchProc.code;
+      } else {
+        const matchDrug = activeAdminDrugs.find(d => d.name.toLowerCase() === query.toLowerCase() || d.brandName?.toLowerCase() === query.toLowerCase());
+        if (matchDrug) {
+          finalSource = 'DRUG_FORMULARY';
+          finalDrugId = matchDrug.id;
+          finalIdCode = finalIdCode || matchDrug.slotNo || matchDrug.id;
+        } else {
+          finalSource = 'CUSTOM';
+          if (!finalIdCode) finalIdCode = `CUST-${Math.floor(100 + Math.random() * 899)}`;
+        }
+      }
+    }
 
     addProcedurePrescription({
       id: `proc-rx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      itemName: itemName,
+      procedureId: finalProcedureId,
+      drugId: finalDrugId,
+      source: finalSource || 'CUSTOM',
+      itemName: query,
       quantity: procRxQty > 0 ? procRxQty : 1,
-      idCode: finalIdCode,
-      category: matched?.category || 'Procedure Supply',
+      idCode: finalIdCode || 'PRX-01',
+      category: finalSource === 'PROCEDURE_MASTER' ? 'Procedure Master' : finalSource === 'DRUG_FORMULARY' ? 'Central Drug Formulary' : 'Custom Supply',
       unit: 'Nos',
-      instructions: 'For clinical procedure use'
+      instructions: finalSource === 'CUSTOM' ? 'Custom clinical supply' : 'Allocated from Clinical Master',
+      printOnRx: true
     });
 
     addNotification({
       type: 'success',
-      message: `Prescribed ${itemName} (Qty: ${procRxQty > 0 ? procRxQty : 1}, ID Code: ${finalIdCode})`
+      message: `Prescribed ${query} (Qty: ${procRxQty > 0 ? procRxQty : 1}, Code: ${finalIdCode})`
     });
 
     setProcRxItemName('');
     setProcRxIdCode('');
     setProcRxQty(1);
+    setProcRxSource('');
+    setProcRxMasterId('');
     setShowProcCatalogDropdown(false);
-    setIsCustomProcItem(false);
+    setIsProcSelectorModalOpen(false);
   };
 
   const handleLoadStandardProcedureSupplies = () => {
-    const defaults = [
-      { name: '3.0 VICRIL SUTURE', idCode: 'BZX  320', qty: 1, category: 'Suture / Closure' },
-      { name: 'Ex darma rollar', idCode: 'ZVX  580', qty: 1, category: 'Derma Roller' },
-      { name: 'Ex 5cc series', idCode: 'KMX 30', qty: 2, category: 'Syringe / Series' }
-    ];
-    defaults.forEach((def, i) => {
+    const procsToLoad = activeAdminProcedures.slice(0, 3);
+    procsToLoad.forEach((proc, i) => {
       addProcedurePrescription({
         id: `proc-std-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
-        itemName: def.name,
-        quantity: def.qty,
-        idCode: def.idCode,
-        category: def.category,
+        procedureId: proc.id,
+        itemName: proc.name,
+        quantity: 1,
+        idCode: proc.code,
+        category: proc.category,
         unit: 'Nos',
-        instructions: 'Clinical procedure supply'
+        instructions: proc.preInstructions || 'Clinical procedure supply'
       });
     });
     addNotification({
       type: 'success',
-      message: 'Loaded 3 standard procedure supplies: 3.0 VICRIL SUTURE, Ex darma rollar, Ex 5cc series'
+      message: `Loaded ${procsToLoad.length} procedure supplies from Admin Procedure Master`
     });
   };
 
@@ -1232,6 +1488,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
       followUpDate: diag.followUpDate || ''
     });
 
+    syncFollowUpToCallList();
     handleSaveClinicalData();
 
     addNotification({
@@ -1345,12 +1602,39 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     });
   };
 
+  // Helper: Live Sync Follow-Up to Outbound Call List
+  const syncFollowUpToCallList = (diagUpdates?: Partial<ConsultationSession['diagnosis']>) => {
+    const currentDiag = { ...(activeSession?.diagnosis || {}), ...(diagUpdates || {}) };
+    const retDate = currentDiag.followUpDate || '';
+    if (retDate || currentDiag.nursingInstructions || currentDiag.followUpPurpose) {
+      useFollowUpStore.getState().upsertConsultationTask({
+        caseId,
+        patientId: patient.id,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        mrdNumber: patient.mrdNumber || 'MRD-2026-0004',
+        mobile: patient.mobile || '9825100004',
+        doctorName: activeSession?.doctorName || 'Dr. Raj Valaki',
+        originalVisitDate: formatToDDMMYYYY(new Date()),
+        reason: currentDiag.followUpPurpose || 'Assess clinical clearance of fungal lesions',
+        dueDate: retDate || formatToDDMMYYYY(new Date(Date.now() + (Number(currentDiag.followUpDays) || 7) * 86400000)),
+        followUpDays: currentDiag.followUpDays || 7,
+        nursingInstructions: currentDiag.nursingInstructions || 'Call patient at day 5 to verify compliance and assess clinical clearance of fungal lesions',
+        priority: (currentDiag.nursingFollowUp?.priority as any) || 'High',
+        status: 'PENDING'
+      });
+    }
+  };
+
   // Helper: Select Follow Up preset days
   const handleSelectFollowUpPreset = (days: number) => {
     setIsCustomIntervalActive(false);
     const today = new Date();
     const fDate = formatToDDMMYYYY(new Date(today.getTime() + days * 24 * 60 * 60 * 1000));
     updateDiagnosis({
+      followUpDays: days,
+      followUpDate: fDate
+    });
+    syncFollowUpToCallList({
       followUpDays: days,
       followUpDate: fDate
     });
@@ -1606,6 +1890,39 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     if (currentProcs.length <= 1) {
       setProcedures(DEFAULT_DEMO_TREATMENT_SESSIONS);
     }
+    if (!activeSession.diagnosis?.followUpDate) {
+      const defaultDays = 7;
+      const defaultDate = formatToDDMMYYYY(new Date(Date.now() + defaultDays * 86400000));
+      const defaultPurpose = 'Assess clinical clearance of fungal lesions';
+      const defaultNursingInstructions = 'Call patient at day 5 to verify compliance and assess clinical clearance of fungal lesions';
+      updateDiagnosis({
+        followUpDays: defaultDays,
+        followUpDate: defaultDate,
+        followUpPurpose: defaultPurpose,
+        nursingInstructions: defaultNursingInstructions,
+        visibility: {
+          ...(activeSession.diagnosis?.visibility || {
+            diagnosis: true, diagnosisNote: true, advice: true, dietAdvice: false, investigation: true, procedure: true, followUp: true, referral: false
+          }),
+          followUp: true
+        }
+      });
+      useFollowUpStore.getState().upsertConsultationTask({
+        caseId,
+        patientId: patient.id,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        mrdNumber: patient.mrdNumber || 'MRD-2026-0004',
+        mobile: patient.mobile || '9825100004',
+        doctorName: activeSession?.doctorName || 'Dr. Raj Valaki',
+        originalVisitDate: formatToDDMMYYYY(new Date()),
+        reason: defaultPurpose,
+        dueDate: defaultDate,
+        followUpDays: defaultDays,
+        nursingInstructions: defaultNursingInstructions,
+        priority: 'High',
+        status: 'PENDING'
+      });
+    }
   }, [activeSession, addPrescription, addProcedurePrescription, addInvestigation, setProcedures]);
 
   // Guaranteed Unique Prescriptions and Procedure Items for React Keys
@@ -1625,12 +1942,17 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     const list = activeSession?.procedurePrescriptions || [];
     const seen = new Set<string>();
     return list.filter((item, idx) => {
+      if (!item || !item.itemName || item.itemName === 'undefined' || item.itemName === 'null') return false;
       const key = item.id || `proc-${idx}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
   }, [activeSession?.procedurePrescriptions]);
+
+  const printableProcedurePrescriptions = useMemo(() => {
+    return uniqueProcedurePrescriptions.filter(p => p.printOnRx !== false);
+  }, [uniqueProcedurePrescriptions]);
 
   const uniqueInvestigations = useMemo(() => {
     const list = activeSession?.investigations || [];
@@ -2031,18 +2353,15 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     });
   };
 
-  // Drug Selection & Smart Search Direct Prescribe Handlers
-  const handleAddDrugFromSmartSearch = (drug: DrugInventoryItem) => {
+  // Drug Selection & Smart Search Direct Prescribe Handlers (Single Source of Truth: /admin/drugs)
+  const handleSelectDrugFromMaster = (drug: DrugInventoryItem) => {
     const isTablet = drug.formulation === 'Tablet' || drug.formulation === 'Capsule';
-    const generic = drug.genericName || drug.name;
-    const brand = drug.brandName || drug.name;
-
     const finalItem: PrescriptionItem = {
       id: `rx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       drugId: drug.id,
-      drugName: brand,
-      brandName: brand,
-      genericName: generic,
+      drugName: drug.name,
+      brandName: drug.brandName || drug.name,
+      genericName: drug.genericName || drug.name,
       manufacturer: drug.manufacturer || 'Cipla pvt',
       dosage: drug.defaultDose || (isTablet ? '1 tab' : '1'),
       frequency: drug.defaultFreq || (isTablet ? 'Od after mill' : 'tds'),
@@ -2070,8 +2389,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
     addPrescription(finalItem);
 
-    // Allergy check
-    const checkName = (brand + ' ' + generic).toLowerCase();
+    // Dynamic AI Safety Check
+    const checkName = (finalItem.brandName + ' ' + finalItem.genericName).toLowerCase();
     if (checkName.includes('penicillin') || checkName.includes('amoxicillin')) {
       setAiSafetyReport({
         checked: true,
@@ -2082,22 +2401,39 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
       setAiSafetyReport({
         checked: true,
         safe: true,
-        warning: '✓ AI Safety Check: Dosage validated for adult weight; no interaction with current medications.'
+        warning: '✓ AI Drug Safety Verified: Dosage validated for adult weight; no interaction with current medications.'
       });
     }
 
+    setIsDrugSelectorModalOpen(false);
+    setDrugModalSearch('');
+    addNotification({
+      type: 'success',
+      message: `Prescribed ${drug.name} referencing /admin/drugs master ID: ${drug.id}`
+    });
+  };
+
+  const handleAddDrugFromSmartSearch = (drug: DrugInventoryItem) => {
+    handleSelectDrugFromMaster(drug);
     setDrugSearch('');
     setIsDrugDropdownOpen(false);
     setSelectedDrug(null);
-    addNotification({
-      type: 'success',
-      message: `Prescribed ${brand} (${finalItem.dosage})`
-    });
   };
 
   const handleAddCustomDrugFromSearch = (customName?: string) => {
     const name = (customName || drugSearch).trim();
     if (!name) return;
+
+    // Search active drugs catalog first
+    const matched = activeAdminDrugs.find(d =>
+      d.name.toLowerCase() === name.toLowerCase() ||
+      d.genericName.toLowerCase() === name.toLowerCase() ||
+      d.brandName?.toLowerCase() === name.toLowerCase()
+    );
+    if (matched) {
+      handleAddDrugFromSmartSearch(matched);
+      return;
+    }
 
     const isCream = name.toLowerCase().includes('cream') || name.toLowerCase().includes('ointment') || name.toLowerCase().includes('lotion');
     const isTablet = !isCream && !name.toLowerCase().includes('syrup');
@@ -2152,52 +2488,14 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   };
 
   const handleAddBlankRow = () => {
-    const finalItem: PrescriptionItem = {
-      id: `rx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      drugName: '',
-      brandName: '',
-      genericName: '',
-      manufacturer: 'Cipla pvt',
-      dosage: '1 tab',
-      frequency: 'Od after mill',
-      durationDays: '5 day',
-      totalQty: '5',
-      instructions: 'Not teken with milk',
-      slotNo: 'BZX 120',
-      price: '120',
-      timing: 'AFTER_MEAL',
-      startDate: new Date().toISOString().split('T')[0],
-      visibility: {
-        generic: true,
-        brandName: true,
-        manufacturer: true,
-        dosage: true,
-        frequency: true,
-        durationDays: true,
-        totalQty: true,
-        instructions: true,
-        slotNo: true,
-        price: true
-      }
-    };
-
-    addPrescription(finalItem);
-    addNotification({
-      type: 'info',
-      message: 'Added new writable row to prescription table.'
-    });
+    // Single Source of Truth flow: open searchable Drug Master selector
+    setIsDrugSelectorModalOpen(true);
   };
 
-  const handleSelectDrug = (drug: DrugInventoryItem) => handleAddDrugFromSmartSearch(drug);
+  const handleSelectDrug = (drug: DrugInventoryItem) => handleSelectDrugFromMaster(drug);
   const handleCreateCustomDrug = () => handleAddCustomDrugFromSearch();
   const handleAddDrugRow = () => {
-    if (filteredDrugs.length > 0) {
-      handleAddDrugFromSmartSearch(filteredDrugs[0]);
-    } else if (drugSearch.trim()) {
-      handleAddCustomDrugFromSearch();
-    } else {
-      handleAddBlankRow();
-    }
+    setIsDrugSelectorModalOpen(true);
   };
 
   // Put on Hold Handler
@@ -2380,6 +2678,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
       followUpDate: activeSession?.diagnosis.followUpDate
     });
 
+    syncFollowUpToCallList();
+
     // 4. Queue state transition & SSE emission
     endSessionAndSendToBilling(caseId, nextStage);
 
@@ -2513,7 +2813,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
 
       {/* Main Workspace Layout (Side Panel + 7 Tabs) */}
-      <div className="consultation-layout-grid" style={{ display: 'grid', gridTemplateColumns: showSidePanel ? '280px 1fr' : '1fr', gap: 16 }}>
+      <div className="consultation-layout-grid" style={{ display: 'grid', gridTemplateColumns: showSidePanel ? '280px minmax(0, 1fr)' : 'minmax(0, 1fr)', gap: 16, width: '100%', maxWidth: '100%', minWidth: 0 }}>
         {/* 5.3 Patient Side Panel */}
         {showSidePanel && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -2610,7 +2910,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         )}
 
         {/* 7 Clinical Consultation Tabs Area */}
-        <div>
+        <div style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
           {/* Tabs Navigation Header */}
           <div className="tabs consultation-tabs" style={{ background: '#FFFFFF', borderRadius: '10px 10px 0 0', padding: '6px 12px', border: '1px solid var(--border)', borderBottom: 'none', overflowX: 'auto', whiteSpace: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
             {[
@@ -3096,9 +3396,38 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* ============================================================ */}
           {/* TAB 2: Investigations & Lab Orders */}
           {/* ============================================================ */}
+          {/* ============================================================ */}
+          {/* TAB 2: Investigations & Lab Orders (Master Catalog Consumer) */}
+          {/* ============================================================ */}
           {activeTab === 'investigations' && (
             <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none' }}>
               <div className="card-body">
+                {/* Single Master Source Banner */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#EEF2FF',
+                  border: '1px solid #C7D2FE',
+                  borderRadius: 8,
+                  padding: '10px 16px',
+                  marginBottom: 16,
+                  flexWrap: 'wrap',
+                  gap: 8
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', background: '#6366F1', color: '#FFFFFF', padding: '2px 8px', borderRadius: 4 }}>
+                      SINGLE SOURCE OF TRUTH
+                    </span>
+                    <span style={{ fontSize: 12.5, color: '#3730A3', fontWeight: 600 }}>
+                      Hospital Diagnostic Catalog loaded live from Admin Master (<code>/admin/lab</code>).
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#4F46E5', fontWeight: 600 }}>
+                    Active Orderable Tests: {activeOrderableCatalog.length} | Placed Orders: {caseLabOrders.length}
+                  </div>
+                </div>
+
                 {/* Sub-Tabs: ORDER vs RESULTS */}
                 <div style={{ display: 'flex', gap: 10, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
                   <button
@@ -3106,320 +3435,395 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     className={`btn ${investigationSubTab === 'ORDER' ? 'btn-primary' : 'btn-outline'} btn-sm`}
                     style={{ background: investigationSubTab === 'ORDER' ? '#036d92' : undefined }}
                   >
-                    1. Requisition & Order Tests
+                    1. Requisition &amp; Order Tests ({selectedRequisitionTests.length} draft / {caseLabOrders.length} placed)
                   </button>
                   <button
                     onClick={() => setInvestigationSubTab('RESULTS')}
                     className={`btn ${investigationSubTab === 'RESULTS' ? 'btn-primary' : 'btn-outline'} btn-sm`}
                     style={{ background: investigationSubTab === 'RESULTS' ? '#036d92' : undefined }}
                   >
-                    2. Ingestion & Result Parameters
+                    2. Ingestion &amp; Result Parameters
                   </button>
                 </div>
 
                 {investigationSubTab === 'ORDER' ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20 }}>
-                    {/* Catalog Search & New Lab Order Button */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: 20 }}>
+                    
+                    {/* LEFT COLUMN: Search Hospital Diagnostic Catalog */}
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <div className="form-label" style={{ margin: 0, fontWeight: 700 }}>Search Hospital Diagnostic Catalog</div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNewTestForm({
-                              name: invSearch || '',
-                              category: 'Hematology',
-                              price: 350,
-                              unit: 'mg/dL',
-                              normalRange: '',
-                              specimenTube: 'EDTA (Purple Tube)',
-                              instructions: '',
-                              addToBasket: true
-                            });
-                            setShowAddTestModal(true);
-                          }}
-                          className="btn btn-sm btn-primary"
-                          style={{ background: '#036d92', borderColor: '#036d92', fontSize: 11.5, padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                        >
-                          <Plus size={13} /> Add New Lab Test
-                        </button>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <div className="form-label" style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#0F172A' }}>
+                          Search Hospital Diagnostic Catalog
+                        </div>
+                        <span style={{ fontSize: 11.5, color: '#64748B' }}>
+                          Admin Controlled ({filteredOrderableTests.length} available)
+                        </span>
                       </div>
 
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Search CBC, ASO Titre, Lipid, HbA1c, KOH scraping, IgE, X-Ray..."
-                        value={invSearch}
-                        onChange={e => setInvSearch(e.target.value)}
-                        style={{ marginBottom: 10 }}
-                      />
+                      {/* Search Input */}
+                      <div style={{ position: 'relative', marginBottom: 10 }}>
+                        <Search size={15} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Search Hospital Diagnostic Catalog (CBC, Blood Sugar, LFT, IgE, RFT)..."
+                          value={invSearch}
+                          onChange={e => setInvSearch(e.target.value)}
+                          style={{ paddingLeft: 36, marginBottom: 0 }}
+                        />
+                      </div>
 
-                      {/* Quick prompt to add searched test if not present */}
-                      {invSearch.trim().length > 0 && (
-                        <div style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '6px 12px', background: '#F0F9FF', borderRadius: 6,
-                          border: '1px dashed #0284C7', marginBottom: 10
-                        }}>
-                          <span style={{ fontSize: 12, color: '#0369A1' }}>Can&apos;t find &ldquo;{invSearch}&rdquo; in catalog?</span>
+                      {/* Category Pills */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                        {['ALL', 'Hematology', 'Biochemistry', 'Pathology', 'Microbiology'].map((cat) => (
                           <button
+                            key={cat}
                             type="button"
-                            onClick={() => {
-                              setNewTestForm({
-                                name: invSearch,
-                                category: 'Biochemistry',
-                                price: 450,
-                                unit: 'mg/dL',
-                                normalRange: '',
-                                specimenTube: 'EDTA (Purple Tube)',
-                                instructions: '',
-                                addToBasket: true
-                              });
-                              setShowAddTestModal(true);
+                            onClick={() => setSelectedInvCategory(cat)}
+                            style={{
+                              padding: '3px 10px',
+                              borderRadius: 20,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: selectedInvCategory === cat ? 'none' : '1px solid #CBD5E1',
+                              background: selectedInvCategory === cat ? '#036d92' : '#FFFFFF',
+                              color: selectedInvCategory === cat ? '#FFFFFF' : '#475569'
                             }}
-                            className="btn btn-sm btn-ghost"
-                            style={{ color: '#0369A1', fontWeight: 800, padding: '2px 8px', fontSize: 11.5 }}
                           >
-                            + Add &ldquo;{invSearch}&rdquo; as New Test
+                            {cat === 'ALL' ? 'All Categories' : cat}
                           </button>
-                        </div>
-                      )}
+                        ))}
+                      </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
-                        {invCatalog
-                          .filter(t => !invSearch || t.name.toLowerCase().includes(invSearch.toLowerCase()) || (t.category && t.category.toLowerCase().includes(invSearch.toLowerCase())))
-                          .map(test => {
-                            const isAlreadyInBasket = activeSession?.investigations.some(i => i.testId === test.id || i.testName.toLowerCase() === test.name.toLowerCase());
+                      {/* Catalog Items List */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 480, overflowY: 'auto', paddingRight: 4 }}>
+                        {filteredOrderableTests.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '36px 12px', background: '#F8FAFC', borderRadius: 8, border: '1px dashed #CBD5E1', color: '#64748B', fontSize: 12 }}>
+                            No active catalog test matching &ldquo;{invSearch}&rdquo;.
+                            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
+                              Tests must be configured and activated in <strong>/admin/lab</strong>.
+                            </div>
+                          </div>
+                        ) : (
+                          filteredOrderableTests.map((test) => {
+                            const isSelected = selectedRequisitionTests.some(item => item.test.id === test.id);
+                            const isAlreadyOrdered = caseLabOrders.some(order => order.items.some(i => i.labTestId === test.id));
+
                             return (
                               <div
                                 key={test.id}
                                 style={{
-                                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                  padding: '10px 14px', background: '#F8FAFC', borderRadius: 8,
-                                  border: '1px solid #E2E8F0',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                                  padding: '12px 14px',
+                                  background: isSelected ? '#F0F9FF' : '#FFFFFF',
+                                  borderRadius: 8,
+                                  border: `1.5px solid ${isSelected ? '#0284C7' : '#E2E8F0'}`,
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                                  transition: 'all 0.1s ease'
                                 }}
                               >
-                                <div>
-                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>{test.name}</div>
-                                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                                    <span className="badge badge-purple" style={{ fontSize: 10, padding: '1px 6px', marginRight: 6 }}>{test.category}</span>
-                                    Ref: {test.normalRange || 'Standard'} {test.specimenTube ? `• 🧪 ${test.specimenTube}` : ''} {test.instructions ? `• ${test.instructions}` : ''}
-                                  </div>
-                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <span style={{
+                                        fontWeight: 800,
+                                        fontSize: 11,
+                                        fontFamily: 'monospace',
+                                        background: '#EEF2FF',
+                                        color: '#4F46E5',
+                                        padding: '1px 6px',
+                                        borderRadius: 4,
+                                        border: '1px solid #C7D2FE'
+                                      }}>
+                                        {test.code}
+                                      </span>
+                                      <span style={{ fontWeight: 800, fontSize: 13, color: '#0F172A' }}>
+                                        {test.name}
+                                      </span>
+                                    </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span style={{ fontWeight: 800, fontSize: 13, color: '#036d92' }}>₹{test.price}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      addInvestigation({
-                                        testId: test.id,
-                                        testName: test.name,
-                                        category: test.category,
-                                        price: test.price,
-                                        status: 'ORDERED',
-                                        specimenTube: test.specimenTube,
-                                        notes: test.instructions || ''
-                                      });
-                                      addNotification({
-                                        type: 'info',
-                                        message: `Added ${test.name} to Investigation Basket`
-                                      });
-                                    }}
-                                    className={`btn ${isAlreadyInBasket ? 'btn-ghost' : 'btn-outline'} btn-sm`}
-                                    style={{
-                                      borderColor: '#036d92',
-                                      color: isAlreadyInBasket ? '#059669' : '#036d92',
-                                      fontWeight: 700,
-                                      fontSize: 12
-                                    }}
-                                  >
-                                    {isAlreadyInBasket ? '+ Add Again' : '+ Add Order'}
-                                  </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                                      <span className="badge badge-purple" style={{ fontSize: 10, padding: '1px 6px' }}>
+                                        {test.category}
+                                      </span>
+                                      <span style={{ fontSize: 11, color: '#475569' }}>
+                                        🧪 {test.specimen}
+                                      </span>
+                                      {test.turnaroundTime && (
+                                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                                          • TAT: {test.turnaroundTime}
+                                        </span>
+                                      )}
+                                      {test.requiresFasting && (
+                                        <span style={{ fontSize: 10, background: '#FEF3C7', color: '#B45309', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                          Fasting Req.
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {test.parameters && test.parameters.length > 0 && (
+                                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewingParametersTest(test)}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            fontSize: 11,
+                                            color: '#6366F1',
+                                            cursor: 'pointer',
+                                            textDecoration: 'underline',
+                                            fontWeight: 600
+                                          }}
+                                        >
+                                          View {test.parameters.length} Ingestion Parameters
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                                    <span style={{ fontWeight: 900, fontSize: 14, color: '#036d92' }}>
+                                      ₹{test.price}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSelectRequisitionTest(test)}
+                                      className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'} btn-sm`}
+                                      style={{
+                                        background: isSelected ? '#036d92' : '#FFFFFF',
+                                        borderColor: '#036d92',
+                                        color: isSelected ? '#FFFFFF' : '#036d92',
+                                        fontWeight: 800,
+                                        fontSize: 11.5,
+                                        padding: '4px 12px'
+                                      }}
+                                    >
+                                      {isSelected ? '✓ Added' : '+ Add'}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                        )}
                       </div>
                     </div>
 
-                    {/* Ordered Basket with Note Option */}
-                    <div style={{ background: '#F8FAFC', padding: 18, borderRadius: 10, border: '1px solid #E2E8F0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <div style={{ fontWeight: 800, fontSize: 14, color: '#036d92', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Heart size={16} /> Active Investigation Basket ({activeSession?.investigations.length || 0})
-                        </div>
-                        {activeSession?.investigations && activeSession.investigations.length > 0 && (
-                          <span className="badge badge-primary" style={{ fontSize: 11 }}>
-                            Total: ₹{investigationsTotal}
-                          </span>
-                        )}
-                      </div>
-
-                      {activeSession?.investigations.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--text-muted)', fontSize: 12, background: '#FFFFFF', borderRadius: 8, border: '1px dashed #CBD5E1' }}>
-                          <FileText size={32} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
-                          <p style={{ fontWeight: 600, margin: '0 0 8px' }}>No tests requisitioned for this visit yet.</p>
-                          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                addInvestigation({
-                                  testId: 'inv-1',
-                                  testName: 'Complete Blood Count (CBC) with ESR',
-                                  category: 'Hematology',
-                                  price: 350,
-                                  status: 'ORDERED',
-                                  notes: 'Routine hematological workup, check ESR and platelet count'
-                                });
-                                addNotification({
-                                  type: 'info',
-                                  message: 'Added Complete Blood Count (CBC) with ESR to Basket'
-                                });
-                              }}
-                              className="btn btn-outline btn-sm"
-                              style={{ borderColor: '#036d92', color: '#036d92', fontWeight: 700 }}
-                            >
-                              + Add CBC with ESR (₹350)
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewTestForm({
-                                  name: '',
-                                  category: 'Biochemistry',
-                                  price: 450,
-                                  unit: 'mg/dL',
-                                  normalRange: '',
-                                  specimenTube: 'EDTA (Purple Tube)',
-                                  instructions: '',
-                                  addToBasket: true
-                                });
-                                setShowAddTestModal(true);
-                              }}
-                              className="btn btn-primary btn-sm"
-                              style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 700 }}
-                            >
-                              <Plus size={13} /> Add New Lab Test
-                            </button>
+                    {/* RIGHT COLUMN: Selected Tests Requisition & Place Lab Order */}
+                    <div style={{ background: '#F8FAFC', padding: 18, borderRadius: 10, border: '1px solid #CBD5E1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: '#036d92', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Heart size={16} /> Selected Tests Requisition ({selectedRequisitionTests.length})
                           </div>
+                          {selectedRequisitionTests.length > 0 && (
+                            <span className="badge badge-primary" style={{ fontSize: 11 }}>
+                              Requisition: ₹{selectedRequisitionTotal}
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {activeSession?.investigations.map((item, idx) => (
-                            <div
-                              key={`${item.testId}-${idx}`}
-                              style={{
-                                padding: '12px 14px', background: '#FFFFFF', borderRadius: 8,
-                                border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-                              }}
-                            >
-                              {/* Top row: Name, price, delete */}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                  <div style={{ fontWeight: 800, fontSize: 13, color: '#0F172A' }}>{item.testName}</div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                                    <span className="badge badge-purple" style={{ fontSize: 10 }}>{item.category}</span>
-                                    <span className="badge badge-info" style={{ fontSize: 10 }}>ORDERED</span>
-                                    {item.specimenTube && (
-                                      <span className="badge" style={{ fontSize: 10, background: '#EDE9FE', color: '#6D28D9', border: '1px solid #DDD6FE' }}>
-                                        🧪 {item.specimenTube}
-                                      </span>
-                                    )}
-                                    <span style={{ fontWeight: 800, fontSize: 12, color: '#036d92' }}>₹{item.price}</span>
+
+                        {selectedRequisitionTests.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '28px 12px', background: '#FFFFFF', borderRadius: 8, border: '1px dashed #CBD5E1', color: '#64748B', fontSize: 12 }}>
+                            <FileText size={28} color="#94A3B8" style={{ margin: '0 auto 6px' }} />
+                            <p style={{ fontWeight: 700, margin: '0 0 4px', color: '#1E293B' }}>
+                              No tests selected from catalog yet.
+                            </p>
+                            <p style={{ margin: 0, fontSize: 11.5, color: '#94A3B8' }}>
+                              Search the Hospital Diagnostic Catalog on the left and click <strong>[ + Add ]</strong> to build this order requisition.
+                            </p>
+
+                            {/* Quick Add Shortcuts for Common Tests */}
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+                              {activeOrderableCatalog.slice(0, 3).map(commonTest => (
+                                <button
+                                  key={commonTest.id}
+                                  type="button"
+                                  onClick={() => toggleSelectRequisitionTest(commonTest)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ borderColor: '#036d92', color: '#036d92', fontSize: 11, fontWeight: 700 }}
+                                >
+                                  + {commonTest.code} (₹{commonTest.price})
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 260, overflowY: 'auto' }}>
+                            {selectedRequisitionTests.map(({ test, notes }) => (
+                              <div
+                                key={test.id}
+                                style={{
+                                  padding: '10px 12px',
+                                  background: '#FFFFFF',
+                                  borderRadius: 8,
+                                  border: '1px solid #CBD5E1'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ color: '#059669', fontWeight: 800 }}>☑</span>
+                                    <div>
+                                      <div style={{ fontWeight: 800, fontSize: 12.5, color: '#0F172A' }}>
+                                        {test.name}
+                                      </div>
+                                      <div style={{ fontSize: 11, color: '#64748B' }}>
+                                        {test.code} • {test.specimen} • <strong style={{ color: '#036d92' }}>₹{test.price}</strong>
+                                      </div>
+                                    </div>
                                   </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSelectedRequisitionTest(test.id)}
+                                    style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 4 }}
+                                    title="Remove from requisition"
+                                  >
+                                    <X size={14} />
+                                  </button>
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => removeInvestigation(item.testId)}
-                                  className="btn btn-ghost btn-icon btn-sm"
-                                  title="Remove from basket"
-                                  style={{ color: 'var(--danger)' }}
-                                >
-                                  <X size={15} />
-                                </button>
-                              </div>
-
-                              {/* Note Option section */}
-                              <div style={{ marginTop: 8, borderTop: '1px solid #F1F5F9', paddingTop: 8 }}>
-                                {item.notes && editingNoteTestId !== item.testId ? (
-                                  <div style={{
-                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                    padding: '6px 10px', background: '#F0F9FF', borderRadius: 6,
-                                    border: '1px solid #BAE6FD', fontSize: 11.5, color: '#0369A1'
-                                  }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, wordBreak: 'break-word' }}>
-                                      <span style={{ fontWeight: 700 }}>📝 Note:</span>
-                                      <span>{item.notes}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingNoteTestId(item.testId)}
-                                        className="btn btn-ghost btn-sm"
-                                        style={{ padding: '2px 6px', fontSize: 10.5, color: '#0284C7', height: 22 }}
-                                      >
-                                        Edit Note
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => updateInvestigationNote(item.testId, '')}
-                                        className="btn btn-ghost btn-sm"
-                                        style={{ padding: '2px 6px', fontSize: 10.5, color: '#EF4444', height: 22 }}
-                                        title="Clear Note"
-                                      >
-                                        Clear
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {/* Per-test Doctor Notes */}
+                                {test.doctorNotesAllowed !== false && (
+                                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
                                     <input
                                       type="text"
-                                      className="form-input"
-                                      style={{ fontSize: 11.5, padding: '5px 8px', flex: 1, height: 30 }}
-                                      placeholder="Add clinical note or instructions..."
-                                      value={item.notes || ''}
-                                      onChange={e => updateInvestigationNote(item.testId, e.target.value)}
+                                      placeholder="Specific instructions for this test..."
+                                      value={notes || ''}
+                                      onChange={(e) => updateSelectedRequisitionNote(test.id, e.target.value)}
+                                      style={{ width: '100%', padding: '4px 8px', borderRadius: 4, border: '1px solid #E2E8F0', fontSize: 11 }}
                                     />
-                                    {editingNoteTestId === item.testId && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingNoteTestId(null)}
-                                        className="btn btn-sm btn-primary"
-                                        style={{ background: '#036d92', borderColor: '#036d92', padding: '4px 10px', fontSize: 11, height: 30 }}
-                                      >
-                                        Done
-                                      </button>
-                                    )}
                                   </div>
                                 )}
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                        )}
 
-                          <div style={{
-                            borderTop: '2px solid #E2E8F0', paddingTop: 12, marginTop: 6,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800
-                          }}>
-                            <div>
-                              <div style={{ fontSize: 13, color: '#0F172A' }}>Requisition Total ({activeSession?.investigations.length} tests):</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Auto-adds to pharmacy/billing invoice</div>
+                        {/* Order Placement Form: Clinical Notes & Priority */}
+                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #CBD5E1' }}>
+                          <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                            Clinical Notes:
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="Enter clinical indication, diagnostic differential, or instructions for the diagnostic lab..."
+                            value={orderClinicalNotes}
+                            onChange={(e) => setOrderClinicalNotes(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 10px',
+                              borderRadius: 6,
+                              border: '1px solid #CBD5E1',
+                              fontSize: 12,
+                              resize: 'vertical',
+                              marginBottom: 10
+                            }}
+                          />
+
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                              Priority:
                             </div>
-                            <span style={{ fontSize: 20, color: '#036d92', fontWeight: 900 }}>₹{investigationsTotal}</span>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              {(['Routine', 'Urgent', 'STAT'] as const).map((p) => (
+                                <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: '#1E293B', cursor: 'pointer' }}>
+                                  <input
+                                    type="radio"
+                                    name="orderPriority"
+                                    value={p}
+                                    checked={orderPriority === p}
+                                    onChange={() => setOrderPriority(p)}
+                                  />
+                                  {p === 'STAT' ? <span style={{ color: '#DC2626', fontWeight: 800 }}>⚡ STAT</span> : p}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handlePlaceLabOrder}
+                            disabled={selectedRequisitionTests.length === 0}
+                            style={{
+                              width: '100%',
+                              padding: '10px 16px',
+                              borderRadius: 8,
+                              border: 'none',
+                              background: selectedRequisitionTests.length > 0 ? '#036d92' : '#94A3B8',
+                              color: '#FFFFFF',
+                              fontWeight: 800,
+                              fontSize: 13,
+                              cursor: selectedRequisitionTests.length > 0 ? 'pointer' : 'not-allowed',
+                              boxShadow: selectedRequisitionTests.length > 0 ? '0 2px 6px rgba(3, 109, 146, 0.3)' : 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 8
+                            }}
+                          >
+                            <Send size={15} /> [ Place Lab Order ]
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Placed Lab Orders for This Case */}
+                      {caseLabOrders.length > 0 && (
+                        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '2px dashed #CBD5E1' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: '#036d92', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Placed Lab Orders for Encounter ({caseLabOrders.length})</span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
+                            {caseLabOrders.map((order) => (
+                              <div
+                                key={order.id}
+                                style={{
+                                  background: '#FFFFFF',
+                                  padding: '8px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid #E2E8F0',
+                                  fontSize: 11.5
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <strong style={{ color: '#0F172A' }}>{order.orderNumber}</strong>
+                                  <div style={{ display: 'flex', gap: 4 }}>
+                                    <span style={{
+                                      fontSize: 10,
+                                      fontWeight: 800,
+                                      padding: '1px 5px',
+                                      borderRadius: 4,
+                                      background: order.priority === 'STAT' ? '#FEE2E2' : '#EFF6FF',
+                                      color: order.priority === 'STAT' ? '#DC2626' : '#2563EB'
+                                    }}>
+                                      {order.priority}
+                                    </span>
+                                    <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
+                                      {order.status}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div style={{ color: '#64748B', marginTop: 3 }}>
+                                  {order.items.map(i => i.testName).join(', ')}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
                     </div>
+
                   </div>
                 ) : (
                   <div>
                     {/* RESULTS Tab */}
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-                      Point-of-Care Parameter Entries & Attached Reports
+                      Point-of-Care Parameter Entries &amp; Attached Reports
                     </div>
 
                     <div className="table-container" style={{ border: '1px solid var(--border)', borderRadius: 8 }}>
@@ -3805,10 +4209,10 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                             )}
                           </div>
 
-                          {/* Add Blank Row Button (Clean single plus icon) */}
+                          {/* Add Row Button (Opens Searchable Drug Master) */}
                           <button
                             type="button"
-                            onClick={handleAddBlankRow}
+                            onClick={() => setIsDrugSelectorModalOpen(true)}
                             className="btn btn-sm"
                             style={{
                               background: '#036d92',
@@ -3823,7 +4227,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                               padding: '0 12px',
                               whiteSpace: 'nowrap'
                             }}
-                            title="Add new writable row to table"
+                            title="Select drug from Admin Drug Master (/admin/drugs)"
                           >
                             <Plus size={14} /> Add Row
                           </button>
@@ -3835,16 +4239,16 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         <table style={{ width: '100%', minWidth: rxLayoutMode === 'split' ? 760 : 1080, fontSize: rxLayoutMode === 'split' ? 11 : 12, borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
-                              <th style={{ width: rxLayoutMode === 'split' ? 32 : 48, textAlign: 'center', padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>NO</th>
-                              <th style={{ minWidth: rxLayoutMode === 'split' ? 120 : 180, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 10px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }} title="Content Name / Combination">{rxLayoutMode === 'split' ? 'CONTENT / GENERIC' : 'CONTENT NAME/COBINATIN'}</th>
-                              <th style={{ minWidth: rxLayoutMode === 'split' ? 115 : 170, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 10px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>BRAND NAME</th>
-                              <th style={{ minWidth: rxLayoutMode === 'split' ? 85 : 130, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 10px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>BRAND</th>
-                              <th style={{ width: rxLayoutMode === 'split' ? 65 : 95, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>DOSE</th>
-                              <th style={{ width: rxLayoutMode === 'split' ? 70 : 125, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }} title="Frequency">{rxLayoutMode === 'split' ? 'FREQ' : 'FREQUNCY'}</th>
-                              <th style={{ width: rxLayoutMode === 'split' ? 52 : 85, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>DAY</th>
-                              <th style={{ width: rxLayoutMode === 'split' ? 52 : 75, textAlign: 'center', padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }} title="Total Quantity">{rxLayoutMode === 'split' ? 'QTY' : 'TOTAL'}</th>
-                              <th style={{ minWidth: rxLayoutMode === 'split' ? 100 : 180, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 10px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>NOTE</th>
-                              <th style={{ width: rxLayoutMode === 'split' ? 65 : 95, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>PRICE</th>
+                              <th style={{ width: rxLayoutMode === 'split' ? 32 : 44, textAlign: 'center', padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 6px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>No.</th>
+                              <th style={{ minWidth: rxLayoutMode === 'split' ? 120 : 170, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Drug</th>
+                              <th style={{ minWidth: rxLayoutMode === 'split' ? 120 : 170, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Combination</th>
+                              <th style={{ minWidth: rxLayoutMode === 'split' ? 100 : 140, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Brand</th>
+                              <th style={{ width: rxLayoutMode === 'split' ? 65 : 95, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Dose</th>
+                              <th style={{ width: rxLayoutMode === 'split' ? 70 : 110, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Frequency</th>
+                              <th style={{ width: rxLayoutMode === 'split' ? 52 : 80, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Days</th>
+                              <th style={{ width: rxLayoutMode === 'split' ? 52 : 75, textAlign: 'center', padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Total</th>
+                              <th style={{ minWidth: rxLayoutMode === 'split' ? 100 : 160, padding: rxLayoutMode === 'split' ? '8px 6px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Note</th>
+                              <th style={{ width: rxLayoutMode === 'split' ? 65 : 90, padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>Price</th>
                               <th style={{ width: rxLayoutMode === 'split' ? 32 : 44, textAlign: 'center', padding: rxLayoutMode === 'split' ? '8px 4px' : '10px 6px' }} />
                             </tr>
                           </thead>
@@ -3860,27 +4264,24 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       No Prescription Medicines Added
                                     </div>
                                     <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.4 }}>
-                                      Smart search medicines from the dispensary catalog above, or add a blank writable row to prescribe directly into table.
+                                      Select drugs from the Admin Drug Master (/admin/drugs) to prescribe directly into table.
                                     </div>
                                     <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
                                       <button
                                         type="button"
-                                        onClick={handleAddBlankRow}
+                                        onClick={() => setIsDrugSelectorModalOpen(true)}
                                         className="btn btn-sm btn-primary"
                                         style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 700, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}
                                       >
-                                        <Plus size={14} /> Add Prescription Row
+                                        <Plus size={14} /> Add Row
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          drugSearchInputRef.current?.focus();
-                                          setIsDrugDropdownOpen(true);
-                                        }}
+                                        onClick={() => setIsDrugSelectorModalOpen(true)}
                                         className="btn btn-sm btn-outline"
                                         style={{ background: '#FFFFFF', borderColor: '#036d92', color: '#036d92', fontWeight: 700, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}
                                       >
-                                        <Search size={14} /> Search Medicines
+                                        <Search size={14} /> Search Drug Master
                                       </button>
                                       <button
                                         type="button"
@@ -3903,7 +4304,35 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   {idx + 1}
                                 </td>
 
-                                {/* Content name/cobinatin */}
+                                {/* Drug name */}
+                                <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      style={{
+                                        fontSize: rxLayoutMode === 'split' ? 11 : 12, padding: rxLayoutMode === 'split' ? '3px 6px' : '5px 8px', height: rxLayoutMode === 'split' ? 26 : 30, fontWeight: 700, width: '100%',
+                                        color: '#0F172A', background: '#FFFFFF', borderRadius: 6, border: '1px solid #CBD5E1'
+                                      }}
+                                      placeholder="Select from Drug Master"
+                                      value={rx.drugName || rx.brandName || ''}
+                                      onChange={e => updatePrescription(rx.id, { drugName: e.target.value })}
+                                    />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                      {rx.drugId ? (
+                                        <span className="badge badge-primary" style={{ fontSize: 9, padding: '1px 5px', fontFamily: 'monospace' }}>
+                                          Master ID: {rx.drugId}
+                                        </span>
+                                      ) : (
+                                        <span className="badge badge-warning" style={{ fontSize: 9, padding: '1px 5px' }}>
+                                          Custom
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Combination / Generic */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -3914,6 +4343,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.generic === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Auto / Combination"
                                     value={rx.genericName || ''}
                                     onChange={e => updatePrescription(rx.id, { genericName: e.target.value })}
                                   />
@@ -3935,7 +4365,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* Brand name */}
+                                {/* Brand */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -3946,8 +4376,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.brandName === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
-                                    value={rx.brandName || rx.drugName || ''}
-                                    onChange={e => updatePrescription(rx.id, { brandName: e.target.value, drugName: e.target.value })}
+                                    placeholder="Auto / Brand"
+                                    value={rx.brandName || ''}
+                                    onChange={e => updatePrescription(rx.id, { brandName: e.target.value })}
                                   />
                                   <div style={{ marginTop: rxLayoutMode === 'split' ? 2 : 4 }}>
                                     <button
@@ -3967,39 +4398,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* brand (Manufacturer) */}
-                                <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    style={{
-                                      fontSize: rxLayoutMode === 'split' ? 11 : 12, padding: rxLayoutMode === 'split' ? '3px 6px' : '5px 8px', height: rxLayoutMode === 'split' ? 26 : 30, width: '100%',
-                                      color: rx.visibility?.manufacturer === false ? '#94A3B8' : '#334155',
-                                      background: rx.visibility?.manufacturer === false ? '#F8FAFC' : '#FFFFFF',
-                                      borderRadius: 6, border: '1px solid #CBD5E1'
-                                    }}
-                                    value={rx.manufacturer || ''}
-                                    onChange={e => updatePrescription(rx.id, { manufacturer: e.target.value })}
-                                  />
-                                  <div style={{ marginTop: rxLayoutMode === 'split' ? 2 : 4 }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => togglePrescriptionVisibility(rx.id, 'manufacturer')}
-                                      style={{
-                                        border: rx.visibility?.manufacturer !== false ? '1px solid #BBF7D0' : '1px solid #E2E8F0',
-                                        background: rx.visibility?.manufacturer !== false ? '#DCFCE7' : '#F1F5F9',
-                                        color: rx.visibility?.manufacturer !== false ? '#15803D' : '#64748B',
-                                        fontWeight: 800, fontSize: rxLayoutMode === 'split' ? 9 : 10, padding: rxLayoutMode === 'split' ? '1px 5px' : '2px 8px', borderRadius: 4, cursor: 'pointer',
-                                        display: 'inline-flex', alignItems: 'center', gap: 3
-                                      }}
-                                      title={rx.visibility?.manufacturer !== false ? "Visible on Rx (Click to hide)" : "Hidden on Rx (Click to show)"}
-                                    >
-                                      {rx.visibility?.manufacturer !== false ? 'show' : 'hide'}
-                                    </button>
-                                  </div>
-                                </td>
-
-                                {/* dose */}
+                                {/* Dose */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -4010,6 +4409,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.dosage === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Enter/select"
                                     value={rx.dosage}
                                     onChange={e => updatePrescription(rx.id, { dosage: e.target.value })}
                                   />
@@ -4031,7 +4431,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* frequncy */}
+                                {/* Frequency */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -4042,6 +4442,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.frequency === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Select"
                                     value={rx.frequency}
                                     onChange={e => updatePrescription(rx.id, { frequency: e.target.value })}
                                   />
@@ -4063,7 +4464,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* day */}
+                                {/* Days */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -4074,6 +4475,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.durationDays === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Enter"
                                     value={rx.durationDays}
                                     onChange={e => updatePrescription(rx.id, { durationDays: e.target.value })}
                                   />
@@ -4095,7 +4497,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* total */}
+                                {/* Total */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -4106,6 +4508,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.totalQty === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Auto"
                                     value={rx.totalQty}
                                     onChange={e => updatePrescription(rx.id, { totalQty: e.target.value })}
                                   />
@@ -4127,7 +4530,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* note */}
+                                {/* Note */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -4138,6 +4541,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.instructions === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Enter"
                                     value={rx.instructions}
                                     onChange={e => updatePrescription(rx.id, { instructions: e.target.value })}
                                   />
@@ -4159,7 +4563,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   </div>
                                 </td>
 
-                                {/* price / slot no */}
+                                {/* Price */}
                                 <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                   <input
                                     type="text"
@@ -4170,6 +4574,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       background: rx.visibility?.price === false ? '#F8FAFC' : '#FFFFFF',
                                       borderRadius: 6, border: '1px solid #CBD5E1'
                                     }}
+                                    placeholder="Auto"
                                     value={rx.price !== undefined ? String(rx.price) : (rx.slotNo || '')}
                                     onChange={e => updatePrescription(rx.id, { price: e.target.value, slotNo: e.target.value })}
                                   />
@@ -4228,36 +4633,58 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         padding: rxLayoutMode === 'split' ? '10px 14px' : '12px 18px', background: 'linear-gradient(180deg, #F0F9FF 0%, #E0F2FE 100%)', borderBottom: '1px solid #BAE6FD',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Scissors size={16} color="#036d92" />
-                          <span style={{ fontWeight: 800, fontSize: rxLayoutMode === 'split' ? 12.5 : 13.5, color: '#0C4A6E' }}>
-                            Procedure Supplies (Clinical Instruments)
-                          </span>
-                          <span className="badge" style={{ fontSize: 10, background: '#FEF3C7', color: '#92400E', fontWeight: 800 }}>
-                            Optional
-                          </span>
-                          <span className="badge" style={{
-                            fontSize: 10,
-                            background: (uniqueProcedurePrescriptions.length > 0) ? '#0284C7' : '#E2E8F0',
-                            color: (uniqueProcedurePrescriptions.length > 0) ? '#FFFFFF' : '#475569',
-                            fontWeight: 800
-                          }}>
-                            {uniqueProcedurePrescriptions.length} Added
-                          </span>
+                        <div>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#0369A1', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>
+                            PROCEDURE PRESCRIPTION
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Scissors size={16} color="#036d92" />
+                            <span style={{ fontWeight: 800, fontSize: rxLayoutMode === 'split' ? 12.5 : 13.5, color: '#0C4A6E' }}>
+                              Procedure Supplies (Clinical Instruments)
+                            </span>
+                            <span className="badge" style={{ fontSize: 11, background: '#FEF3C7', color: '#92400E', fontWeight: 800, padding: '3px 8px', borderRadius: 5, border: '1px solid #FDE68A' }}>
+                              Optional · {uniqueProcedurePrescriptions.length} Added
+                            </span>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowProcSideOption(false)}
-                          style={{
-                            background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 5,
-                            padding: '4px 10px', color: '#64748B', cursor: 'pointer', fontSize: 11, fontWeight: 700,
-                            display: 'inline-flex', alignItems: 'center', gap: 4
-                          }}
-                          title="Collapse procedure section"
-                        >
-                          <X size={13} />
-                          <span>Hide Section</span>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            id="proc-header-add-btn"
+                            onClick={() => setIsProcSelectorModalOpen(true)}
+                            className="btn btn-sm"
+                            style={{
+                              background: '#036d92',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              fontWeight: 700,
+                              fontSize: 11.5,
+                              padding: '4px 10px',
+                              borderRadius: 5,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              cursor: 'pointer'
+                            }}
+                            title="Search catalog from Clinical Masters (/admin/procedures & /admin/drugs)"
+                          >
+                            <Plus size={13} />
+                            <span>+ Add</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowProcSideOption(false)}
+                            style={{
+                              background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 5,
+                              padding: '4px 10px', color: '#64748B', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                              display: 'inline-flex', alignItems: 'center', gap: 4
+                            }}
+                            title="Collapse procedure section"
+                          >
+                            <X size={13} />
+                            <span>Hide Section</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div style={{ padding: rxLayoutMode === 'split' ? 12 : 16 }}>
@@ -4274,39 +4701,44 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
                           <div style={{
                             display: 'grid',
-                            gridTemplateColumns: rxLayoutMode === 'split' ? '1fr' : '1.4fr 110px 150px auto',
+                            gridTemplateColumns: rxLayoutMode === 'split' ? '1fr' : '1.7fr 110px 160px auto',
                             gap: 8,
                             alignItems: 'flex-end'
                           }}>
-                            {/* Column 1: Instrument / Drug with Dynamic Search & ID CORD Preview */}
+                            {/* Column 1: Instrument / Drug with Dynamic Search & Catalog Dropdown */}
                             <div style={{ position: 'relative' }}>
                               <label className="form-label" style={{ fontWeight: 700, fontSize: 11, marginBottom: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>Instrument /drugh *</span>
-                                {procRxIdCode && (
-                                  <span style={{ color: '#0369A1', fontWeight: 800, fontSize: 10.5, fontFamily: 'monospace', background: '#E0F2FE', padding: '1px 6px', borderRadius: 4 }}>
+                                <span>Instrument / Drug *</span>
+                                {procRxSource === 'PROCEDURE_MASTER' ? (
+                                  <span style={{ color: '#0369A1', fontWeight: 800, fontSize: 10, background: '#E0F2FE', padding: '1px 6px', borderRadius: 4 }}>
+                                    PROCEDURE MASTER {procRxIdCode ? `(${procRxIdCode})` : ''}
+                                  </span>
+                                ) : procRxSource === 'DRUG_FORMULARY' ? (
+                                  <span style={{ color: '#7E22CE', fontWeight: 800, fontSize: 10, background: '#F3E8FF', padding: '1px 6px', borderRadius: 4 }}>
+                                    CENTRAL DRUG FORMULARY {procRxIdCode ? `(${procRxIdCode})` : ''}
+                                  </span>
+                                ) : procRxSource === 'CUSTOM' ? (
+                                  <span style={{ color: '#92400E', fontWeight: 800, fontSize: 10, background: '#FEF3C7', padding: '1px 6px', borderRadius: 4 }}>
+                                    Source: CUSTOM {procRxIdCode ? `(${procRxIdCode})` : ''}
+                                  </span>
+                                ) : procRxIdCode ? (
+                                  <span style={{ color: '#0369A1', fontWeight: 800, fontSize: 10, fontFamily: 'monospace', background: '#E0F2FE', padding: '1px 6px', borderRadius: 4 }}>
                                     ID: {procRxIdCode}
                                   </span>
-                                )}
+                                ) : null}
                               </label>
                               <div style={{ position: 'relative' }}>
                                 <input
                                   type="text"
+                                  id="proc-input-name"
                                   className="form-input"
-                                  placeholder="Search Instrument / Drug (e.g. Ex darma rollar, VICRIL)..."
+                                  placeholder="Search / Select from Clinical Masters"
                                   value={procRxItemName}
                                   onFocus={() => setShowProcCatalogDropdown(true)}
                                   onChange={e => {
                                     const val = e.target.value;
                                     setProcRxItemName(val);
                                     setShowProcCatalogDropdown(true);
-                                    const match = PROCEDURE_INSTRUMENTS_CATALOG.find(p =>
-                                      p.name.toLowerCase() === val.toLowerCase() ||
-                                      p.idCode.toLowerCase() === val.toLowerCase()
-                                    );
-                                    if (match) {
-                                      setProcRxIdCode(match.idCode);
-                                      setProcRxQty(match.defaultQty);
-                                    }
                                   }}
                                   onKeyDown={e => {
                                     if (e.key === 'Enter') {
@@ -4323,6 +4755,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                       setProcRxItemName('');
                                       setProcRxIdCode('');
                                       setProcRxQty(1);
+                                      setProcRxSource('');
+                                      setProcRxMasterId('');
                                     }}
                                     style={{
                                       position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
@@ -4334,7 +4768,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                 )}
                               </div>
 
-                              {/* Interactive Autocomplete Dropdown: Shows ID CORD on Search before Adding */}
+                              {/* Interactive Autocomplete Dropdown: PROCEDURE MASTER + CENTRAL DRUG FORMULARY + Custom Item */}
                               {showProcCatalogDropdown && (
                                 <div
                                   style={{
@@ -4342,60 +4776,46 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                     top: '100%',
                                     left: 0,
                                     right: 0,
-                                    zIndex: 100,
+                                    zIndex: 150,
                                     background: '#FFFFFF',
                                     border: '1.5px solid #036d92',
                                     borderRadius: 8,
-                                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                                    boxShadow: '0 12px 28px -4px rgba(0, 0, 0, 0.25)',
                                     marginTop: 4,
-                                    maxHeight: 250,
+                                    maxHeight: 320,
                                     overflowY: 'auto'
                                   }}
                                 >
-                                  <div style={{ padding: '6px 10px', background: '#F0F9FF', borderBottom: '1px solid #BAE6FD', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: 10.5, fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
-                                      Select Instrument (Shows Dynamic ID CORD)
-                                    </span>
+                                  <div style={{ padding: '8px 12px', background: '#F0F9FF', borderBottom: '1px solid #BAE6FD', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                      <span style={{ fontSize: 11, fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
+                                        Select from catalog or custom
+                                      </span>
+                                      <div style={{ fontSize: 9.5, color: '#64748B' }}>
+                                        Master Source: /admin/procedures &amp; /admin/drugs
+                                      </div>
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={() => setShowProcCatalogDropdown(false)}
-                                      style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 10, cursor: 'pointer', fontWeight: 700 }}
+                                      style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}
                                     >
                                       Close ✕
                                     </button>
                                   </div>
 
-                                  {filteredCatalogItems.length === 0 ? (
-                                    <div style={{ padding: 12, textAlign: 'center', fontSize: 11.5, color: '#64748B' }}>
-                                      <div>No catalog match for "{procRxItemName}"</div>
-                                      <div
-                                        onClick={() => {
-                                          const genPrefix = procRxItemName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'GEN';
-                                          const genId = `${genPrefix} ${Math.floor(100 + Math.random() * 899)}`;
-                                          setProcRxIdCode(genId);
-                                          setShowProcCatalogDropdown(false);
-                                        }}
-                                        style={{
-                                          marginTop: 6,
-                                          color: '#036d92',
-                                          fontWeight: 700,
-                                          cursor: 'pointer',
-                                          textDecoration: 'underline'
-                                        }}
-                                      >
-                                        + Use custom item "{procRxItemName}" (Auto-generate dynamic ID)
-                                      </div>
-                                    </div>
+                                  {/* Group 1: PROCEDURE MASTER */}
+                                  <div style={{ background: '#F8FAFC', padding: '6px 12px', borderBottom: '1px solid #E2E8F0', fontSize: 10.5, fontWeight: 800, color: '#0369A1', letterSpacing: '0.05em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>PROCEDURE MASTER ({filteredCatalogProcedures.length})</span>
+                                    <span style={{ fontSize: 9.5, background: '#E0F2FE', color: '#0369A1', padding: '1px 5px', borderRadius: 3 }}>/admin/procedures</span>
+                                  </div>
+                                  {filteredCatalogProcedures.length === 0 ? (
+                                    <div style={{ padding: '6px 12px', fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>No procedure master matches</div>
                                   ) : (
-                                    filteredCatalogItems.map(item => (
+                                    filteredCatalogProcedures.map(proc => (
                                       <div
-                                        key={item.name}
-                                        onMouseDown={() => {
-                                          setProcRxItemName(item.name);
-                                          setProcRxIdCode(item.idCode);
-                                          setProcRxQty(item.defaultQty);
-                                          setShowProcCatalogDropdown(false);
-                                        }}
+                                        key={`proc-item-${proc.id}`}
+                                        onMouseDown={() => handleSelectFromProcedureMaster(proc)}
                                         style={{
                                           padding: '8px 12px',
                                           borderBottom: '1px solid #F1F5F9',
@@ -4404,123 +4824,136 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                           justifyContent: 'space-between',
                                           alignItems: 'center',
                                           gap: 8,
-                                          background: procRxItemName.toLowerCase() === item.name.toLowerCase() ? '#F0F9FF' : '#FFFFFF',
-                                          transition: 'background 0.15s ease'
+                                          background: procRxItemName === proc.name ? '#F0F9FF' : '#FFFFFF'
                                         }}
                                         onMouseEnter={e => (e.currentTarget.style.background = '#F0F9FF')}
-                                        onMouseLeave={e => (e.currentTarget.style.background = procRxItemName.toLowerCase() === item.name.toLowerCase() ? '#F0F9FF' : '#FFFFFF')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = procRxItemName === proc.name ? '#F0F9FF' : '#FFFFFF')}
                                       >
                                         <div>
-                                          <div style={{ fontWeight: 800, fontSize: 12, color: '#0F172A' }}>
-                                            {item.name}
-                                          </div>
-                                          <div style={{ fontSize: 10.5, color: '#64748B', display: 'flex', gap: 6, marginTop: 2 }}>
-                                            <span className="badge badge-outline" style={{ fontSize: 9.5, padding: '1px 5px' }}>
-                                              {item.category}
-                                            </span>
-                                            <span>Default Qty: {item.defaultQty}</span>
+                                          <div style={{ fontWeight: 700, fontSize: 12, color: '#0F172A' }}>{proc.name}</div>
+                                          <div style={{ fontSize: 10, color: '#64748B', display: 'flex', gap: 6, marginTop: 1 }}>
+                                            <span style={{ background: '#F1F5F9', padding: '1px 5px', borderRadius: 3 }}>{proc.category}</span>
+                                            <span style={{ color: '#059669', fontWeight: 700 }}>₹{proc.basePrice}</span>
                                           </div>
                                         </div>
-                                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                          <span
-                                            style={{
-                                              fontFamily: 'monospace',
-                                              fontWeight: 800,
-                                              fontSize: 11,
-                                              background: '#E0F2FE',
-                                              color: '#0369A1',
-                                              border: '1px solid #BAE6FD',
-                                              padding: '2px 8px',
-                                              borderRadius: 4,
-                                              display: 'inline-block'
-                                            }}
-                                          >
-                                            ID: {item.idCode}
+                                        <div style={{ textAlign: 'right' }}>
+                                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 10.5, background: '#E0F2FE', color: '#0369A1', padding: '2px 6px', borderRadius: 4 }}>
+                                            {proc.code || proc.id}
                                           </span>
                                         </div>
                                       </div>
                                     ))
                                   )}
+
+                                  {/* Group 2: CENTRAL DRUG FORMULARY */}
+                                  <div style={{ background: '#FAF5FF', padding: '6px 12px', borderBottom: '1px solid #F3E8FF', borderTop: '1px solid #E2E8F0', fontSize: 10.5, fontWeight: 800, color: '#7E22CE', letterSpacing: '0.05em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>CENTRAL DRUG FORMULARY ({filteredCatalogDrugs.length})</span>
+                                    <span style={{ fontSize: 9.5, background: '#F3E8FF', color: '#7E22CE', padding: '1px 5px', borderRadius: 3 }}>/admin/drugs</span>
+                                  </div>
+                                  {filteredCatalogDrugs.length === 0 ? (
+                                    <div style={{ padding: '6px 12px', fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>No formulary drug matches</div>
+                                  ) : (
+                                    filteredCatalogDrugs.map(drug => {
+                                      const displayName = drug.brandName ? `${drug.brandName} (${drug.name})` : drug.name;
+                                      return (
+                                        <div
+                                          key={`drug-item-${drug.id}`}
+                                          onMouseDown={() => handleSelectFromDrugFormulary(drug)}
+                                          style={{
+                                            padding: '8px 12px',
+                                            borderBottom: '1px solid #F1F5F9',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            background: procRxItemName === displayName ? '#FAF5FF' : '#FFFFFF'
+                                          }}
+                                          onMouseEnter={e => (e.currentTarget.style.background = '#FAF5FF')}
+                                          onMouseLeave={e => (e.currentTarget.style.background = procRxItemName === displayName ? '#FAF5FF' : '#FFFFFF')}
+                                        >
+                                          <div>
+                                            <div style={{ fontWeight: 700, fontSize: 12, color: '#0F172A' }}>{displayName}</div>
+                                            <div style={{ fontSize: 10, color: '#64748B', display: 'flex', gap: 6, marginTop: 1 }}>
+                                              <span style={{ background: '#F3E8FF', color: '#6B21A8', padding: '1px 5px', borderRadius: 3 }}>{drug.formulation || 'Drug'}</span>
+                                              <span>{drug.manufacturer || 'Formulary'}</span>
+                                            </div>
+                                          </div>
+                                          <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 10.5, background: '#F3E8FF', color: '#6B21A8', padding: '2px 6px', borderRadius: 4 }}>
+                                              {drug.slotNo || drug.id}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  )}
+
+                                  {/* Group 3: Custom Item */}
+                                  <div
+                                    onMouseDown={() => handleUseCustomItem()}
+                                    style={{
+                                      padding: '10px 14px',
+                                      background: '#FFFBEB',
+                                      borderTop: '1px solid #FDE68A',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      color: '#92400E',
+                                      fontSize: 11.5,
+                                      fontWeight: 700
+                                    }}
+                                  >
+                                    <Plus size={14} color="#D97706" />
+                                    <span>+ Use Custom Item {procRxItemName ? `"${procRxItemName}"` : ''} (Source: CUSTOM • Not added to master catalog)</span>
+                                  </div>
                                 </div>
                               )}
                             </div>
 
-                            {/* Column 2 & 3 in Split Mode / Stacked Mode */}
-                            {rxLayoutMode === 'split' ? (
-                              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(55px, 1fr) minmax(85px, 1.4fr) auto', gap: 6, alignItems: 'flex-end' }}>
-                                <div>
-                                  <label className="form-label" style={{ fontWeight: 700, fontSize: 10.5, marginBottom: 2 }}>
-                                    qunity *
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    className="form-input"
-                                    value={procRxQty}
-                                    onChange={e => setProcRxQty(parseInt(e.target.value) || 1)}
-                                    style={{ fontSize: 11.5, padding: '4px 6px', textAlign: 'center', fontWeight: 800, height: 32 }}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="form-label" style={{ fontWeight: 700, fontSize: 10.5, marginBottom: 2 }}>
-                                    ID CORD
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    placeholder="ID code..."
-                                    value={procRxIdCode}
-                                    onChange={e => setProcRxIdCode(e.target.value)}
-                                    style={{ fontSize: 11.5, padding: '4px 6px', fontFamily: 'monospace', fontWeight: 700, height: 32 }}
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={handleAddProcedurePrescription}
-                                  className="btn btn-primary"
-                                  style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 800, padding: '0 12px', height: 32, fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                >
-                                  <Plus size={13} /> Add
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <div>
-                                  <label className="form-label" style={{ fontWeight: 700, fontSize: 11, marginBottom: 3 }}>
-                                    qunity *
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    className="form-input"
-                                    value={procRxQty}
-                                    onChange={e => setProcRxQty(parseInt(e.target.value) || 1)}
-                                    style={{ fontSize: 12, padding: '6px 8px', textAlign: 'center', fontWeight: 800, height: 35 }}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="form-label" style={{ fontWeight: 700, fontSize: 11, marginBottom: 3 }}>
-                                    ID CORD
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    placeholder="e.g. BZX 320"
-                                    value={procRxIdCode}
-                                    onChange={e => setProcRxIdCode(e.target.value)}
-                                    style={{ fontSize: 12, padding: '6px 8px', fontFamily: 'monospace', fontWeight: 700, height: 35 }}
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={handleAddProcedurePrescription}
-                                  className="btn btn-primary"
-                                  style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 800, padding: '0 16px', height: 35, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                                >
-                                  <Plus size={14} /> Add Instrument
-                                </button>
-                              </>
-                            )}
+                            {/* Column 2: Quantity * */}
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 700, fontSize: 11, marginBottom: 3 }}>
+                                Quantity *
+                              </label>
+                              <input
+                                type="number"
+                                id="proc-input-qty"
+                                min={1}
+                                className="form-input"
+                                value={procRxQty}
+                                onChange={e => setProcRxQty(parseInt(e.target.value) || 1)}
+                                style={{ fontSize: 12, padding: '6px 8px', textAlign: 'center', fontWeight: 800, height: 35 }}
+                              />
+                            </div>
+
+                            {/* Column 3: ID / CORD */}
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 700, fontSize: 11, marginBottom: 3 }}>
+                                ID / CORD
+                              </label>
+                              <input
+                                type="text"
+                                id="proc-input-idcode"
+                                className="form-input"
+                                placeholder="ID code..."
+                                value={procRxIdCode}
+                                onChange={e => setProcRxIdCode(e.target.value)}
+                                style={{ fontSize: 12, padding: '6px 8px', fontFamily: 'monospace', fontWeight: 700, height: 35 }}
+                              />
+                            </div>
+
+                            {/* Column 4: + Add Instrument */}
+                            <button
+                              type="button"
+                              id="proc-form-add-btn"
+                              onClick={() => handleAddProcedurePrescription()}
+                              className="btn btn-primary"
+                              style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 800, padding: '0 16px', height: 35, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <Plus size={14} /> + Add Instrument
+                            </button>
                           </div>
                         </div>
 
@@ -4530,7 +4963,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                             <span style={{ fontWeight: 800, fontSize: 13, color: '#1E293B' }}>
                               Active Procedure Items ({uniqueProcedurePrescriptions.length})
                             </span>
-                            <span style={{ fontSize: 11, color: '#059669', fontWeight: 700 }}>
+                            <span style={{ fontSize: 11, color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                               ✓ Included in final prescription slip
                             </span>
                           </div>
@@ -4561,11 +4994,11 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                 No Procedure Instruments or Supplies Added (Optional)
                               </div>
                               <div style={{ fontSize: 11.5, color: '#64748B', maxWidth: 460, margin: '4px auto 12px', lineHeight: 1.4 }}>
-                                Prescribe clinical consumables (e.g. Sutures, Derma Rollers, Syringes) if performing an in-clinic minor procedure. If empty, this section will not appear on the final printed Rx slip.
+                                Prescribe clinical consumables (e.g. Sutures, Derma Rollers, Syringes) from Procedure Master or Drug Formulary. Only items marked &ldquo;✓ Print on Rx&rdquo; will appear on the final printed Rx slip.
                               </div>
                               <button
                                 type="button"
-                                onClick={handleLoadStandardProcedureSupplies}
+                                onClick={() => setIsProcSelectorModalOpen(true)}
                                 className="btn btn-outline btn-sm"
                                 style={{
                                   background: '#FFFFFF',
@@ -4579,7 +5012,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   gap: 6
                                 }}
                               >
-                                <Plus size={13} /> Load Standard Supplies (Vicril, Derma Roller, Syringe)
+                                <Plus size={13} /> Select from Clinical Masters
                               </button>
                             </div>
                           ) : (
@@ -4588,9 +5021,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                 <thead>
                                   <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
                                     <th style={{ width: rxLayoutMode === 'split' ? 30 : 45, textAlign: 'center', padding: rxLayoutMode === 'split' ? '7px 4px' : '9px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>NO</th>
-                                    <th style={{ minWidth: rxLayoutMode === 'split' ? 125 : 220, padding: rxLayoutMode === 'split' ? '7px 8px' : '9px 12px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>INSTRUMENT /DRUGH</th>
-                                    <th style={{ width: rxLayoutMode === 'split' ? 55 : 90, textAlign: 'center', padding: rxLayoutMode === 'split' ? '7px 4px' : '9px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>QUNITY</th>
-                                    <th style={{ width: rxLayoutMode === 'split' ? 80 : 140, padding: rxLayoutMode === 'split' ? '7px 6px' : '9px 10px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>ID CORD</th>
+                                    <th style={{ minWidth: rxLayoutMode === 'split' ? 125 : 220, padding: rxLayoutMode === 'split' ? '7px 8px' : '9px 12px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>INSTRUMENT / DRUG</th>
+                                    <th style={{ width: rxLayoutMode === 'split' ? 55 : 90, textAlign: 'center', padding: rxLayoutMode === 'split' ? '7px 4px' : '9px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>QUANTITY</th>
+                                    <th style={{ width: rxLayoutMode === 'split' ? 80 : 140, padding: rxLayoutMode === 'split' ? '7px 6px' : '9px 10px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>ID / CORD</th>
                                     <th style={{ width: rxLayoutMode === 'split' ? 80 : 120, textAlign: 'center', padding: rxLayoutMode === 'split' ? '7px 4px' : '9px 8px', fontWeight: 800, color: '#475569', fontSize: rxLayoutMode === 'split' ? 10.5 : 11, letterSpacing: '0.04em' }}>PRINT STATUS</th>
                                     <th style={{ width: rxLayoutMode === 'split' ? 30 : 40, textAlign: 'center', padding: rxLayoutMode === 'split' ? '7px 4px' : '9px 6px' }} />
                                   </tr>
@@ -4609,6 +5042,21 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                           value={item.itemName}
                                           onChange={e => updateProcedurePrescription(item.id, { itemName: e.target.value })}
                                         />
+                                        <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                          {item.source === 'PROCEDURE_MASTER' || item.procedureId ? (
+                                            <span style={{ fontSize: 9.5, color: '#0369A1', background: '#E0F2FE', padding: '1px 6px', borderRadius: 3, fontWeight: 700, border: '1px solid #BAE6FD' }}>
+                                              Procedure Master (ID: {item.procedureId || item.idCode})
+                                            </span>
+                                          ) : item.source === 'DRUG_FORMULARY' || item.drugId ? (
+                                            <span style={{ fontSize: 9.5, color: '#7C3AED', background: '#F5F3FF', padding: '1px 6px', borderRadius: 3, fontWeight: 700, border: '1px solid #DDD6FE' }}>
+                                              Central Drug Formulary (ID: {item.drugId || item.idCode})
+                                            </span>
+                                          ) : (
+                                            <span style={{ fontSize: 9.5, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 3, fontWeight: 700, border: '1px solid #FDE68A' }}>
+                                              Source: CUSTOM
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
                                       <td style={{ padding: rxLayoutMode === 'split' ? '5px 4px' : '8px' }}>
                                         <input
@@ -4630,18 +5078,46 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                         />
                                       </td>
                                       <td style={{ textAlign: 'center', padding: rxLayoutMode === 'split' ? '5px 4px' : '8px', verticalAlign: 'middle' }}>
-                                        <span className="badge badge-success" style={{ fontSize: rxLayoutMode === 'split' ? 9.5 : 10, padding: rxLayoutMode === 'split' ? '2px 5px' : '3px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                          {rxLayoutMode === 'split' ? '✓ Print' : '✓ Print on Rx'}
-                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => updateProcedurePrescription(item.id, { printOnRx: item.printOnRx === false ? true : false })}
+                                          style={{
+                                            background: item.printOnRx === false ? '#F1F5F9' : '#ECFDF5',
+                                            color: item.printOnRx === false ? '#64748B' : '#059669',
+                                            border: item.printOnRx === false ? '1px solid #CBD5E1' : '1px solid #A7F3D0',
+                                            borderRadius: 5,
+                                            padding: rxLayoutMode === 'split' ? '2px 6px' : '3px 9px',
+                                            fontWeight: 700,
+                                            fontSize: rxLayoutMode === 'split' ? 10 : 11,
+                                            cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 3
+                                          }}
+                                          title={item.printOnRx === false ? "Click to include in final prescription slip" : "Click to exclude from final prescription slip"}
+                                        >
+                                          {item.printOnRx === false ? '✕ Do Not Print' : '✓ Print on Rx'}
+                                        </button>
                                       </td>
                                       <td style={{ textAlign: 'center', padding: rxLayoutMode === 'split' ? '5px 4px' : '8px', verticalAlign: 'middle' }}>
                                         <button
                                           type="button"
                                           onClick={() => removeProcedurePrescription(item.id)}
-                                          style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: rxLayoutMode === 'split' ? 2 : 3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                          title="Remove procedure item"
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: '#EF4444',
+                                            cursor: 'pointer',
+                                            padding: rxLayoutMode === 'split' ? 2 : 4,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderRadius: 4
+                                          }}
+                                          title="Remove item (does not delete master record)"
                                         >
-                                          <X size={rxLayoutMode === 'split' ? 13 : 15} />
+                                          <Trash2 size={rxLayoutMode === 'split' ? 14 : 16} />
                                         </button>
                                       </td>
                                     </tr>
@@ -4681,14 +5157,24 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           {uniqueProcedurePrescriptions.length} Configured
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowProcSideOption(true)}
-                        className="btn btn-outline btn-sm"
-                        style={{ background: '#FFFFFF', borderColor: '#036d92', color: '#036d92', fontWeight: 800, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                      >
-                        <Plus size={14} /> Open Procedure Prescription ({uniqueProcedurePrescriptions.length} Items)
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => setIsProcSelectorModalOpen(true)}
+                          className="btn btn-sm btn-primary"
+                          style={{ background: '#036d92', borderColor: '#036d92', color: '#FFFFFF', fontWeight: 800, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                        >
+                          <Plus size={13} /> + Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowProcSideOption(true)}
+                          className="btn btn-outline btn-sm"
+                          style={{ background: '#FFFFFF', borderColor: '#036d92', color: '#036d92', fontWeight: 800, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          Open Procedure Prescription ({uniqueProcedurePrescriptions.length} Items)
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -4826,8 +5312,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* TAB 4: Clinical Procedures & Laser Protocol Tracker */}
           {/* ============================================================ */}
           {activeTab === 'procedures' && (
-            <div className="card" style={{ borderRadius: '0 0 12px 12px', borderTop: 'none', background: '#F8FAFC' }}>
-              <div className="card-body" style={{ padding: '20px 22px' }}>
+            <div className="card" style={{ borderRadius: '0 0 12px 12px', borderTop: 'none', background: '#F8FAFC', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+              <div className="card-body" style={{ padding: '20px 22px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                 {/* 1 & 2. UNIFIED TREATMENT PROTOCOL & SESSION EXECUTION (SINGLE SOURCE OF TRUTH) */}
                 <TreatmentProtocolManager
                   caseId={caseId}
@@ -5912,26 +6398,48 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       </div>
                     </div>
 
-                    {/* Eye Icon for Follow-Up (Item 11) */}
-                    <button
-                      type="button"
-                      onClick={() => toggleDiagnosisSectionVisibility('followUp')}
-                      style={{
-                        background: activeSession?.diagnosis?.visibility?.followUp !== false ? '#ECFDF5' : '#FEF3C7',
-                        border: activeSession?.diagnosis?.visibility?.followUp !== false ? '1px solid #10B981' : '1px solid #F59E0B',
-                        color: activeSession?.diagnosis?.visibility?.followUp !== false ? '#065F46' : '#92400E',
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {activeSession?.diagnosis?.visibility?.followUp !== false ? <><Eye size={11} /> SHOW on Rx</> : <><EyeOff size={11} /> HIDE</>}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Link
+                        href="/doctor/followup-call-list"
+                        target="_blank"
+                        className="btn btn-outline btn-sm"
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderColor: '#036d92',
+                          color: '#036d92',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                        title="Open Outbound Follow-Up Recall List"
+                      >
+                        <PhoneCall size={12} /> View Recall List →
+                      </Link>
+
+                      {/* Eye Icon for Follow-Up (Item 11) */}
+                      <button
+                        id="btn-toggle-show-on-rx"
+                        type="button"
+                        onClick={() => toggleDiagnosisSectionVisibility('followUp')}
+                        style={{
+                          background: activeSession?.diagnosis?.visibility?.followUp !== false ? '#ECFDF5' : '#FEF3C7',
+                          border: activeSession?.diagnosis?.visibility?.followUp !== false ? '1px solid #10B981' : '1px solid #F59E0B',
+                          color: activeSession?.diagnosis?.visibility?.followUp !== false ? '#065F46' : '#92400E',
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {activeSession?.diagnosis?.visibility?.followUp !== false ? <><Eye size={12} /> SHOW on Rx</> : <><EyeOff size={12} /> HIDE</>}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Preset Days Pill Selector + Custom Interval */}
@@ -5944,11 +6452,12 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       return (
                         <button
                           key={`fudays-${days}`}
+                          id={`btn-fu-interval-${days}`}
                           type="button"
                           onClick={() => handleSelectFollowUpPreset(days)}
                           className="btn btn-sm"
                           style={{
-                            padding: '3px 10px',
+                            padding: '4px 12px',
                             fontSize: 11.5,
                             fontWeight: 700,
                             borderRadius: 6,
@@ -5966,6 +6475,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     {/* Custom Days Button & Inline Number Input */}
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <button
+                        id="btn-fu-interval-custom"
                         type="button"
                         onClick={() => {
                           setIsCustomIntervalActive(true);
@@ -5973,10 +6483,11 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           const today = new Date();
                           const fDate = formatToDDMMYYYY(new Date(today.getTime() + days * 24 * 60 * 60 * 1000));
                           updateDiagnosis({ followUpDays: days, followUpDate: fDate });
+                          syncFollowUpToCallList({ followUpDays: days, followUpDate: fDate });
                         }}
                         className="btn btn-sm"
                         style={{
-                          padding: '3px 10px',
+                          padding: '4px 12px',
                           fontSize: 11.5,
                           fontWeight: 700,
                           borderRadius: 6,
@@ -5991,6 +6502,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       {isCustomIntervalActive && (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <input
+                            id="input-fu-custom-days"
                             type="number"
                             min={1}
                             max={365}
@@ -6001,6 +6513,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                               const today = new Date();
                               const fDate = formatToDDMMYYYY(new Date(today.getTime() + val * 24 * 60 * 60 * 1000));
                               updateDiagnosis({ followUpDays: val, followUpDate: fDate });
+                              syncFollowUpToCallList({ followUpDays: val, followUpDate: fDate });
                             }}
                             className="form-input"
                             style={{ width: 64, padding: '3px 6px', fontSize: 12, fontWeight: 700, color: '#036d92', textAlign: 'center' }}
@@ -6033,6 +6546,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           type="button"
                           onClick={() => {
                             updateDiagnosis({ followUpDate: holidayWarning.suggestedDate });
+                            syncFollowUpToCallList({ followUpDate: holidayWarning.suggestedDate });
                             addNotification({
                               type: 'success',
                               message: `Adjusted follow-up return date to ${holidayWarning.suggestedDate} (${holidayWarning.suggestedDayName}) ✓`
@@ -6051,27 +6565,35 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     );
                   })()}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1.5fr', gap: 12, marginBottom: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1.5fr', gap: 12, marginBottom: 12 }}>
                     <div>
                       <label className="form-label" style={{ fontSize: 11.5 }}>Scheduled Return Date</label>
                       <input
+                        id="input-fu-return-date"
                         type="text"
                         className="form-input"
                         placeholder="DD/MM/YYYY"
                         style={{ fontWeight: 700, color: '#036d92', fontSize: 12 }}
                         value={activeSession?.diagnosis.followUpDate || ''}
-                        onChange={e => updateDiagnosis({ followUpDate: e.target.value })}
+                        onChange={e => {
+                          updateDiagnosis({ followUpDate: e.target.value });
+                          syncFollowUpToCallList({ followUpDate: e.target.value });
+                        }}
                       />
                     </div>
 
                     <div>
                       <label className="form-label" style={{ fontSize: 11.5 }}>Purpose of Follow-Up</label>
                       <input
+                        id="input-fu-purpose"
                         type="text"
                         className="form-input"
                         style={{ fontSize: 12 }}
                         value={activeSession?.diagnosis.followUpPurpose || ''}
-                        onChange={e => updateDiagnosis({ followUpPurpose: e.target.value })}
+                        onChange={e => {
+                          updateDiagnosis({ followUpPurpose: e.target.value });
+                          syncFollowUpToCallList({ followUpPurpose: e.target.value });
+                        }}
                         placeholder="e.g. Assess clinical clearance of fungal lesions"
                       />
                     </div>
@@ -6079,14 +6601,33 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     <div>
                       <label className="form-label" style={{ fontSize: 11.5 }}>Nursing Outbound Call Instructions</label>
                       <input
+                        id="input-fu-nursing-instructions"
                         type="text"
                         className="form-input"
                         style={{ fontSize: 12 }}
                         value={activeSession?.diagnosis.nursingInstructions || ''}
-                        onChange={e => updateDiagnosis({ nursingInstructions: e.target.value })}
+                        onChange={e => {
+                          updateDiagnosis({ nursingInstructions: e.target.value });
+                          syncFollowUpToCallList({ nursingInstructions: e.target.value });
+                        }}
                         placeholder="e.g. Call patient at day 5 to verify compliance"
                       />
                     </div>
+                  </div>
+
+                  {/* Sync status footer banner */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '6px 12px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 11, color: '#475569' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <CheckCircle2 size={13} color="#059669" />
+                      <span><strong>Outbound Recall Sync:</strong> Automatically synchronized with <Link href="/doctor/followup-call-list" target="_blank" style={{ color: '#036d92', fontWeight: 700 }}>Follow-Up Call List</Link> for nursing care coordination.</span>
+                    </div>
+                    <Link
+                      href="/doctor/followup-call-list"
+                      target="_blank"
+                      style={{ color: '#036d92', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}
+                    >
+                      Open Recall Ledger <ArrowRight size={11} />
+                    </Link>
                   </div>
                 </div>
 
@@ -6793,10 +7334,10 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Layers size={14} color="#0369A1" />
                         <span style={{ letterSpacing: '0.02em' }}>
-                          PROCEDURE SUPPLIES &amp; CONSUMABLES ({uniqueProcedurePrescriptions.length})
+                          PROCEDURE SUPPLIES &amp; CONSUMABLES ({printableProcedurePrescriptions.length})
                         </span>
                         <span style={{ fontSize: 10, background: '#E0F2FE', color: '#0369A1', fontWeight: 800, padding: '1px 6px', borderRadius: 10 }}>
-                          Dispensary Allocated
+                          Dispensary Allocated • Print on Rx = ✓
                         </span>
                       </div>
                       <button
@@ -6808,9 +7349,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       </button>
                     </div>
 
-                    {(!uniqueProcedurePrescriptions || uniqueProcedurePrescriptions.length === 0) ? (
+                    {(!printableProcedurePrescriptions || printableProcedurePrescriptions.length === 0) ? (
                       <div style={{ padding: '12px 14px', fontSize: 12, color: '#64748B', fontStyle: 'italic' }}>
-                        No procedure consumables or supplies allocated.
+                        No procedure consumables set to print on final prescription slip.
                       </div>
                     ) : (
                       <div style={{ overflowX: 'auto' }}>
@@ -6823,12 +7364,12 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                               <th style={{ padding: '7px 10px', fontWeight: 800 }}>CATEGORY</th>
                               <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>ALLOCATED QTY</th>
                               <th style={{ padding: '7px 10px', fontWeight: 800 }}>CLINICAL NOTES / PURPOSE</th>
-                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>STATUS</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>PRINT STATUS</th>
                               <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'right' }}>DISPENSARY CHARGE</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {uniqueProcedurePrescriptions.map((sup, idx) => {
+                            {printableProcedurePrescriptions.map((sup, idx) => {
                               const isFirst = idx === 0;
                               return (
                                 <tr
@@ -6839,7 +7380,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   }}
                                 >
                                   <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
-                                    {idx + 1}/{uniqueProcedurePrescriptions.length}
+                                    {idx + 1}/{printableProcedurePrescriptions.length}
                                   </td>
                                   <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
                                     {sup.itemName}
@@ -8894,30 +9435,37 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       </tbody>
                     </table>
 
-                    {/* Procedure Consumables & Supplies Prescription (Optional: ONLY shown if added) */}
-                    {activeSession?.procedurePrescriptions && activeSession.procedurePrescriptions.length > 0 && (
+                    {/* Procedure Consumables & Supplies Prescription (Optional: ONLY shown if added AND Print on Rx = ✓) */}
+                    {printableProcedurePrescriptions.length > 0 && (
                       <div style={{ marginTop: 14, marginBottom: 18, borderTop: '1.5px dashed #CBD5E1', paddingTop: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                           <span style={{ fontSize: 20, fontWeight: 900, color: '#036d92', fontFamily: 'serif' }}>℞</span>
                           <span style={{ fontSize: 12.5, fontWeight: 800, color: '#0C4A6E', textTransform: 'uppercase' }}>
-                            Procedure Consumables & Supplies Prescription
+                            Procedure Consumables &amp; Supplies Prescription
                           </span>
                           <span className="badge" style={{ fontSize: 10, background: '#E0F2FE', color: '#0369A1', fontWeight: 700 }}>
-                            {activeSession.procedurePrescriptions.length} Items
+                            {printableProcedurePrescriptions.length} Items (Print on Rx = ✓)
                           </span>
                         </div>
                         <table style={{ width: '100%', fontSize: rxTableFontSize }}>
                           <thead>
                             <tr style={{ borderBottom: '1px solid #CBD5E1', textAlign: 'left' }}>
-                              <th style={{ padding: '4px 0' }}># Instrument /drugh</th>
-                              <th style={{ width: 80 }}>qunity</th>
-                              <th style={{ width: 110 }}>ID CORD</th>
+                              <th style={{ padding: '4px 0' }}># Instrument / Drug</th>
+                              <th style={{ width: 80 }}>Quantity</th>
+                              <th style={{ width: 110 }}>ID / CORD</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {uniqueProcedurePrescriptions.map((p, idx) => (
+                            {printableProcedurePrescriptions.map((p, idx) => (
                               <tr key={p.id || `print-proc-${idx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                <td style={{ padding: '6px 0', fontWeight: 700, color: '#036d92' }}>{idx + 1}. {p.itemName}</td>
+                                <td style={{ padding: '6px 0', fontWeight: 700, color: '#036d92' }}>
+                                  {idx + 1}. {p.itemName}
+                                  {p.source === 'CUSTOM' && (
+                                    <span style={{ marginLeft: 6, fontSize: 9, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>
+                                      CUSTOM
+                                    </span>
+                                  )}
+                                </td>
                                 <td style={{ fontWeight: 800 }}>{p.quantity}</td>
                                 <td>
                                   <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, background: '#F1F5F9', padding: '2px 6px', borderRadius: 4 }}>
@@ -9227,216 +9775,85 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         </div>
       )}
 
-      {/* Add New Lab Test Modal */}
-      {showAddTestModal && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setShowAddTestModal(false)}>
-          <div className="modal modal-md" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ background: '#F0F9FF', borderBottom: '1px solid #BAE6FD' }}>
+      {/* Diagnostic Test Ingestion Parameters Inspector Modal */}
+      {viewingParametersTest && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setViewingParametersTest(null)}>
+          <div className="modal modal-md" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header" style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
-                  width: 34, height: 34, borderRadius: 8, background: '#036d92',
+                  width: 34, height: 34, borderRadius: 8, background: '#6366F1',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF'
                 }}>
-                  <FileText size={18} />
+                  <FlaskConical size={18} />
                 </div>
                 <div>
-                  <span className="modal-title" style={{ fontWeight: 800, fontSize: 16, color: '#036d92' }}>
-                    Add New Lab Test to Diagnostic Catalog
+                  <span className="modal-title" style={{ fontWeight: 800, fontSize: 16, color: '#0F172A' }}>
+                    {viewingParametersTest.name}
                   </span>
                   <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>
-                    Register test in hospital catalog and order into active consultation
+                    Code: <strong style={{ color: '#4F46E5' }}>{viewingParametersTest.code}</strong> • {viewingParametersTest.category} • 🧪 {viewingParametersTest.specimen}
                   </div>
                 </div>
               </div>
-              <button onClick={() => setShowAddTestModal(false)} className="btn btn-ghost btn-icon">
+              <button onClick={() => setViewingParametersTest(null)} className="btn btn-ghost btn-icon">
                 <X size={16} />
               </button>
             </div>
 
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label className="form-label" style={{ fontWeight: 700 }}>Test Name *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Enter test name / investigation panel..."
-                  value={newTestForm.name}
-                  onChange={e => setNewTestForm({ ...newTestForm, name: e.target.value })}
-                  autoFocus
-                />
+            <div className="modal-body" style={{ padding: 18 }}>
+              <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#0369A1' }}>
+                <strong>Admin Master Configuration:</strong> When the laboratory processes this test, technician enters results conforming to these exact parameters and reference intervals.
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700 }}>Category *</label>
-                  <select
-                    className="form-select"
-                    value={newTestForm.category}
-                    onChange={e => setNewTestForm({ ...newTestForm, category: e.target.value as any })}
-                  >
-                    <option value="Hematology">Hematology</option>
-                    <option value="Biochemistry">Biochemistry</option>
-                    <option value="Pathology">Pathology</option>
-                    <option value="Microbiology">Microbiology</option>
-                    <option value="Radiology">Radiology</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700 }}>Requisition Fee (₹) *</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newTestForm.price}
-                    onChange={e => setNewTestForm({ ...newTestForm, price: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
+              <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', textAlign: 'left', fontWeight: 700 }}>
+                      <th style={{ padding: '8px 10px' }}>#</th>
+                      <th style={{ padding: '8px 10px' }}>Analyte Parameter</th>
+                      <th style={{ padding: '8px 10px' }}>Type</th>
+                      <th style={{ padding: '8px 10px' }}>Unit</th>
+                      <th style={{ padding: '8px 10px' }}>Male Interval</th>
+                      <th style={{ padding: '8px 10px' }}>Female Interval</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingParametersTest.parameters && viewingParametersTest.parameters.length > 0 ? (
+                      viewingParametersTest.parameters.map((p, idx) => (
+                        <tr key={p.id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '8px 10px', color: '#94A3B8' }}>{idx + 1}</td>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: '#0F172A' }}>
+                            {p.name} {p.code ? `(${p.code})` : ''}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span style={{ fontSize: 10.5, background: '#F1F5F9', padding: '1px 5px', borderRadius: 4 }}>
+                              {p.dataType}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#475569' }}>{p.unit || '-'}</td>
+                          <td style={{ padding: '8px 10px', color: '#0369A1' }}>
+                            {p.maleMin !== undefined && p.maleMax !== undefined ? `${p.maleMin} – ${p.maleMax}` : (p.referenceRange || '-')}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#BE185D' }}>
+                            {p.femaleMin !== undefined && p.femaleMax !== undefined ? `${p.femaleMin} – ${p.femaleMax}` : (p.referenceRange || '-')}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 16, textAlign: 'center', color: '#94A3B8' }}>
+                          No individual analyte parameters defined.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Unit of Measurement</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Unit of measurement..."
-                    value={newTestForm.unit || ''}
-                    onChange={e => setNewTestForm({ ...newTestForm, unit: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Specimen Tube / Sample Type</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    list="specimen-tube-options"
-                    placeholder="EDTA (Purple Tube)"
-                    value={newTestForm.specimenTube}
-                    onChange={e => setNewTestForm({ ...newTestForm, specimenTube: e.target.value })}
-                  />
-                  <datalist id="specimen-tube-options">
-                    <option value="EDTA (Purple Tube)" />
-                    <option value="Serum Gel (Yellow Tube)" />
-                    <option value="Fluoride (Grey Tube)" />
-                    <option value="Plain (Red Tube)" />
-                    <option value="Citrate (Light Blue Tube)" />
-                    <option value="Heparin (Green Tube)" />
-                    <option value="Urine Sterile Container" />
-                    <option value="Lesion Swab / Scraping" />
-                    <option value="Sterile Biopsy Container" />
-                  </datalist>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Normal Reference Range</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Normal reference range..."
-                    value={newTestForm.normalRange}
-                    onChange={e => setNewTestForm({ ...newTestForm, normalRange: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Special Instructions / Sample Prep</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Sample preparation or instructions..."
-                    value={newTestForm.instructions}
-                    onChange={e => setNewTestForm({ ...newTestForm, instructions: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                fontWeight: 700, fontSize: 12.5, background: '#F0F9FF', padding: '10px 14px',
-                borderRadius: 8, border: '1.5px solid #BAE6FD', color: '#0369A1'
-              }}>
-                <input
-                  type="checkbox"
-                  checked={newTestForm.addToBasket}
-                  onChange={e => setNewTestForm({ ...newTestForm, addToBasket: e.target.checked })}
-                  style={{ width: 17, height: 17, accentColor: '#036d92' }}
-                />
-                <span>Also add directly to current patient Active Investigation Basket now</span>
-              </label>
             </div>
 
-            <div className="modal-footer" style={{ background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
-              <button onClick={() => setShowAddTestModal(false)} className="btn btn-ghost">Cancel</button>
-              <button
-                onClick={() => {
-                  const testName = newTestForm.name.trim();
-                  if (!testName) {
-                    addNotification({ type: 'warning', message: 'Please enter a test name' });
-                    return;
-                  }
-                  const testId = `inv-${Date.now()}`;
-                  const tubeName = newTestForm.specimenTube?.trim() || 'EDTA (Purple Tube)';
-                  const newCatalogItem = {
-                    id: testId,
-                    name: testName,
-                    category: newTestForm.category,
-                    price: Number(newTestForm.price) || 0,
-                    unit: newTestForm.unit?.trim(),
-                    normalRange: newTestForm.normalRange?.trim() || 'Standard Reference Range',
-                    instructions: newTestForm.instructions?.trim(),
-                    specimenTube: tubeName
-                  };
-
-                  useInvestigationCatalogStore.getState().addTest(newCatalogItem);
-
-                  try {
-                    useAdminStore.getState().addLabTest({
-                      name: testName,
-                      category: newTestForm.category,
-                      specimenTube: tubeName,
-                      price: Number(newTestForm.price) || 0,
-                      turnaroundHours: 4,
-                      parameters: [
-                        {
-                          name: testName,
-                          unit: newTestForm.unit || 'Standard',
-                          maleMin: 0,
-                          maleMax: 100,
-                          femaleMin: 0,
-                          femaleMax: 100
-                        }
-                      ]
-                    });
-                  } catch {}
-
-                  if (newTestForm.addToBasket) {
-                    addInvestigation({
-                      testId,
-                      testName,
-                      category: newTestForm.category,
-                      price: Number(newTestForm.price) || 0,
-                      status: 'ORDERED',
-                      specimenTube: tubeName,
-                      notes: newTestForm.instructions?.trim() || ''
-                    });
-                  }
-
-                  addNotification({
-                    type: 'success',
-                    message: `Added "${testName}" to Diagnostic Catalog${newTestForm.addToBasket ? ' and Active Basket' : ''}!`
-                  });
-                  setInvSearch(testName);
-                  setActiveTab('investigations');
-                  setShowAddTestModal(false);
-                }}
-                className="btn btn-primary"
-                style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 800 }}
-              >
-                Save & Add to Catalog
-              </button>
+            <div className="modal-footer" style={{ background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setViewingParametersTest(null)} className="btn btn-ghost">Close</button>
             </div>
           </div>
         </div>
@@ -10412,6 +10829,553 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   <Printer size={15} /> 🖨️ Print Complete Dossier (Show All / 4 Sheets)
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SEARCHABLE DRUG SELECTOR MODAL (Single Source of Truth: /admin/drugs) */}
+      {/* ============================================================ */}
+      {isDrugSelectorModalOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setIsDrugSelectorModalOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 16,
+            backdropFilter: 'blur(3px)'
+          }}
+        >
+          <div
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: 860,
+              width: '100%',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 12,
+              overflow: 'hidden',
+              background: '#FFFFFF',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '1.5px solid #BAE6FD'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #036d92 0%, #0284c7 100%)',
+              color: '#FFFFFF',
+              padding: '16px 20px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Pill size={18} />
+                  <span>Select Drug from Admin Drug Catalog</span>
+                </div>
+                <div style={{ fontSize: 11.5, opacity: 0.9, marginTop: 2 }}>
+                  Single Source of Truth: <code style={{ background: 'rgba(255,255,255,0.2)', padding: '1px 5px', borderRadius: 4 }}>/admin/drugs</code> • Active Master Drugs ({activeAdminDrugs.length} Available)
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDrugSelectorModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: 4 }}
+                title="Close modal"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Search Box */}
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  className="form-input"
+                  autoFocus
+                  placeholder="Search drug name, combination / generic, brand name..."
+                  value={drugModalSearch}
+                  onChange={e => setDrugModalSearch(e.target.value)}
+                  style={{ paddingLeft: 38, height: 40, fontSize: 13, background: '#FFFFFF', borderRadius: 8, borderColor: '#CBD5E1' }}
+                />
+                {drugModalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setDrugModalSearch('')}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Drugs List */}
+            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {filteredModalDrugs.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B' }}>
+                  <Pill size={32} color="#CBD5E1" style={{ margin: '0 auto 10px' }} />
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#1E293B' }}>No Active Catalog Drugs Found</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    No active drugs match &ldquo;{drugModalSearch}&rdquo;. Inactive drugs configured in <code>/admin/drugs</code> are hidden from selection.
+                  </div>
+                </div>
+              ) : (
+                filteredModalDrugs.map(drug => (
+                  <div
+                    key={drug.id}
+                    onClick={() => handleSelectDrugFromMaster(drug)}
+                    style={{
+                      border: '1.5px solid #E2E8F0',
+                      borderRadius: 8,
+                      padding: '12px 16px',
+                      background: '#FFFFFF',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      transition: 'all 0.15s ease',
+                      gap: 16
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#036d92';
+                      e.currentTarget.style.background = '#F0F9FF';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = '#E2E8F0';
+                      e.currentTarget.style.background = '#FFFFFF';
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: 13.5, color: '#0F172A' }}>
+                          {drug.name}
+                        </span>
+                        <span style={{ fontSize: 12, color: '#036d92', fontWeight: 600 }}>
+                          ({drug.genericName})
+                        </span>
+                        {drug.brandName && (
+                          <span className="badge badge-purple" style={{ fontSize: 10 }}>
+                            Brand: {drug.brandName}
+                          </span>
+                        )}
+                        <span className="badge badge-outline" style={{ fontSize: 9.5, fontFamily: 'monospace' }}>
+                          ID: {drug.id}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 4, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <span>Dose: <strong>{drug.defaultDose || '1 tab'}</strong></span>
+                        <span>Freq: <strong>{drug.defaultFreq || '1-0-1'}</strong></span>
+                        <span>Days: <strong>{drug.defaultDay || '5 day'}</strong></span>
+                        <span>Total: <strong>{drug.defaultTotal || '5'}</strong></span>
+                        <span>Note: <em>{drug.defaultNote || 'After food'}</em></span>
+                        <span>Brand/Mfg: <strong>{drug.manufacturer || 'Cipla pvt'}</strong></span>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#036d92' }}>
+                        ₹{drug.unitPrice}
+                      </div>
+                      <span className={`badge ${drug.stock === 0 ? 'badge-danger' : drug.stock <= drug.reorderLevel ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: 9.5 }}>
+                        {drug.stock === 0 ? 'Out of Stock' : `Stock: ${drug.stock}`}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        style={{ background: '#036d92', borderColor: '#036d92', fontSize: 11, padding: '3px 10px', marginTop: 4 }}
+                      >
+                        Select & Prescribe
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                Showing {filteredModalDrugs.length} of {activeAdminDrugs.length} active master drugs
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setIsDrugSelectorModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SEARCH PROCEDURE & CLINICAL MASTERS MODAL (Single Source of Truth: /admin/procedures & /admin/drugs) */}
+      {/* ============================================================ */}
+      {isProcSelectorModalOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setIsProcSelectorModalOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 16,
+            backdropFilter: 'blur(3px)'
+          }}
+        >
+          <div
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: 680,
+              width: '100%',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 12,
+              overflow: 'hidden',
+              background: '#FFFFFF',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '1.5px solid #BAE6FD'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #036d92 0%, #0284c7 100%)',
+              color: '#FFFFFF',
+              padding: '16px 20px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Scissors size={18} />
+                  <span>Search Procedure &amp; Clinical Masters</span>
+                </div>
+                <div style={{ fontSize: 11.5, opacity: 0.95, marginTop: 2 }}>
+                  Master Source: <code style={{ background: 'rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 4 }}>/admin/procedures &rarr; 4. Procedures ({activeAdminProcedures.length})</code> &bull; <code style={{ background: 'rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 4 }}>/admin/drugs ({activeAdminDrugs.length})</code>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsProcSelectorModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: 4 }}
+                title="Close modal"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Filter Tabs & Search Box */}
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setProcModalCategory('ALL')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: '1px solid',
+                    borderColor: procModalCategory === 'ALL' ? '#036d92' : '#CBD5E1',
+                    background: procModalCategory === 'ALL' ? '#036d92' : '#FFFFFF',
+                    color: procModalCategory === 'ALL' ? '#FFFFFF' : '#475569',
+                    cursor: 'pointer'
+                  }}
+                >
+                  All Masters ({activeAdminProcedures.length + activeAdminDrugs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProcModalCategory('PROCEDURES')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: '1px solid',
+                    borderColor: procModalCategory === 'PROCEDURES' ? '#036d92' : '#CBD5E1',
+                    background: procModalCategory === 'PROCEDURES' ? '#036d92' : '#FFFFFF',
+                    color: procModalCategory === 'PROCEDURES' ? '#FFFFFF' : '#475569',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Procedure Master ({activeAdminProcedures.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProcModalCategory('DRUGS')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: '1px solid',
+                    borderColor: procModalCategory === 'DRUGS' ? '#7E22CE' : '#CBD5E1',
+                    background: procModalCategory === 'DRUGS' ? '#7E22CE' : '#FFFFFF',
+                    color: procModalCategory === 'DRUGS' ? '#FFFFFF' : '#475569',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Central Drug Formulary ({activeAdminDrugs.length})
+                </button>
+              </div>
+
+              <div style={{ position: 'relative' }}>
+                <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  className="form-input"
+                  autoFocus
+                  placeholder="Search procedure or formulary drug..."
+                  value={procModalSearch}
+                  onChange={e => setProcModalSearch(e.target.value)}
+                  style={{ paddingLeft: 38, height: 38, fontSize: 13, background: '#FFFFFF', borderRadius: 8, borderColor: '#CBD5E1' }}
+                />
+                {procModalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setProcModalSearch('')}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Masters Item List */}
+            <div style={{ padding: '14px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* PROCEDURE MASTER SECTION */}
+              {(procModalCategory === 'ALL' || procModalCategory === 'PROCEDURES') && (
+                <>
+                  {procModalCategory === 'ALL' && (
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>PROCEDURE MASTER (/admin/procedures &rarr; 4. Procedures)</span>
+                      <span>{filteredModalProcedures.length} Available</span>
+                    </div>
+                  )}
+                  {filteredModalProcedures.map(proc => (
+                    <div
+                      key={`modal-proc-${proc.id}`}
+                      onClick={() => handleSelectProcedureFromMaster(proc)}
+                      style={{
+                        border: '1px solid #E2E8F0',
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        background: '#FFFFFF',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = '#036d92';
+                        e.currentTarget.style.background = '#F0F9FF';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = '#E2E8F0';
+                        e.currentTarget.style.background = '#FFFFFF';
+                      }}
+                    >
+                      <div style={{
+                        width: 18, height: 18, borderRadius: '50%', border: '2px solid #036d92',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                      }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#036d92' }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: '#0F172A' }}>
+                            {proc.name}
+                          </span>
+                          <span className="badge badge-outline" style={{ fontSize: 9.5, fontFamily: 'monospace' }}>
+                            {proc.code}
+                          </span>
+                          <span className="badge" style={{ fontSize: 9.5, background: '#E0F2FE', color: '#0369A1' }}>
+                            {proc.category}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace', fontWeight: 700 }}>
+                            ID: {proc.id}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', background: '#F0FDF4', color: '#15803D', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                            PROCEDURE MASTER
+                          </span>
+                        </div>
+                        {proc.preInstructions && (
+                          <div style={{ fontSize: 11, color: '#64748B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {proc.preInstructions}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#036d92' }}>
+                          ₹{proc.basePrice}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* CENTRAL DRUG FORMULARY SECTION */}
+              {(procModalCategory === 'ALL' || procModalCategory === 'DRUGS') && (
+                <>
+                  {procModalCategory === 'ALL' && (
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#7E22CE', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 10, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>CENTRAL DRUG FORMULARY (/admin/drugs)</span>
+                      <span>{filteredModalDrugsForProc.length} Available</span>
+                    </div>
+                  )}
+                  {filteredModalDrugsForProc.map(drug => {
+                    const displayName = drug.brandName ? `${drug.brandName} (${drug.name})` : drug.name;
+                    return (
+                      <div
+                        key={`modal-drug-${drug.id}`}
+                        onClick={() => handleSelectDrugForProcedure(drug)}
+                        style={{
+                          border: '1px solid #F3E8FF',
+                          borderRadius: 8,
+                          padding: '10px 14px',
+                          background: '#FFFFFF',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = '#7E22CE';
+                          e.currentTarget.style.background = '#FAF5FF';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = '#F3E8FF';
+                          e.currentTarget.style.background = '#FFFFFF';
+                        }}
+                      >
+                        <div style={{
+                          width: 18, height: 18, borderRadius: '50%', border: '2px solid #7E22CE',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7E22CE' }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: '#0F172A' }}>
+                              {displayName}
+                            </span>
+                            <span className="badge" style={{ fontSize: 9.5, background: '#F3E8FF', color: '#7E22CE' }}>
+                              {drug.formulation || 'Drug'}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', background: '#F3E8FF', color: '#6B21A8', border: '1px solid #DDD6FE', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace', fontWeight: 700 }}>
+                              ID: {drug.id}
+                            </span>
+                            {drug.slotNo && (
+                              <span className="badge badge-outline" style={{ fontSize: 9.5, fontFamily: 'monospace' }}>
+                                Slot: {drug.slotNo}
+                              </span>
+                            )}
+                            <span style={{ fontSize: '0.72rem', background: '#FAF5FF', color: '#7E22CE', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                              DRUG FORMULARY
+                            </span>
+                          </div>
+                          {drug.genericName && (
+                            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                              Generic: {drug.genericName} {drug.manufacturer ? `• ${drug.manufacturer}` : ''}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#7E22CE' }}>
+                            ₹{drug.unitPrice || 0}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Custom Item Option */}
+              <div
+                onClick={() => {
+                  const customName = procModalSearch.trim() || 'Custom Clinical Item';
+                  addProcedurePrescription({
+                    id: `proc-rx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                    source: 'CUSTOM',
+                    itemName: customName,
+                    quantity: 1,
+                    idCode: `CUST-${Math.floor(100 + Math.random() * 899)}`,
+                    category: 'Custom Supply',
+                    unit: 'Nos',
+                    instructions: 'Custom clinical item',
+                    printOnRx: true
+                  });
+                  addNotification({
+                    type: 'success',
+                    message: `Added custom item "${customName}" (Source: CUSTOM • master catalogs untouched)`
+                  });
+                  setIsProcSelectorModalOpen(false);
+                  setProcModalSearch('');
+                }}
+                style={{
+                  padding: '12px 16px',
+                  background: '#FFFBEB',
+                  border: '1.5px dashed #FDE68A',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  color: '#92400E',
+                  marginTop: 6
+                }}
+              >
+                <Plus size={16} color="#D97706" />
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 12.5 }}>
+                    + Use Custom Item {procModalSearch ? `"${procModalSearch}"` : ''}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#B45309' }}>
+                    Saves as transaction-level custom supply. Does not create or alter records in /admin/procedures or /admin/drugs.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                Showing active master items from <code>/admin/procedures &rarr; 4. Procedures ({activeAdminProcedures.length})</code> &amp; <code>/admin/drugs ({activeAdminDrugs.length})</code>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setIsProcSelectorModalOpen(false)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

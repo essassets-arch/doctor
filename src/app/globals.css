@@ -286,6 +286,9 @@ input, select, textarea { font-family: inherit; }
   flex-direction: column;
   min-height: calc(100vh - 110px);
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* ============================================================
@@ -574,6 +577,7 @@ input, select, textarea { font-family: inherit; }
   flex: 1;
   max-width: 100% !important;
   width: 100% !important;
+  min-width: 0 !important;
   margin: 0 !important;
   box-sizing: border-box;
 }
@@ -1982,8 +1986,11 @@ tbody tr.row-completed { opacity: 0.7; }
 /* Base classes for responsive layouts */
 .consultation-layout-grid {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .consultation-vitals-grid {
@@ -2657,3 +2664,90 @@ tbody tr.row-completed { opacity: 0.7; }
 .rx-table-scroll::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
+
+/* ============================================================
+   Admin Layout & Financial Governance Responsive Helpers
+   ============================================================ */
+.admin-main-viewport {
+  padding: 24px 28px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+  .admin-main-viewport {
+    padding: 18px 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-main-viewport {
+    padding: 14px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-main-viewport {
+    padding: 10px 8px;
+  }
+}
+
+.billing-responsive-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F8FAFC;
+}
+
+.billing-responsive-table-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.billing-responsive-table-scroll::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+
+.billing-responsive-table-scroll::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border-radius: 4px;
+}
+
+.billing-responsive-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+
+/* ============================================================ */
+/* ENTERPRISE ADMIN APP SHELL & FIXED/STICKY SIDEBAR ARCHITECTURE */
+/* ============================================================ */
+.admin-shell-root {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: #F8FAFC;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
+}
+
+@media screen and (min-width: 1025px) {
+  .admin-sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    flex-shrink: 0 !important;
+    z-index: 999 !important;
+    overflow: hidden !important;
+    transform: none !important;
+  }
+}
+

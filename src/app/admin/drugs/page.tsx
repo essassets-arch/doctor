@@ -9,7 +9,7 @@ import {
 import { useInventoryStore, usePharmacyStore, useUIStore } from '@/store';
 
 export default function AdminDrugsPage() {
-  const { inventory } = useInventoryStore();
+  const { inventory, toggleDrugActive } = useInventoryStore();
   const { batches, addNewDrugMaster } = usePharmacyStore();
   const { addNotification } = useUIStore();
 
@@ -21,20 +21,28 @@ export default function AdminDrugsPage() {
   const [form, setForm] = useState({
     name: '',
     genericName: '',
+    brandName: '',
     formulation: 'Tablet',
+    defaultDose: '1 tab',
+    defaultFreq: '1-0-1',
+    defaultDay: '5 day',
+    defaultTotal: '5',
+    defaultNote: 'After food',
     unitPrice: 20,
     reorderLevel: 25,
     initialStock: 100,
     batchNumber: 'BAT-2630',
     expiryDate: '2028-06-30',
     supplier: 'Sun Pharma Distributors',
-    scheduleClass: 'Schedule H'
+    scheduleClass: 'Schedule H',
+    isActive: true
   });
 
   const filteredDrugs = useMemo(() => {
     return inventory.filter(item => {
       const matchSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.genericName.toLowerCase().includes(searchTerm.toLowerCase());
+        item.genericName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.brandName && item.brandName.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchForm = selectedFormulation === 'ALL' || item.formulation === selectedFormulation;
       return matchSearch && matchForm;
     });
@@ -50,32 +58,55 @@ export default function AdminDrugsPage() {
     addNewDrugMaster({
       name: form.name,
       genericName: form.genericName,
+      brandName: form.brandName || form.name,
+      defaultDose: form.defaultDose || '1 tab',
+      defaultFreq: form.defaultFreq || '1-0-1',
+      defaultDay: form.defaultDay || '5 day',
+      defaultTotal: form.defaultTotal || '5',
+      defaultNote: form.defaultNote || 'After food',
       formulation: form.formulation,
       unitPrice: Number(form.unitPrice),
       reorderLevel: Number(form.reorderLevel),
       initialStock: Number(form.initialStock),
       batchNumber: form.batchNumber,
       expiryDate: form.expiryDate,
-      supplier: form.supplier
-    });
+      supplier: form.supplier,
+      isActive: form.isActive
+    } as any);
 
     addNotification({
       type: 'success',
-      message: `Formulary drug "${form.name}" registered in enterprise database.`
+      message: `Formulary drug "${form.name}" registered in enterprise database and immediately available in Doctor Consultation.`
     });
 
     setIsAddModalOpen(false);
     setForm({
       name: '',
       genericName: '',
+      brandName: '',
       formulation: 'Tablet',
+      defaultDose: '1 tab',
+      defaultFreq: '1-0-1',
+      defaultDay: '5 day',
+      defaultTotal: '5',
+      defaultNote: 'After food',
       unitPrice: 20,
       reorderLevel: 25,
       initialStock: 100,
       batchNumber: 'BAT-2630',
       expiryDate: '2028-06-30',
       supplier: 'Sun Pharma Distributors',
-      scheduleClass: 'Schedule H'
+      scheduleClass: 'Schedule H',
+      isActive: true
+    });
+  };
+
+  const handleToggleStatus = (drugId: string, drugName: string, currentActive: boolean) => {
+    toggleDrugActive(drugId);
+    const newStatus = !currentActive;
+    addNotification({
+      type: newStatus ? 'success' : 'warning',
+      message: `Drug "${drugName}" is now ${newStatus ? 'ACTIVE (selectable by doctors)' : 'INACTIVE (hidden from new doctor prescriptions)'}.`
     });
   };
 
@@ -168,24 +199,31 @@ export default function AdminDrugsPage() {
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               <th style={{ padding: '14px 18px' }}>Trade Name & Composition</th>
+              <th style={{ padding: '14px 18px' }}>Brand / Manufacturer</th>
               <th style={{ padding: '14px 18px' }}>Form</th>
-              <th style={{ padding: '14px 18px' }}>Schedule Class</th>
+              <th style={{ padding: '14px 18px' }}>Default Rx Config</th>
               <th style={{ padding: '14px 18px' }}>Current Stock</th>
-              <th style={{ padding: '14px 18px' }}>Reorder Level</th>
               <th style={{ padding: '14px 18px' }}>Retail MRP</th>
-              <th style={{ padding: '14px 18px', textAlign: 'right' }}>Status</th>
+              <th style={{ padding: '14px 18px', textAlign: 'right' }}>Master Status</th>
             </tr>
           </thead>
           <tbody>
             {filteredDrugs.map(drug => {
               const isOut = drug.stock === 0;
               const isLow = drug.stock > 0 && drug.stock <= drug.reorderLevel;
+              const isActive = drug.isActive !== false;
 
               return (
-                <tr key={drug.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr key={drug.id} style={{ borderBottom: '1px solid #f1f5f9', background: isActive ? '#ffffff' : '#fafafa' }}>
                   <td style={{ padding: '14px 18px' }}>
-                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{drug.name}</div>
+                    <div style={{ fontWeight: 800, color: isActive ? '#0f172a' : '#64748b' }}>{drug.name}</div>
                     <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{drug.genericName}</div>
+                  </td>
+
+                  <td style={{ padding: '14px 18px' }}>
+                    <span style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>
+                      {drug.brandName || drug.manufacturer || 'Cipla pvt'}
+                    </span>
                   </td>
 
                   <td style={{ padding: '14px 18px' }}>
@@ -195,9 +233,12 @@ export default function AdminDrugsPage() {
                   </td>
 
                   <td style={{ padding: '14px 18px' }}>
-                    <span style={{ fontSize: '0.72rem', background: '#FEF3C7', color: '#B45309', padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>
-                      Schedule H Prescription
-                    </span>
+                    <div style={{ fontSize: '0.8rem', color: '#0369a1', fontWeight: 700 }}>
+                      {drug.defaultDose || '1 tab'} • {drug.defaultFreq || '1-0-1'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      {drug.defaultDay || '5 day'} ({drug.defaultTotal || '5'} Qty) • {drug.defaultNote || 'After food'}
+                    </div>
                   </td>
 
                   <td style={{ padding: '14px 18px' }}>
@@ -210,25 +251,44 @@ export default function AdminDrugsPage() {
                     </span>
                   </td>
 
-                  <td style={{ padding: '14px 18px', color: '#64748b' }}>
-                    {drug.reorderLevel} units
-                  </td>
-
                   <td style={{ padding: '14px 18px', fontWeight: 700, color: '#334155' }}>
                     ₹{drug.unitPrice}
                   </td>
 
                   <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                    <span style={{
-                      padding: '3px 8px',
-                      borderRadius: 4,
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      background: isOut ? '#FEE2E2' : isLow ? '#FEF3C7' : '#DCFCE7',
-                      color: isOut ? '#991B1B' : isLow ? '#B45309' : '#15803D'
-                    }}>
-                      {isOut ? 'DEPLETED' : isLow ? 'LOW STOCK' : 'IN STOCK'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(drug.id, drug.name, isActive)}
+                        style={{
+                          border: isActive ? '1px solid #10b981' : '1px solid #cbd5e1',
+                          background: isActive ? '#ecfdf5' : '#f1f5f9',
+                          color: isActive ? '#047857' : '#64748b',
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          fontWeight: 700,
+                          fontSize: '0.76rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                        title={isActive ? "Active in Doctor Master (Click to Deactivate)" : "Inactive in Doctor Master (Click to Activate)"}
+                      >
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: isActive ? '#10b981' : '#94a3b8' }} />
+                        {isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </button>
+                      <span style={{
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        background: isOut ? '#FEE2E2' : isLow ? '#FEF3C7' : '#DCFCE7',
+                        color: isOut ? '#991B1B' : isLow ? '#B45309' : '#15803D'
+                      }}>
+                        {isOut ? 'DEPLETED' : isLow ? 'LOW STOCK' : 'IN STOCK'}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               );
@@ -254,9 +314,12 @@ export default function AdminDrugsPage() {
             background: '#ffffff',
             borderRadius: 12,
             width: '100%',
-            maxWidth: 540,
+            maxWidth: 580,
             overflow: 'hidden',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -270,33 +333,117 @@ export default function AdminDrugsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form onSubmit={handleAddSubmit} style={{ padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 5 }}>
-                  Brand / Trade Name *
+                  Drug / Product Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ciprofloxacin 500mg (Ciplox)"
+                  placeholder="e.g. XYZ or TAB Flucocip 400mg"
                   value={form.name}
                   onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 5 }}>
-                  Chemical Composition / Generic Formula *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ciprofloxacin Hydrochloride IP"
-                  value={form.genericName}
-                  onChange={(e) => setForm(f => ({ ...f, genericName: e.target.value }))}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 5 }}>
+                    Combination / Generic Formula *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ABC 500mg + DEF 10mg"
+                    value={form.genericName}
+                    onChange={(e) => setForm(f => ({ ...f, genericName: e.target.value }))}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 5 }}>
+                    Brand Name / Trade Mark
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. XYZ Forte or Cipla pvt"
+                    value={form.brandName}
+                    onChange={(e) => setForm(f => ({ ...f, brandName: e.target.value }))}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* Master Default Prescription Autofill Settings */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12 }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0369a1', display: 'block', marginBottom: 8, textTransform: 'uppercase' }}>
+                  Doctor Prescription Default Autofill Config:
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: 3 }}>
+                      Dose
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="1 Tablet"
+                      value={form.defaultDose}
+                      onChange={(e) => setForm(f => ({ ...f, defaultDose: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: 3 }}>
+                      Frequency
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="1-0-1"
+                      value={form.defaultFreq}
+                      onChange={(e) => setForm(f => ({ ...f, defaultFreq: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: 3 }}>
+                      Days
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="5 day"
+                      value={form.defaultDay}
+                      onChange={(e) => setForm(f => ({ ...f, defaultDay: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: 3 }}>
+                      Total Qty
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="5"
+                      value={form.defaultTotal}
+                      onChange={(e) => setForm(f => ({ ...f, defaultTotal: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: 3 }}>
+                    Prescription Note / Patient Instructions
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. After food or Not taken with milk"
+                    value={form.defaultNote}
+                    onChange={(e) => setForm(f => ({ ...f, defaultNote: e.target.value }))}
+                    style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -369,6 +516,19 @@ export default function AdminDrugsPage() {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
                   />
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ECFDF5', padding: '10px 12px', borderRadius: 6, border: '1px solid #A7F3D0' }}>
+                <input
+                  type="checkbox"
+                  id="drug-active-checkbox"
+                  checked={form.isActive}
+                  onChange={(e) => setForm(f => ({ ...f, isActive: e.target.checked }))}
+                  style={{ accentColor: '#059669', width: 16, height: 16 }}
+                />
+                <label htmlFor="drug-active-checkbox" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#065F46', cursor: 'pointer' }}>
+                  Drug Active in Catalog (Available immediately in Doctor Consultation /doctor/consultation/:caseId)
+                </label>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>

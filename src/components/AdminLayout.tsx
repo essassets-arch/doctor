@@ -151,10 +151,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [NAV_SECTIONS, pathname]);
 
   return (
-    <div style={{
-      display: 'flex', minHeight: '100vh', background: '#F8FAFC',
+    <div className="admin-shell-root" style={{
+      display: 'flex',
+      height: '100vh',
+      height: '100dvh',
+      maxHeight: '100vh',
+      maxHeight: '100dvh',
+      overflow: 'hidden',
+      background: '#F8FAFC',
       fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
-      overflowX: 'hidden', width: '100%', maxWidth: '100vw'
+      width: '100%',
+      maxWidth: '100vw',
+      boxSizing: 'border-box'
     }}>
       
       {/* Mobile Drawer Backdrop */}
@@ -185,6 +193,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           position: 'sticky',
           top: 0,
           height: '100vh',
+          height: '100dvh',
+          maxHeight: '100vh',
+          maxHeight: '100dvh',
+          flexShrink: 0,
+          overflow: 'hidden',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)'
         }}
       >
@@ -485,7 +498,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* ============================================================ */}
       {/* 2. MAIN VIEWPORT & HEADER                                   */}
       {/* ============================================================ */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        flex: 1,
+        minWidth: 0,
+        height: '100vh',
+        height: '100dvh',
+        maxHeight: '100vh',
+        maxHeight: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}>
         
         {/* Global Emergency Lockdown Banner if Active */}
         {isPanicLockdown && (
@@ -502,8 +525,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             gap: 12,
             letterSpacing: '0.04em',
             boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
-            position: 'sticky',
-            top: 0,
+            flexShrink: 0,
             zIndex: 110
           }}>
             <ShieldAlert size={18} />
@@ -520,6 +542,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Top Header Bar (58px height) */}
         <header style={{
           height: 58,
+          flexShrink: 0,
           background: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
           padding: '0 16px',
@@ -527,7 +550,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           alignItems: 'center',
           justifyContent: 'space-between',
           position: 'sticky',
-          top: isPanicLockdown ? 36 : 0,
+          top: 0,
           zIndex: 40,
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
           overflowX: 'hidden',
@@ -676,7 +699,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </header>
 
         {/* Page Content Body */}
-        <main style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
+        <main className="admin-main-viewport" style={{ flex: 1, overflowY: 'auto', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
           {children}
         </main>
 

@@ -59,7 +59,8 @@
         "doctorObservation": "Session 4 initiated.",
         "beforeImages": [],
         "afterImages": [],
-        "subSections": []
+        "subSections": [],
+        "status": "Pending"
       },
       {
         "id": "sess-proc-1790323549445-5-mugq1glk",
@@ -624,7 +625,25 @@
         "doctorObservation": "Session 4 initiated.",
         "efficacy": "",
         "status": "Done",
-        "beforeImages": [],
+        "beforeImages": [
+          {
+            "id": "img-1790346194231-u6an",
+            "procedureId": "proc-demo-3",
+            "sessionId": "sess-proc-demo-3-4-1790318753409",
+            "url": "/uploads/consultation/photos/img-1790346194231-u6an_1790346194295_fhgc.png",
+            "originalUrl": "/uploads/consultation/photos/img-1790346194231-u6an_1790346194295_fhgc.png",
+            "type": "BEFORE",
+            "fileName": "Quotation_QU_2627_0072 (1).png",
+            "fileType": "image/png",
+            "fileSize": "884 KB",
+            "date": "25/09/2026",
+            "time": "7:53 PM",
+            "capturedAt": "25/09/2026 7:53 PM",
+            "uploadedAt": "2026-09-25T14:23:14.232Z",
+            "source": "UPLOAD",
+            "doctorObservation": ""
+          }
+        ],
         "afterImages": [],
         "subSections": [],
         "sections": []
