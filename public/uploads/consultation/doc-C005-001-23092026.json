@@ -1,0 +1,74 @@
+{
+  "consultationId": "C005-001-23092026",
+  "images": [
+    {
+      "id": "img-demo-before",
+      "assetId": "asset-demo-before",
+      "src": "/samples/lesion-before.jpg",
+      "name": "Dermoscopy-PreTreatment-Plaque.jpg",
+      "type": "image/jpeg",
+      "size": 688883,
+      "width": 1024,
+      "height": 768,
+      "uploadedAt": "2026-09-24T10:00:00.000Z",
+      "source": "UPLOAD",
+      "uploadStatus": "uploaded",
+      "uploadProgress": 100
+    },
+    {
+      "id": "img-demo-after",
+      "assetId": "asset-demo-after",
+      "src": "/samples/lesion-after.jpg",
+      "name": "Dermoscopy-PostTreatment-Clearance.jpg",
+      "type": "image/jpeg",
+      "size": 768467,
+      "width": 1024,
+      "height": 768,
+      "uploadedAt": "2026-09-24T10:05:00.000Z",
+      "source": "UPLOAD",
+      "uploadStatus": "uploaded",
+      "uploadProgress": 100
+    }
+  ],
+  "markers": [
+    {
+      "id": "mkr-1",
+      "imageId": "img-demo-before",
+      "type": "ERYTHEMA_MARGIN",
+      "x": 0.52,
+      "y": 0.48,
+      "note": "Central erythematous plaque with mild irregular margin",
+      "label": "1",
+      "createdAt": "2026-09-24T10:01:00.000Z",
+      "updatedAt": "2026-09-24T10:01:00.000Z"
+    },
+    {
+      "id": "mkr-2",
+      "imageId": "img-demo-before",
+      "type": "ACTIVE_INDURATION",
+      "x": 0.44,
+      "y": 0.53,
+      "note": "Mild palpable induration and erythema perimeter",
+      "label": "2",
+      "createdAt": "2026-09-24T10:02:00.000Z",
+      "updatedAt": "2026-09-24T10:02:00.000Z"
+    },
+    {
+      "id": "mkr-test-save",
+      "imageId": "img-demo-before",
+      "type": "FOLLICULAR_PAPULE",
+      "x": 0.6,
+      "y": 0.6,
+      "note": "Test follicular papule marker",
+      "label": "3",
+      "createdAt": "2026-09-24T12:45:43.246Z",
+      "updatedAt": "2026-09-24T12:45:43.246Z"
+    }
+  ],
+  "selectedImageId": "img-demo-before",
+  "beforeImageId": "img-demo-before",
+  "afterImageId": "img-demo-after",
+  "comparisonPosition": 50,
+  "efficacyPercentage": 85,
+  "efficacySource": "MANUAL"
+}

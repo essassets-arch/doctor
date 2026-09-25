@@ -18,7 +18,7 @@ export function totals(bill: BillRecord) {
   const discount = money(bill.discountAmount || 0);
   const foc = money(bill.focAdjustment || 0);
   const net = Math.max(0, gross - discount - foc);
-  const paid = useBillingStore.getState().payments.filter(p => p.billId === bill.id).reduce((sum, p) => sum + money(p.amount), 0);
+  const paid = (useBillingStore.getState().payments || []).filter(p => p.billId === bill.id).reduce((sum, p) => sum + money(p.amount), 0);
   return { gross: gross / 100, discount: discount / 100, foc: foc / 100, net: net / 100, paid: paid / 100, outstanding: Math.max(0, net - paid) / 100 };
 }
 function derived(bill: BillRecord): BillRecord {
@@ -42,12 +42,12 @@ export function generateBill(encounterId: string): BillRecord {
   const fee = q.consultationFee ?? session?.billing.consultationFee ?? useAdminStore.getState().settings.consultationFee;
   if (fee === undefined) throw new Error('Configure the consultation fee in Admin Settings before check-in.');
   const items = [item('CONSULTATION', encounterId, 'Consultation', fee)];
-  session?.investigations.filter(i => i.location !== 'EXTERNAL').forEach(i => items.push(item('INVESTIGATION', i.id || i.testId, i.testName, i.price, i.quantity || 1)));
-  session?.procedures.filter(p => p.completedInClinic || p.status === 'Done').forEach(p => {
+  (session?.investigations || []).filter(i => i.location !== 'EXTERNAL').forEach(i => items.push(item('INVESTIGATION', i.id || i.testId, i.testName, i.price, i.quantity || 1)));
+  (session?.procedures || []).filter(p => p.completedInClinic || p.status === 'Done').forEach(p => {
     items.push(item('PROCEDURE', p.id, `${p.procedureName} — session ${p.sessionNumber || p.sessionsCount || ''}`, p.price));
     p.consumables?.forEach(c => items.push(item('CONSUMABLE', `${p.id}:${c.id}`, c.name, c.unitPrice, c.quantity)));
   });
-  session?.prescriptions.filter(p => p.dispensed).forEach(p => items.push(item(p.topical ? 'TOPICAL' : 'PHARMACY', p.id, p.drugName, Number(p.price || 0), Number(p.totalQty))));
+  (session?.prescriptions || []).filter(p => p.dispensed).forEach(p => items.push(item(p.topical ? 'TOPICAL' : 'PHARMACY', p.id, p.drugName, Number(p.price || 0), Number(p.totalQty))));
   const bill = derived({ ...(existing || {}), id: existing?.id || crypto.randomUUID(), encounterId,
     invoiceNumber: existing?.invoiceNumber || '', patientId: patient.id, patientName: `${patient.firstName} ${patient.lastName}`,
     mrdNumber: patient.mrdNumber, doctorName: q.doctorName, date: new Date().toISOString().slice(0, 10),
@@ -61,8 +61,8 @@ export function receivePayment(billId: string, tenders: Tender[], requestId: str
     const bill = state.bills.find(b => b.id === billId);
     if (!bill?.encounterId) throw new Error('Select an encounter bill.');
     if (!requestId.trim()) throw new Error('Payment request ID is required.');
-    if (state.payments.some(p => p.requestId === requestId)) {
-      if (state.payments.some(p => p.requestId === requestId && p.billId !== billId)) throw new Error('Request ID already used for another bill.');
+    if ((state.payments || []).some(p => p.requestId === requestId)) {
+      if ((state.payments || []).some(p => p.requestId === requestId && p.billId !== billId)) throw new Error('Request ID already used for another bill.');
       return bill;
     }
     if (bill.lifecycle === 'FINALIZED') throw new Error('Finalized bills are read-only.');
@@ -76,7 +76,7 @@ export function receivePayment(billId: string, tenders: Tender[], requestId: str
         mode: t.mode, reference: t.reference?.trim() || '', provider: t.provider?.trim() || '', date: new Date().toISOString(), receivedBy };
     });
     if (payments.reduce((sum, p) => sum + money(p.amount), 0) > money(totals(bill).outstanding)) throw new Error('Payment exceeds the outstanding balance.');
-    useBillingStore.setState({ payments: [...state.payments, ...payments] });
+    useBillingStore.setState({ payments: [...(state.payments || []), ...payments] });
     const updated = derived(bill);
     useBillingStore.setState({ bills: state.bills.map(b => b.id === billId ? updated : b) });
     return updated;
@@ -95,7 +95,7 @@ export function adjustBill(billId: string, kind: 'AMOUNT' | 'PERCENT' | 'FOC', a
   if (kind === 'FOC' && t.paid > 0) throw new Error('Refund existing payments before applying FOC.');
   const updated = derived({ ...bill, discountAmount: kind === 'FOC' ? 0 : discount, focAdjustment: kind === 'FOC' ? t.gross : 0 });
   useBillingStore.setState({ bills: state.bills.map(b => b.id === billId ? updated : b),
-    audit: [...state.audit, { id: crypto.randomUUID(), billId, action: kind === 'FOC' ? 'FOC Applied' : `Discount ${kind}`, reason, user: user.name, date: new Date().toISOString() }] });
+    audit: [...(state.audit || []), { id: crypto.randomUUID(), billId, action: kind === 'FOC' ? 'FOC Applied' : `Discount ${kind}`, reason, user: user.name, date: new Date().toISOString() }] });
 }
 export function settleAndFinalize(billId: string, tenders: Tender[], requestId: string) {
   return atomic(() => {

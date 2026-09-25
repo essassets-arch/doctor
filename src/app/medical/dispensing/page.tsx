@@ -36,7 +36,7 @@ export default function MedicalDispensingQueuePage() {
   const dispensedCount = prescriptions.filter(p => p.status === 'DISPENSED').length;
 
   return (
-    <div className="page-container" style={{ maxWidth: 1560, margin: '0 auto', padding: '24px 20px' }}>
+    <div className="page-container" style={{ width: '100%', padding: '24px 20px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 14 }}>
         <div>

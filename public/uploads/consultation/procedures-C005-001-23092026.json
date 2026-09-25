@@ -1,0 +1,738 @@
+[
+  {
+    "id": "proc-1790323549445",
+    "patientId": "pat-1789991704297",
+    "name": "PRP (Platelet-Rich Plasma) Therapy",
+    "category": "Aesthetic / Regenerative",
+    "createdAt": "25/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "sessions": [
+      {
+        "id": "sess-proc-1790323549445-1",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 1,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Clinical protocol initiated on 25/09/2026.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "status": "Pending"
+      },
+      {
+        "id": "sess-proc-1790323549445-2-1790323557559",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 2,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 2 initiated.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "status": "Pending"
+      },
+      {
+        "id": "sess-proc-1790323549445-4-mugof7av",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 4,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      },
+      {
+        "id": "sess-proc-1790323549445-4-1790326275523",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 4,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 4 initiated.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": []
+      },
+      {
+        "id": "sess-proc-1790323549445-5-mugq1glk",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 5,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      }
+    ]
+  },
+  {
+    "id": "proc-1790317821482",
+    "patientId": "pat-1789991704297",
+    "name": "Microneedling Dermapen Therapy",
+    "category": "Cosmetology",
+    "createdAt": "25/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "doctorObservation": "",
+    "sessions": [
+      {
+        "id": "sess-proc-1790317821482-1",
+        "procedureId": "proc-1790317821482",
+        "sessionNumber": 1,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Clinical protocol initiated on 25/09/2026.",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      }
+    ]
+  },
+  {
+    "id": "proc-demo-1",
+    "patientId": "pat-1789991704297",
+    "name": "Hair Removal",
+    "category": "Laser Therapy",
+    "createdAt": "24/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "doctorObservation": "Fitzpatrick Type II. Good response to Diode 808nm laser. Marked reduction in chin and cheek coarse terminal hairs. Mild transient erythema resolved within 2 hours. Strict SPF 50+ prescribed.",
+    "sessions": [
+      {
+        "id": "sess-1",
+        "procedureId": "proc-demo-1",
+        "sessionNumber": 1,
+        "date": "10/04/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [
+          {
+            "id": "img-1-1",
+            "url": "/samples/lesion-before.jpg",
+            "type": "BEFORE",
+            "date": "10/04/2026",
+            "time": "03:42 PM",
+            "fileName": "Chin_Lateral_Before.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "672 KB",
+            "source": "CAMERA",
+            "notes": "Baseline follicular prominence prior to laser pulse"
+          }
+        ],
+        "afterImages": [
+          {
+            "id": "img-1-2",
+            "url": "/samples/lesion-after.jpg",
+            "type": "AFTER",
+            "date": "10/04/2026",
+            "time": "04:15 PM",
+            "fileName": "Chin_Lateral_After_S1.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "750 KB",
+            "source": "CAMERA",
+            "notes": "Immediate post-treatment perifollicular response and 85% clearance"
+          }
+        ],
+        "subSections": [],
+        "sections": [
+          {
+            "id": "sec-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-1-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "10/04/2026",
+                "time": "03:42 PM",
+                "fileName": "Chin_Lateral_Before.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "CAMERA",
+                "notes": "Baseline follicular prominence prior to laser pulse"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-1-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "10/04/2026",
+                "time": "04:15 PM",
+                "fileName": "Chin_Lateral_After_S1.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "CAMERA",
+                "notes": "Immediate post-treatment perifollicular response and 85% clearance"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-2",
+        "procedureId": "proc-demo-1",
+        "sessionNumber": 2,
+        "date": "25/04/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [
+          {
+            "id": "img-sess2-1",
+            "url": "/samples/lesion-before.jpg",
+            "type": "BEFORE",
+            "date": "25/04/2026",
+            "time": "11:00 AM",
+            "fileName": "Session2_PreTreatment.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "672 KB",
+            "source": "CAMERA",
+            "notes": "40% hair density reduction noted at 2 weeks"
+          }
+        ],
+        "afterImages": [
+          {
+            "id": "img-sess2-2",
+            "url": "/samples/lesion-after.jpg",
+            "type": "AFTER",
+            "date": "25/04/2026",
+            "time": "11:35 AM",
+            "fileName": "Session2_PostTreatment.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "750 KB",
+            "source": "CAMERA",
+            "notes": "Excellent follicular reduction"
+          }
+        ],
+        "subSections": [],
+        "sections": [
+          {
+            "id": "sec-2-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-sess2-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "25/04/2026",
+                "time": "11:00 AM",
+                "fileName": "Session2_PreTreatment.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "CAMERA",
+                "notes": "40% hair density reduction noted at 2 weeks"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-sess2-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "25/04/2026",
+                "time": "11:35 AM",
+                "fileName": "Session2_PostTreatment.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "CAMERA",
+                "notes": "Excellent follicular reduction"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-3",
+        "procedureId": "proc-demo-1",
+        "sessionNumber": 3,
+        "date": "10/05/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [
+          {
+            "id": "img-sess3-1",
+            "url": "/samples/lesion-before.jpg",
+            "type": "BEFORE",
+            "date": "10/05/2026",
+            "time": "09:15 AM",
+            "fileName": "Session3_PreTreatment.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "672 KB",
+            "source": "CAMERA",
+            "notes": "Maintenance evaluation"
+          }
+        ],
+        "afterImages": [
+          {
+            "id": "img-sess3-2",
+            "url": "/samples/lesion-after.jpg",
+            "type": "AFTER",
+            "date": "10/05/2026",
+            "time": "09:45 AM",
+            "fileName": "Session3_PostTreatment.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "750 KB",
+            "source": "CAMERA",
+            "notes": "Clearance sustained at 85%"
+          }
+        ],
+        "subSections": [],
+        "sections": [
+          {
+            "id": "sec-3-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-sess3-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "10/05/2026",
+                "time": "09:15 AM",
+                "fileName": "Session3_PreTreatment.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "CAMERA",
+                "notes": "Maintenance evaluation"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-sess3-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "10/05/2026",
+                "time": "09:45 AM",
+                "fileName": "Session3_PostTreatment.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "CAMERA",
+                "notes": "Clearance sustained at 85%"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-1790259140657-4",
+        "procedureId": "proc-demo-1",
+        "sessionNumber": 4,
+        "date": "24/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "CHIN & CHEEKS",
+        "doctorObservation": "Session 4: 90% clearance, no regrowth on lateral cheeks",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [
+          {
+            "id": "img-s4-b1",
+            "url": "/samples/lesion-before.jpg",
+            "type": "BEFORE",
+            "fileName": "S4_Pre.jpg",
+            "date": "24/09/2026",
+            "time": "05:00 PM",
+            "source": "UPLOAD"
+          }
+        ],
+        "afterImages": [
+          {
+            "id": "img-s4-a1",
+            "url": "/samples/lesion-after.jpg",
+            "type": "AFTER",
+            "fileName": "S4_Post.jpg",
+            "date": "24/09/2026",
+            "time": "05:30 PM",
+            "source": "UPLOAD"
+          }
+        ],
+        "subSections": [],
+        "sections": [
+          {
+            "id": "sec-1790259140657-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-s4-b1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "fileName": "S4_Pre.jpg",
+                "date": "24/09/2026",
+                "time": "05:00 PM",
+                "source": "UPLOAD"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-s4-a1",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "fileName": "S4_Post.jpg",
+                "date": "24/09/2026",
+                "time": "05:30 PM",
+                "source": "UPLOAD"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790259140657-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790259140657-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790259140657-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790259140657-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-proc-demo-1-5-1790317775981",
+        "procedureId": "proc-demo-1",
+        "sessionNumber": 5,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 5 execution record.",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [
+          {
+            "id": "subsec-sess-proc-demo-1-5-1790317775981-1-1790317777030",
+            "sessionId": "sess-proc-demo-1-5-1790317775981",
+            "name": "Session 5 — Sub-section 1",
+            "procedureName": "Hair Removal",
+            "date": "25/09/2026",
+            "createdAt": "25/09/2026 11:59 AM",
+            "images": []
+          }
+        ],
+        "sections": []
+      }
+    ]
+  },
+  {
+    "id": "proc-demo-3",
+    "patientId": "pat-1789991704297",
+    "name": "Chemical Peeling & Resurfacing",
+    "category": "Cosmetology",
+    "createdAt": "12/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "doctorObservation": "Salicylic-Mandelic combination peel 20%. Target active comedones and post-inflammatory hyperpigmentation.",
+    "sessions": [
+      {
+        "id": "sess-peel-1",
+        "procedureId": "proc-demo-3",
+        "sessionNumber": 1,
+        "date": "12/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [
+          {
+            "id": "img-peel-1",
+            "url": "/samples/lesion-before.jpg",
+            "type": "BEFORE",
+            "date": "12/09/2026",
+            "time": "02:30 PM",
+            "fileName": "Peeling_Baseline.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "672 KB",
+            "source": "UPLOAD",
+            "notes": "Malar pigmentary patches"
+          }
+        ],
+        "afterImages": [
+          {
+            "id": "img-peel-2",
+            "url": "/samples/lesion-after.jpg",
+            "type": "AFTER",
+            "date": "12/09/2026",
+            "time": "03:10 PM",
+            "fileName": "Peeling_Post_Frosting.jpg",
+            "fileType": "image/jpeg",
+            "fileSize": "750 KB",
+            "source": "UPLOAD",
+            "notes": "Uniform endpoint mild erythema achieved"
+          }
+        ],
+        "subSections": [],
+        "sections": [
+          {
+            "id": "sec-peel-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-peel-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "12/09/2026",
+                "time": "02:30 PM",
+                "fileName": "Peeling_Baseline.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "UPLOAD",
+                "notes": "Malar pigmentary patches"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-peel-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "12/09/2026",
+                "time": "03:10 PM",
+                "fileName": "Peeling_Post_Frosting.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "UPLOAD",
+                "notes": "Uniform endpoint mild erythema achieved"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-proc-demo-3-2-1790318290602",
+        "procedureId": "proc-demo-3",
+        "sessionNumber": 2,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 2 execution record.",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      },
+      {
+        "id": "sess-proc-demo-3-3-1790318718541",
+        "procedureId": "proc-demo-3",
+        "sessionNumber": 3,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 3 initiated.",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      },
+      {
+        "id": "sess-proc-demo-3-4-1790318753409",
+        "procedureId": "proc-demo-3",
+        "sessionNumber": 4,
+        "date": "25/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 4 initiated.",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      }
+    ]
+  },
+  {
+    "id": "proc-1790256552237",
+    "patientId": "pat-1789991704297",
+    "name": "Acne Laser Comedone Extraction",
+    "category": "Clinical Dermatology",
+    "createdAt": "24/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "CLINICAL SITE",
+    "doctorObservation": "Clinical protocol initiated on 24/09/2026.",
+    "sessions": [
+      {
+        "id": "sess-1790256552237-1",
+        "procedureId": "proc-1790256552237",
+        "sessionNumber": 1,
+        "date": "24/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "CLINICAL SITE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [
+          {
+            "id": "img-1790318307418-cef9",
+            "procedureId": "proc-1790256552237",
+            "sessionId": "sess-1790256552237-1",
+            "url": "/uploads/consultation/photos/img-1790318307418-cef9_1790321909813_fgiu.png",
+            "originalUrl": "/uploads/consultation/photos/img-1790318307418-cef9_1790321909816_02ec.png",
+            "type": "BEFORE",
+            "fileName": "Himalaya_Dispatch_Analytics_August_2026_2026-09-17.png",
+            "fileType": "image/png",
+            "fileSize": "1372 KB",
+            "date": "17/09/2026",
+            "time": "12:08 PM",
+            "capturedAt": "17/09/2026 12:08 PM",
+            "uploadedAt": "2026-09-25T06:38:27.418Z",
+            "source": "UPLOAD",
+            "doctorObservation": ""
+          }
+        ],
+        "afterImages": [
+          {
+            "id": "img-1790319534801-rjdy",
+            "procedureId": "proc-1790256552237",
+            "sessionId": "sess-1790256552237-1",
+            "url": "/uploads/consultation/photos/img-1790319534801-rjdy_1790321909819_9tog.jpg",
+            "originalUrl": "/uploads/consultation/photos/img-1790319534801-rjdy_1790321909820_w9oh.jpg",
+            "type": "AFTER",
+            "fileName": "IMG_20240322_181838_1.jpg (1).jpeg",
+            "fileType": "image/jpeg",
+            "fileSize": "292 KB",
+            "date": "16/09/2026",
+            "time": "12:28 PM",
+            "capturedAt": "16/09/2026 12:28 PM",
+            "uploadedAt": "2026-09-25T06:58:54.801Z",
+            "source": "UPLOAD",
+            "doctorObservation": ""
+          }
+        ],
+        "subSections": [],
+        "sections": [
+          {
+            "id": "sec-1790256552237-1",
+            "name": "Section 1",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790256552237-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790256552237-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790256552237-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-1790256552237-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      }
+    ]
+  }
+]

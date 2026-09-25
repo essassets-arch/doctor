@@ -8,7 +8,7 @@ import {
   LogOut, Tv, MessageSquare, Send, X, ArrowUpRight,
   ShieldCheck, AlertTriangle, Stethoscope, Sparkles, Menu
 } from 'lucide-react';
-import { useQueueStore, useChatStore } from '@/store';
+import { useQueueStore, useChatStore, useUIStore } from '@/store';
 
 const DOCTOR_NAV_ITEMS = [
   { label: 'DASHBOARD', href: '/doctor/dashboard', icon: LayoutGrid },
@@ -25,6 +25,7 @@ export default function DoctorLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const { queue } = useQueueStore();
   const { messages, sendMessage } = useChatStore();
+  const { notifications } = useUIStore();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -425,6 +426,45 @@ export default function DoctorLayout({ children }: { children: React.ReactNode }
             }} />
           </button>
         )}
+      </div>
+
+      {/* Floating Notifications Toast Container */}
+      <div
+        id="doctor-notifications-container"
+        style={{
+          position: 'fixed',
+          bottom: 70,
+          right: 20,
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          pointerEvents: 'none',
+          maxWidth: 400
+        }}
+      >
+        {notifications.slice(0, 4).map(notif => (
+          <div
+            key={notif.id}
+            className={`medflow-toast toast-${notif.type}`}
+            style={{
+              pointerEvents: 'auto',
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: notif.type === 'danger' ? '#FEF2F2' : notif.type === 'warning' ? '#FFFBEB' : '#F0FDF4',
+              border: `1.5px solid ${notif.type === 'danger' ? '#F87171' : notif.type === 'warning' ? '#FCD34D' : '#86EFAC'}`,
+              color: notif.type === 'danger' ? '#991B1B' : notif.type === 'warning' ? '#92400E' : '#166534',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+              fontSize: 12.5,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <span>{notif.message}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

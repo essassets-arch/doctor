@@ -567,14 +567,15 @@ input, select, textarea { font-family: inherit; }
 }
 
 /* ============================================================
-   Page Container
+   Page Container (Full Width Edge-to-Edge Project Layout)
    ============================================================ */
 .page-container {
-  padding: 24px;
+  padding: 20px 24px;
   flex: 1;
-  max-width: 1600px;
-  width: 100%;
-  margin: 0 auto;
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box;
 }
 
 .page-header {

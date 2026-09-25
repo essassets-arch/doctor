@@ -331,9 +331,6 @@ export default function LabUploadPage() {
               </div>
             )}
 
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              💡 <strong>Receptionist Note:</strong> Uploaded reports are immediately visible inside the doctor's consultation EHR tab and during active video triage.
-            </div>
           </div>
         </div>
       </div>

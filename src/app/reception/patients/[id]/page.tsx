@@ -581,7 +581,6 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="page-container">
-      <EncounterTimeline patientId={patientId} />
       {/* Back Navigation Bar */}
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link href="/reception/search" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--primary)', fontWeight: 600 }}>
@@ -643,7 +642,7 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)' }} suppressHydrationWarning>
-                  {patient.firstName} {patient.middleName ? patient.middleName + ' ' : ''}{patient.lastName}
+                  {patient.firstName}{patient.middleName ? ' ' + patient.middleName : ''} {patient.lastName}
                 </h1>
                 <span className="badge badge-primary" style={{ fontSize: 13, padding: '4px 12px', fontFamily: 'monospace', fontWeight: 800 }} suppressHydrationWarning>
                   {patient.mrdNumber}
@@ -680,10 +679,8 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
               <Edit3 size={14} /> Edit Profile
             </button>
 
-            <Link href={`/reception/checkin?patientId=${patient.id}`}>
-              <button className="btn btn-success btn-sm">
-                <SquareCheckBig size={14} /> Check-In Walk-In
-              </button>
+            <Link className="btn btn-primary btn-sm" href={`/reception/checkin?patientId=${patient.id}`}>
+              <SquareCheckBig size={14} /> Check in
             </Link>
 
             <button
@@ -735,11 +732,11 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flex: 1, paddingBottom: 2 }}>
           {[
             { id: 'profile', badge: '11.1', label: 'Profile & Demographics', icon: User, color: '#EA580C' },
-            { id: 'clinical', badge: '11.2', label: 'Clinical Data (Vitals & Complaints)', icon: Heart, color: '#EF4444' },
+            { id: 'clinical', badge: '11.2', label: 'Clinical Data & Summary (Vitals & Complaints)', icon: Heart, color: '#EF4444' },
             { id: 'timeline', badge: '11.3', label: `Timeline & Visits (${patientAppointments.length})`, icon: Calendar, color: '#2563EB' },
             { id: 'documents', badge: '11.4', label: `Documents & Reports (${patientLabs.length})`, icon: Upload, color: '#7C3AED' },
             { id: 'procedures', badge: '11.5', label: 'Clinical Procedures & Images', icon: Camera, color: '#0284C7' },
-            { id: 'consent', badge: '11.6', label: 'Informed Consent Form', icon: FileSignature, color: '#059669' },
+            { id: 'consent', badge: '11.6', label: 'Consent Form', icon: FileSignature, color: '#059669' },
             { id: 'billing', badge: '11.7', label: `Billing & Settlement (${patientBills.length})`, icon: CreditCard, color: '#0369A1' },
           ].map(t => {
             const Icon = t.icon;
@@ -749,7 +746,7 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                 key={t.id}
                 type="button"
                 onClick={() => scrollToSection(t.id)}
-                className={`btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}`}
+                className={`tab-item btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}`}
                 style={{
                   whiteSpace: 'nowrap',
                   fontSize: 12,
@@ -1294,6 +1291,8 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
               </button>
             </Link>
           </div>
+
+          <EncounterTimeline patientId={patient.id} />
 
           <div className="card">
           <div className="card-header">
@@ -2758,4 +2757,4 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-export { default } from '@/components/PatientProfile';
+export default PatientHubPage;

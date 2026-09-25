@@ -132,7 +132,7 @@ export default function MedicalDashboardPage() {
   }, [batches, inventory]);
 
   return (
-    <div className="page-container" style={{ maxWidth: 1560, margin: '0 auto', padding: '24px 20px' }}>
+    <div className="page-container" style={{ width: '100%', padding: '24px 20px' }}>
       {/* Top Welcome & Subtitle Banner */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
         <div>

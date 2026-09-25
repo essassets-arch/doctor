@@ -16,7 +16,8 @@ import {
   formatToDDMMYYYY,
   parseAnyDate,
   addDaysToFormattedDate,
-  notifyTabSync
+  notifyTabSync,
+  CURRENT_TAB_ID
 } from '@/store';
 
 interface TreatmentProtocolManagerProps {
@@ -57,7 +58,7 @@ export default function TreatmentProtocolManager({
   const [lastSyncTime, setLastSyncTime] = useState<string>('Just now');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [procCatalogSearch, setProcCatalogSearch] = useState('');
-  const [showLevel2, setShowLevel2] = useState<boolean>(false);
+  const [showLevel2, setShowLevel2] = useState<boolean>(true);
 
   // Modals state
   const [cancelModalState, setCancelModalState] = useState<{
@@ -88,6 +89,11 @@ export default function TreatmentProtocolManager({
     reason: 'Client conflict - delay +12 days'
   });
 
+  // Load clinical procedures when caseId/patientId is active
+  useEffect(() => {
+    consultationStore.loadClinicalProcedures(caseId, patientId);
+  }, [caseId, patientId]);
+
   // Single Source of Truth Session & Protocol extraction
   const sessionData = useMemo(() => {
     const fromStore = consultationStore.sessions[caseId] ||
@@ -100,9 +106,39 @@ export default function TreatmentProtocolManager({
       patientId: patientId || ''
     };
 
-    const procedures: ProcedureExecutionItem[] = (fromStore?.procedures && fromStore.procedures.length > 0)
-      ? fromStore.procedures
-      : DEFAULT_TREATMENT_SESSIONS;
+    const clinProcs = fromStore?.clinicalProcedures || [];
+    const procName = protocol.procedureName || 'Hair Removal';
+    const targetProc = clinProcs.find(p => p.id === protocol.procedureId || p.name.toLowerCase() === procName.toLowerCase()) || clinProcs[0];
+
+    let procedures: ProcedureExecutionItem[];
+    if (targetProc && targetProc.sessions && targetProc.sessions.length > 0) {
+      procedures = targetProc.sessions.map((sess, idx) => {
+        const existingItem = (fromStore?.procedures || []).find(p => p.id === sess.id || p.sessionNumber === sess.sessionNumber);
+        return {
+          id: sess.id,
+          procedureId: targetProc.id,
+          caseId,
+          patientId: patientId || '',
+          procedureName: targetProc.name,
+          scheduledDate: sess.date || existingItem?.scheduledDate || formatToDDMMYYYY(new Date()),
+          performanceDate: sess.status === 'Done' ? (sess.date || existingItem?.performanceDate || '') : (existingItem?.performanceDate || ''),
+          sessionNumber: sess.sessionNumber || (idx + 1),
+          totalSessions: targetProc.sessions.length,
+          sessionsCount: `${sess.sessionNumber || idx + 1}/${targetProc.sessions.length}`,
+          therapist: sess.therapist || existingItem?.therapist || 'Dr Valaki',
+          bodyPart: sess.bodyPart || existingItem?.bodyPart || 'FACE',
+          status: (sess.status as any) || existingItem?.status || 'Pending',
+          paymentStatus: sess.status === 'Done' ? 'Done' : (existingItem?.paymentStatus || 'Pending'),
+          price: existingItem?.price || 2250,
+          rate: existingItem?.rate || 2250,
+          remark: sess.doctorObservation || existingItem?.remark || `Session ${sess.sessionNumber || idx + 1} scheduled/recorded.`
+        };
+      });
+    } else if (fromStore?.procedures && fromStore.procedures.length > 0) {
+      procedures = fromStore.procedures;
+    } else {
+      procedures = DEFAULT_TREATMENT_SESSIONS;
+    }
 
     return { protocol, procedures };
   }, [caseId, patientId, consultationStore.sessions, consultationStore.activeSession, syncTick]);
@@ -125,6 +161,7 @@ export default function TreatmentProtocolManager({
       if (typeof BroadcastChannel !== 'undefined') {
         bc = new BroadcastChannel('doctor_medflow_sync');
         bc.onmessage = (event) => {
+          if (event.data?.tabId === CURRENT_TAB_ID) return;
           if (event.data?.key === 'doctor-consultation' || event.data?.key === 'treatment-protocol') {
             setSyncTick(Date.now());
             setLastSyncTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -178,7 +215,7 @@ export default function TreatmentProtocolManager({
     const actual = Number(protocolForm.actualPrice) || 0;
     const after = Math.round(actual * (1 - disc / 100));
     const rate = Math.round(after / count);
-
+    const bMode = protocolForm.billingMode || 'session_wise';
     const updatedProtocol: TreatmentProtocol = {
       ...protocolForm,
       totalSessions: count,
@@ -186,10 +223,12 @@ export default function TreatmentProtocolManager({
       actualPrice: actual,
       afterDiscountPrice: after,
       total: after,
-      ratePerSession: rate
+      ratePerSession: rate,
+      billingMode: bMode
     };
 
     consultationStore.generateProtocolSchedule(caseId, updatedProtocol);
+    consultationStore.updateBilling({ procedureBillingMode: bMode });
     syncWithServerApi('auto_generate', { protocol: updatedProtocol });
     setShowLevel2(true);
 
@@ -208,9 +247,97 @@ export default function TreatmentProtocolManager({
     }, 150);
   };
 
+  // Requirement 4: Centralized session creation from Procedure Tab
+  const [isAddingSession, setIsAddingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  const handleAddNewSession = async () => {
+    if (isAddingSession) return;
+    setIsAddingSession(true);
+    setSessionError(null);
+    try {
+      const procedureName = protocolForm.procedureName || 'HAIR REMOVAL - DIODE';
+      let targetProcId = protocolForm.procedureId;
+
+      const activeSession = consultationStore.sessions[caseId] || consultationStore.activeSession;
+      const clinProcs = activeSession?.clinicalProcedures || [];
+      let targetProc = clinProcs.find(p => p.id === targetProcId || p.name.toLowerCase() === procedureName.toLowerCase());
+
+      if (!targetProc) {
+        targetProc = await consultationStore.createClinicalProcedure(caseId, {
+          name: procedureName,
+          therapist: protocolForm.therapist || 'Dr Valaki',
+          bodyPart: protocolForm.bodyPart || 'FACE',
+          category: 'Laser Therapy'
+        });
+      }
+
+      const nextNum = Math.max(
+        (targetProc.sessions?.length || 0),
+        (sessionData.procedures?.length || 0)
+      ) + 1;
+
+      const interval = Math.max(1, protocolForm.intervalDays || 20);
+      const lastSession = sessionData.procedures[sessionData.procedures.length - 1];
+      const prevDate = lastSession?.scheduledDate || lastSession?.performanceDate || formatToDDMMYYYY(new Date());
+      const nextDate = addDaysToFormattedDate(prevDate, interval);
+
+      await consultationStore.createClinicalSession(caseId, targetProc.id, {
+        sessionNumber: nextNum,
+        date: nextDate,
+        therapist: protocolForm.therapist || 'Dr Valaki',
+        bodyPart: protocolForm.bodyPart || 'FACE',
+        status: 'Pending'
+      });
+
+      setProtocolForm(prev => ({
+        ...prev,
+        totalSessions: Math.max(prev.totalSessions || 0, nextNum)
+      }));
+
+      addNotification({
+        type: 'success',
+        message: `⚡ Session ${nextNum} created in ${procedureName}! Visible in Images Tab.`
+      });
+
+      if (onChanged) onChanged();
+    } catch (err: any) {
+      console.error('Failed to create session in Procedure Tab:', err);
+      const msg = `Failed to create session: ${err?.message || 'Server error'}`;
+      setSessionError(msg);
+      addNotification({
+        type: 'danger',
+        message: msg
+      });
+    } finally {
+      setIsAddingSession(false);
+    }
+  };
+
   // Modify any session field directly (single source of truth mutation)
   const handleSessionFieldChange = (procedureId: string, updates: Partial<ProcedureExecutionItem>) => {
     consultationStore.updateSessionProcedure(caseId, procedureId, updates);
+
+    // Also update canonical ClinicalSession in store & backend
+    const targetItem = sessionData.procedures.find(p => p.id === procedureId);
+    const procName = targetItem?.procedureName || protocolForm.procedureName;
+    const activeSession = consultationStore.sessions[caseId] || consultationStore.activeSession;
+    const clinProcs = activeSession?.clinicalProcedures || [];
+    const matchedProc = clinProcs.find(p => p.id === targetItem?.procedureId || p.name.toLowerCase() === procName?.toLowerCase()) || clinProcs[0];
+
+    if (matchedProc) {
+      const matchedSess = matchedProc.sessions.find(s => s.id === procedureId || s.sessionNumber === targetItem?.sessionNumber);
+      const targetSessId = matchedSess ? matchedSess.id : procedureId;
+
+      consultationStore.updateClinicalSession(caseId, matchedProc.id, targetSessId, {
+        ...(updates.scheduledDate || updates.performanceDate ? { date: updates.performanceDate || updates.scheduledDate } : {}),
+        ...(updates.status ? { status: updates.status } : {}),
+        ...(updates.therapist ? { therapist: updates.therapist } : {}),
+        ...(updates.bodyPart ? { bodyPart: updates.bodyPart } : {}),
+        ...(updates.remark ? { doctorObservation: updates.remark } : {})
+      });
+    }
+
     syncWithServerApi('update_session', { procedureId, updates });
     if (onChanged) onChanged();
   };
@@ -359,9 +486,6 @@ export default function TreatmentProtocolManager({
               <span className="badge" style={{ background: '#DCFCE7', color: '#15803D', fontSize: 11, fontWeight: 800 }}>
                 {protocolForm.totalSessions} Sessions Configured
               </span>
-            </div>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-              Dates recalculate automatically when interval is updated. Clicking <strong>Delay +12d</strong> shifts subsequent sessions.
             </div>
           </div>
 
@@ -576,6 +700,53 @@ export default function TreatmentProtocolManager({
               ₹{protocolForm.total?.toLocaleString('en-IN') || 0}
             </div>
           </div>
+
+          {/* 11. Payment / Billing Collection Mode */}
+          <div style={{ minWidth: 260 }}>
+            <label style={{ fontSize: 11, fontWeight: 800, color: '#1E293B', display: 'block', marginBottom: 4 }}>
+              Billing / Payment Mode *
+            </label>
+            <div style={{ display: 'flex', gap: 4, height: 36, background: '#F1F5F9', padding: 3, borderRadius: 7, border: '1px solid #CBD5E1' }}>
+              <button
+                type="button"
+                onClick={() => setProtocolForm({ ...protocolForm, billingMode: 'session_wise' })}
+                style={{
+                  flex: 1,
+                  border: 'none',
+                  borderRadius: 5,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  background: (protocolForm.billingMode ?? 'session_wise') === 'session_wise' ? '#0369A1' : 'transparent',
+                  color: (protocolForm.billingMode ?? 'session_wise') === 'session_wise' ? '#FFFFFF' : '#475569',
+                  boxShadow: (protocolForm.billingMode ?? 'session_wise') === 'session_wise' ? '0 1px 4px rgba(3, 105, 161, 0.3)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Charge only for today's completed session (₹3,000). Remaining sessions paid at future visits."
+              >
+                ⚡ Session-Wise (₹{protocolForm.ratePerSession || Math.round((protocolForm.afterDiscountPrice || 9000) / Math.max(1, protocolForm.totalSessions))})
+              </button>
+              <button
+                type="button"
+                onClick={() => setProtocolForm({ ...protocolForm, billingMode: 'full_package' })}
+                style={{
+                  flex: 1,
+                  border: 'none',
+                  borderRadius: 5,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  background: protocolForm.billingMode === 'full_package' ? '#059669' : 'transparent',
+                  color: protocolForm.billingMode === 'full_package' ? '#FFFFFF' : '#475569',
+                  boxShadow: protocolForm.billingMode === 'full_package' ? '0 1px 4px rgba(5, 150, 105, 0.3)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Charge full protocol package upfront today (₹9,000)"
+              >
+                📦 Full Package (₹{protocolForm.total || 9000})
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Pre & Post Procedure Clinical Instructions */}
@@ -585,7 +756,6 @@ export default function TreatmentProtocolManager({
               <Sparkles size={14} color="#0284C7" />
               Note (Pre &amp; Post Procedure Clinical Instructions)
             </label>
-            <span style={{ fontSize: 10.5, color: '#64748B', fontWeight: 600 }}>Direct writable</span>
           </div>
           <textarea
             className="form-input"
@@ -677,8 +847,16 @@ export default function TreatmentProtocolManager({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="badge" style={{ background: '#0284C7', color: '#FFFFFF', fontSize: 11, fontWeight: 800, padding: '4px 9px' }}>
-              Rate: ₹{Math.round((protocolForm.afterDiscountPrice || 9000) / Math.max(1, protocolForm.totalSessions))} / session
+            <span className="badge" style={{
+              background: (protocolForm.billingMode ?? 'session_wise') === 'session_wise' ? '#0284C7' : '#059669',
+              color: '#FFFFFF',
+              fontSize: 11,
+              fontWeight: 800,
+              padding: '5px 10px'
+            }}>
+              {(protocolForm.billingMode ?? 'session_wise') === 'session_wise'
+                ? `⚡ Session-Wise: ₹${protocolForm.ratePerSession || Math.round((protocolForm.afterDiscountPrice || 9000) / Math.max(1, protocolForm.totalSessions))} / session (Today: ₹${protocolForm.ratePerSession || 3000})`
+                : `📦 Full Package: ₹${protocolForm.total || 9000} Upfront (All ${protocolForm.totalSessions} Sessions)`}
             </span>
             <button
               type="button"
@@ -727,6 +905,31 @@ export default function TreatmentProtocolManager({
                 title="Collapse Level 2 to edit Level 1 configuration"
               >
                 ▲ Collapse Level 2 / Edit Protocol
+              </button>
+              <button
+                type="button"
+                id="btn-treatment-add-session"
+                onClick={handleAddNewSession}
+                disabled={isAddingSession}
+                className="btn btn-sm"
+                style={{
+                  background: '#036d92',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: 12,
+                  padding: '5px 14px',
+                  borderRadius: 6,
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  cursor: isAddingSession ? 'not-allowed' : 'pointer',
+                  opacity: isAddingSession ? 0.7 : 1
+                }}
+                title="Add new session to this clinical procedure"
+              >
+                <Plus size={14} strokeWidth={2.5} />
+                <span>{isAddingSession ? 'Adding Session...' : `+ Add Session ${sessionData.procedures.length + 1}`}</span>
               </button>
             </div>
 
@@ -779,6 +982,27 @@ export default function TreatmentProtocolManager({
         {/* ============================================================ */}
         {viewMode === 'cards' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {sessionError && (
+              <div
+                className="session-error-banner"
+                data-testid="session-error-banner"
+                style={{
+                  padding: '10px 14px',
+                  background: '#FEE2E2',
+                  border: '1.5px solid #FCA5A5',
+                  borderRadius: 8,
+                  color: '#991B1B',
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>{sessionError}</span>
+              </div>
+            )}
             {sessionData.procedures.map((session, idx) => {
               const isDone = session.status === 'Done';
               const isConfirmed = session.status === 'Confirmed';
@@ -797,6 +1021,9 @@ export default function TreatmentProtocolManager({
               return (
                 <div
                   key={session.id || idx}
+                  className="treatment-session-card"
+                  data-testid="treatment-session-card"
+                  data-session-id={session.id}
                   style={{
                     background: '#FFFFFF',
                     borderRadius: 10,
@@ -965,7 +1192,8 @@ export default function TreatmentProtocolManager({
                         </label>
                         <input
                           type="text"
-                          className="form-input"
+                          className="form-input session-date-input"
+                          data-testid="session-date-input"
                           value={session.scheduledDate}
                           onChange={e => handleSessionFieldChange(session.id, { scheduledDate: e.target.value })}
                           style={{ height: 32, fontSize: 12, fontWeight: 800, fontFamily: 'monospace' }}
@@ -1301,6 +1529,31 @@ export default function TreatmentProtocolManager({
                 </div>
               );
             })}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+              <button
+                type="button"
+                id="btn-treatment-add-session-bottom"
+                onClick={handleAddNewSession}
+                disabled={isAddingSession}
+                className="btn btn-outline"
+                style={{
+                  background: '#F0F9FF',
+                  borderColor: '#0284C7',
+                  color: '#0369A1',
+                  fontWeight: 800,
+                  fontSize: 12.5,
+                  padding: '8px 20px',
+                  borderRadius: 8,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: isAddingSession ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <Plus size={15} strokeWidth={2.5} />
+                <span>{isAddingSession ? 'Adding Session...' : `+ Add Session ${sessionData.procedures.length + 1}`}</span>
+              </button>
+            </div>
           </div>
         )}
 

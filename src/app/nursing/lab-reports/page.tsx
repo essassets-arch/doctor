@@ -129,7 +129,7 @@ function LabReportsContent() {
   }, []);
 
   return (
-    <div className="page-container" style={{ maxWidth: 1300, margin: '0 auto', padding: '24px 20px' }}>
+    <div className="page-container" style={{ width: '100%', padding: '24px 20px' }}>
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 14 }}>
         <div>

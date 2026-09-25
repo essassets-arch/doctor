@@ -34,6 +34,7 @@ export default function EncounterWorkspace({ params }: { params: Promise<{ caseI
       complaints: { presentComplaint: entry.complaints?.join(', ') || entry.complaintNotes || '', durationYears: 0, durationMonths: 0, durationDays: 0, severity: 'MODERATE', onset: '', aggravatingFactors: '', relievingFactors: '' },
       history: { pastMedical: '', pastSurgical: '', allergies: patient.allergies || '', currentMedications: '' },
       billing: { consultationFee: entry.consultationFee ?? settings.consultationFee ?? 0, discountPercent: 0, isFoc: false },
+      procedures: [],
     });
   }, [caseId, session, entry, patient, doctors, settings.consultationFee]);
   if (!entry || !patient) return <main className="page-container"><h1>No records found</h1></main>;

@@ -179,7 +179,7 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
   const hasAllergies = prescription.allergies && prescription.allergies.length > 0;
 
   return (
-    <div className="page-container" style={{ maxWidth: 1500, margin: '0 auto', padding: '24px 20px' }}>
+    <div className="page-container" style={{ width: '100%', padding: '24px 20px' }}>
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>

@@ -1,1084 +1,2305 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Camera, Upload, Search, Plus, Eye, Edit3, Trash2, X, Check,
-  ChevronRight, ChevronDown, RotateCw, RotateCcw, ZoomIn, ZoomOut,
-  Maximize2, ArrowLeft, ArrowRight, Layers, FileText, SplitSquareVertical,
-  Scissors, Sliders, RefreshCw, Send, CheckSquare, Square, Lock,
-  Move, Circle, Square as SquareIcon, Type, MapPin, Sparkles, Filter,
-  Calendar, Clock, CheckCircle2, AlertCircle, Info, HardDrive, Shield, GripVertical
+  Camera,
+  Upload,
+  Plus,
+  Search,
+  ArrowLeft,
+  ArrowRight,
+  X,
+  Check,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  RotateCw,
+  Crop,
+  Edit3,
+  Trash2,
+  Calendar,
+  Clock,
+  SplitSquareVertical,
+  CheckCircle2,
+  Sparkles,
+  Layers,
+  FileText,
+  Eye,
+  ExternalLink,
+  List,
+  LayoutGrid,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpDown,
+  Share2,
+  Download,
+  Send,
+  Printer,
+  Smartphone,
+  Sliders,
+  Settings,
+  AlertCircle,
+  AlertTriangle,
+  Move,
+  Info,
+  User,
+  Shield,
+  FileCheck,
+  Maximize2,
+  RefreshCw
 } from 'lucide-react';
+import {
+  useConsultationStore,
+  useUIStore,
+  ProcedureExecutionItem,
+  formatToDDMMYYYY,
+  parseAnyDate,
+  addDaysToFormattedDate,
+  notifyTabSync,
+  CURRENT_TAB_ID,
+  getProcedurePhotos,
+  getPatientPhotos,
+  getSessionPhotos
+} from '@/store';
 
 // ============================================================================
-// Types & Hierarchy
-// PATIENT -> PROCEDURE -> SESSION -> SECTION -> BEFORE/AFTER -> IMAGES
+// CLINICAL TYPES & INTERFACES (Full hierarchy: Patient -> Procedure -> Session -> Sub-section -> Images)
 // ============================================================================
+
+export interface ClinicalAnnotation {
+  id: string;
+  x: number;
+  y: number;
+  type: string;
+  label: string;
+  color: string;
+}
+
+export interface ClinicalImageEdits {
+  zoom?: number;
+  rotation?: number;
+  crop?: { x: number; y: number; width: number; height: number };
+  panX?: number;
+  panY?: number;
+  annotations?: ClinicalAnnotation[];
+}
 
 export interface ClinicalImage {
   id: string;
+  patientId?: string;
+  procedureId: string;
+  sessionId: string;
+  subSectionId?: string;
   url: string;
-  type: 'BEFORE' | 'AFTER' | 'GENERAL';
+  originalUrl?: string;
+  type: 'BEFORE' | 'AFTER' | 'OTHER';
+  fileName: string;
+  fileType: string;
+  fileSize?: string;
   date: string; // DD/MM/YYYY
   time: string; // hh:mm A
-  fileName: string;
-  fileType: 'image/jpeg' | 'image/png' | 'application/pdf';
-  fileSize?: string;
+  capturedAt?: string;
+  uploadedAt?: string;
   source: 'UPLOAD' | 'CAMERA' | 'DERMASCOPE' | 'FACE_SCANNER' | 'PDF';
-  notes?: string;
-  annotations?: string; // serialized canvas/mark data
-  zoom?: number;
-  rotation?: number;
+  doctorObservation?: string;
+  edits?: ClinicalImageEdits;
 }
 
 export interface ClinicalSubSection {
   id: string;
-  name: string;
-  createdAt: string; // DD/MM/YYYY hh:mm A
+  sessionId: string;
+  name: string; // e.g., "Session 2 — Sub-section 1"
+  procedureName?: string;
+  date: string;
+  createdAt: string;
   images: ClinicalImage[];
-}
-
-export interface ClinicalSection {
-  id: string;
-  name: string; // e.g., "Section 1", "Section 2"
-  beforeImages: ClinicalImage[];
-  afterImages: ClinicalImage[];
-  subSections: ClinicalSubSection[];
-  activeSubSectionId?: string; // 'main' or sub-section id
 }
 
 export interface ClinicalSession {
   id: string;
+  procedureId: string;
   sessionNumber: number;
   date: string; // DD/MM/YYYY
-  sections: ClinicalSection[];
-  activeSectionId: string;
-  isExpanded?: boolean;
+  therapist?: string;
+  bodyPart?: string;
+  doctorObservation?: string;
+  efficacy?: string;
+  status?: string;
+  beforeImages: ClinicalImage[];
+  afterImages: ClinicalImage[];
+  subSections: ClinicalSubSection[];
+  sections?: any[]; // Backwards compatibility for older format
 }
 
 export interface ClinicalProcedure {
   id: string;
-  name: string; // e.g. "Hair Removal", "PRP", "Peeling"
+  patientId: string;
+  name: string;
   category: string;
   createdAt: string; // DD/MM/YYYY
   therapist?: string;
   bodyPart?: string;
-  sessions: ClinicalSession[];
   doctorObservation?: string;
+  sessions: ClinicalSession[];
 }
 
-// Master Catalog of Clinical Procedures Only (No billing/admin/follow-up)
-export const MASTER_PROCEDURE_CATALOG = [
-  { name: 'PRP (Platelet-Rich Plasma) Therapy', shortName: 'PRP', category: 'Aesthetic / Regenerative' },
-  { name: 'Hair Removal (Diode / Alexandrite)', shortName: 'Hair Removal', category: 'Laser Therapy' },
-  { name: 'Chemical Peeling & Resurfacing', shortName: 'Peeling', category: 'Cosmetology' },
-  { name: 'Acne & Active Lesion Treatment', shortName: 'Acne Treatment', category: 'Dermatology' },
-  { name: 'Pimples & Comedone Extraction', shortName: 'Pimples Treatment', category: 'Dermatology' },
-  { name: 'Scar Subcision & Laser Revision', shortName: 'Scar Treatment', category: 'Laser & Surgical' },
-  { name: 'Skin Rejuvenation & Photo-Facial', shortName: 'Skin Rejuvenation', category: 'Aesthetic' },
+// Master clinical procedure catalog
+export const MASTER_PROCEDURES: { name: string; category: string }[] = [
+  { name: 'PRP (Platelet-Rich Plasma) Therapy', category: 'Aesthetic / Regenerative' },
+  { name: 'Hair Removal (Diode / Alexandrite)', category: 'Laser Therapy' },
+  { name: 'Chemical Peeling & Resurfacing', category: 'Cosmetology' },
+  { name: 'Acne Laser Comedone Extraction', category: 'Clinical Dermatology' },
+  { name: 'Fractional CO2 Laser Resurfacing', category: 'Laser Therapy' },
+  { name: 'Microneedling Dermapen Therapy', category: 'Cosmetology' },
+  { name: 'Q-Switched Nd:YAG Laser', category: 'Laser Therapy' },
+  { name: 'Tattoo Removal Laser', category: 'Laser Therapy' },
+  { name: 'Carbon Laser Peel', category: 'Cosmetology' },
+  { name: 'Hydrafacial & Deep Cleanse', category: 'Cosmetology' },
+  { name: 'Mesotherapy (Scalp / Skin)', category: 'Trichology' },
+  { name: 'Electrocautery / Mole Excision', category: 'Minor OT' },
+  { name: 'Botulinum Toxin / Fillers', category: 'Aesthetic Dermatology' },
+  { name: 'Clinical Dermatology Consultation', category: 'Clinical Dermatology' }
 ];
 
-// Helper to format Date & Time
-export function getBrowserDateTime() {
+export const PROCEDURE_CATEGORIES = [
+  'Laser Therapy',
+  'Aesthetic / Regenerative',
+  'Cosmetology',
+  'Clinical Dermatology',
+  'Trichology',
+  'Minor OT',
+  'Aesthetic Dermatology'
+];
+
+export const CLINICAL_MARKERS = [
+  { id: 'erythema', label: 'Erythema Margin', color: '#EF4444' },
+  { id: 'induration', label: 'Active Induration', color: '#F97316' },
+  { id: 'papule', label: 'Follicular Papule', color: '#EAB308' },
+  { id: 'pigment', label: 'Pigmentation Border', color: '#8B5CF6' },
+  { id: 'scar', label: 'Scar / Atrophy', color: '#06B6D4' }
+];
+
+export interface DeviceIntegrationConfig {
+  id: string;
+  name: string;
+  type: 'DERMASCOPE' | 'FACE_SCANNER';
+  enabled: boolean;
+  status: 'ONLINE' | 'OFFLINE';
+  statusMessage: string;
+}
+
+const DEFAULT_DEVICES: DeviceIntegrationConfig[] = [
+  {
+    id: 'dev-dermascope-1',
+    name: 'Digital Dermatoscope (USB/Wi-Fi)',
+    type: 'DERMASCOPE',
+    enabled: true,
+    status: 'OFFLINE',
+    statusMessage: 'No compatible digital dermatoscope detected on USB/Wi-Fi. Connect hardware or use file upload.'
+  },
+  {
+    id: 'dev-facescan-1',
+    name: '3D Facial Topography Scanner',
+    type: 'FACE_SCANNER',
+    enabled: true,
+    status: 'OFFLINE',
+    statusMessage: '3D Face Scanner driver daemon offline on localhost:8089. Connect hardware or use file upload.'
+  }
+];
+
+function getTodayDateString(): string {
   const now = new Date();
   const d = String(now.getDate()).padStart(2, '0');
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const y = now.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+
+function getTimeString(): string {
+  const now = new Date();
   let hours = now.getHours();
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12; // 0 becomes 12
-  const strHours = String(hours).padStart(2, '0');
-  return {
-    date: `${d}/${m}/${y}`,
-    time: `${strHours}:${minutes} ${ampm}`,
-    full: `${d}/${m}/${y} ${strHours}:${minutes} ${ampm}`
-  };
+  hours = hours % 12 || 12;
+  return `${hours}:${minutes} ${ampm}`;
 }
 
-// Helper to parse DD/MM/YYYY into timestamp for accurate chronological sorting
-export function parseClinicalDate(dateStr: string): number {
-  if (!dateStr) return 0;
-  const parts = dateStr.trim().split(/[\/\-\.]/);
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function parseDDMMYYYY(str: string): number {
+  if (!str) return 0;
+  const parts = str.split('/');
   if (parts.length === 3) {
     const d = parseInt(parts[0], 10);
     const m = parseInt(parts[1], 10) - 1;
     const y = parseInt(parts[2], 10);
     return new Date(y, m, d).getTime();
   }
-  return 0;
+  const parsed = Date.parse(str);
+  return isNaN(parsed) ? 0 : parsed;
 }
 
-// Inline SVGs for clinical demo imagery with realistic medical lesion/laser aesthetics
-const DEMO_BEFORE_SVG_1 = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450"><rect width="600" height="450" fill="%23fce7dc"/><circle cx="300" cy="225" r="160" fill="%23f5ceb8"/><ellipse cx="270" cy="190" rx="40" ry="25" fill="%23e89c82" opacity="0.6"/><ellipse cx="340" cy="210" rx="30" ry="20" fill="%23e89c82" opacity="0.5"/><circle cx="280" cy="180" r="4" fill="%2385311b"/><circle cx="265" cy="195" r="3" fill="%2385311b"/><circle cx="345" cy="215" r="5" fill="%2385311b"/><circle cx="310" cy="245" r="3" fill="%2385311b"/><circle cx="295" cy="210" r="4" fill="%2385311b"/><circle cx="330" cy="175" r="3.5" fill="%2385311b"/><rect x="20" y="20" width="130" height="32" rx="6" fill="%23b91c1c" opacity="0.9"/><text x="85" y="42" fill="white" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">BEFORE • BASELINE</text><text x="300" y="420" fill="%236b3b24" font-size="14" font-family="monospace" font-weight="bold" text-anchor="middle">LESION AREA: PRE-TREATMENT DENSITY (HIGH)</text></svg>`;
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
-const DEMO_AFTER_SVG_1 = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450"><rect width="600" height="450" fill="%23fce7dc"/><circle cx="300" cy="225" r="160" fill="%23fceddf"/><ellipse cx="270" cy="190" rx="20" ry="12" fill="%23f0baa6" opacity="0.3"/><circle cx="280" cy="180" r="1.5" fill="%23c4735c" opacity="0.6"/><circle cx="345" cy="215" r="1.5" fill="%23c4735c" opacity="0.6"/><rect x="20" y="20" width="130" height="32" rx="6" fill="%2315803d" opacity="0.9"/><text x="85" y="42" fill="white" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">AFTER • SESSION 2</text><text x="300" y="420" fill="%23166534" font-size="14" font-family="monospace" font-weight="bold" text-anchor="middle">85% FOLLICULAR REDUCTION • CLEAR CLEARANCE</text></svg>`;
-
-const DEMO_BEFORE_SVG_2 = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450"><rect width="600" height="450" fill="%23fcf3e8"/><circle cx="300" cy="220" r="150" fill="%23f6dec5"/><path d="M220 180 Q300 240 380 180" stroke="%23c06d4e" stroke-width="12" fill="none" opacity="0.5"/><circle cx="250" cy="200" r="6" fill="%239e2a1b"/><circle cx="320" cy="230" r="8" fill="%239e2a1b"/><circle cx="350" cy="190" r="5" fill="%239e2a1b"/><rect x="20" y="20" width="120" height="32" rx="6" fill="%23b91c1c"/><text x="80" y="42" fill="white" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">BEFORE</text><text x="300" y="420" fill="%2355321d" font-size="13" font-family="monospace" text-anchor="middle">ATROPHIC ACNE SCARRING (GRADE 3)</text></svg>`;
-
-const DEMO_AFTER_SVG_2 = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450"><rect width="600" height="450" fill="%23fcf3e8"/><circle cx="300" cy="220" r="150" fill="%23faebd9"/><path d="M220 180 Q300 240 380 180" stroke="%23dfa289" stroke-width="4" fill="none" opacity="0.3"/><circle cx="250" cy="200" r="2" fill="%23c9816d" opacity="0.4"/><rect x="20" y="20" width="120" height="32" rx="6" fill="%2315803d"/><text x="80" y="42" fill="white" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">AFTER</text><text x="300" y="420" fill="%23166534" font-size="13" font-family="monospace" text-anchor="middle">POST-PEEL & PRP: COLLAGEN REMODELING</text></svg>`;
-
-// Isolated Frontend-Only Demo Dataset
-const INITIAL_DEMO_PROCEDURES: ClinicalProcedure[] = [
-  {
-    id: 'proc-demo-1',
-    name: 'Hair Removal',
-    category: 'Laser Therapy',
-    createdAt: '26/02/2026',
-    therapist: 'Dr Valaki',
-    bodyPart: 'FACE',
-    doctorObservation: 'Fitzpatrick Type II. Good response to Diode 808nm laser. Marked reduction in chin and cheek coarse terminal hairs. Mild transient erythema resolved within 2 hours. Strict SPF 50+ prescribed.',
-    sessions: [
-      {
-        id: 'sess-1',
-        sessionNumber: 1,
-        date: '10/04/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: true,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [
-              {
-                id: 'img-1-1',
-                url: DEMO_BEFORE_SVG_1,
-                type: 'BEFORE',
-                date: '10/04/2026',
-                time: '03:42 PM',
-                fileName: 'Chin_Lateral_Before.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.4 MB',
-                source: 'CAMERA',
-                notes: 'Baseline follicular prominence prior to laser pulse'
-              }
-            ],
-            afterImages: [
-              {
-                id: 'img-1-2',
-                url: DEMO_AFTER_SVG_1,
-                type: 'AFTER',
-                date: '10/04/2026',
-                time: '04:15 PM',
-                fileName: 'Chin_Lateral_After_S1.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.2 MB',
-                source: 'CAMERA',
-                notes: 'Immediate post-treatment perifollicular edema response'
-              }
-            ],
-            subSections: [
-              {
-                id: 'subsec-1',
-                name: 'Sub-Section 1 (Perioral Angle)',
-                createdAt: '10/04/2026 03:54 PM',
-                images: [
-                  {
-                    id: 'img-1-sub-1',
-                    url: DEMO_BEFORE_SVG_2,
-                    type: 'GENERAL',
-                    date: '10/04/2026',
-                    time: '03:54 PM',
-                    fileName: 'Perioral_HighMag.jpg',
-                    fileType: 'image/jpeg',
-                    fileSize: '950 KB',
-                    source: 'DERMASCOPE',
-                    notes: 'Micro-evaluation of upper lip follicle density'
-                  }
-                ]
-              }
-            ],
-            activeSubSectionId: 'main'
-          },
-          {
-            id: 'sec-2',
-            name: 'Section 2',
-            beforeImages: [
-              {
-                id: 'img-2-1',
-                url: DEMO_BEFORE_SVG_2,
-                type: 'BEFORE',
-                date: '10/04/2026',
-                time: '03:48 PM',
-                fileName: 'Left_Cheek_Before.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.1 MB',
-                source: 'UPLOAD',
-                notes: 'Left malar zone pre-procedure'
-              }
-            ],
-            afterImages: [
-              {
-                id: 'img-2-2',
-                url: DEMO_AFTER_SVG_2,
-                type: 'AFTER',
-                date: '10/04/2026',
-                time: '04:20 PM',
-                fileName: 'Left_Cheek_After.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.3 MB',
-                source: 'UPLOAD',
-                notes: 'Smooth skin texture post cooling'
-              }
-            ],
-            subSections: [],
-            activeSubSectionId: 'main'
-          },
-          {
-            id: 'sec-3',
-            name: 'Section 3',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          },
-          {
-            id: 'sec-4',
-            name: 'Section 4',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          },
-          {
-            id: 'sec-5',
-            name: 'Section 5',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      },
-      {
-        id: 'sess-2',
-        sessionNumber: 2,
-        date: '24/04/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: false,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [
-              {
-                id: 'img-s2-1',
-                url: DEMO_AFTER_SVG_1,
-                type: 'BEFORE',
-                date: '24/04/2026',
-                time: '11:15 AM',
-                fileName: 'Session2_PreCheck.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.2 MB',
-                source: 'CAMERA',
-                notes: 'Regrowth assessment before session 2'
-              }
-            ],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      },
-      {
-        id: 'sess-3',
-        sessionNumber: 3,
-        date: '08/05/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: false,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      },
-      {
-        id: 'sess-4',
-        sessionNumber: 4,
-        date: '22/05/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: false,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'proc-demo-2',
-    name: 'PRP',
-    category: 'Aesthetic / Regenerative',
-    createdAt: '02/02/2026',
-    therapist: 'Dr Valaki',
-    bodyPart: 'SCALP',
-    doctorObservation: 'Vertex and frontal thinning. 10ml autologous platelet-rich plasma derived. Micro-needling 1.5mm applied followed by subdermal boluses.',
-    sessions: [
-      {
-        id: 'sess-prp-1',
-        sessionNumber: 1,
-        date: '02/02/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: true,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [
-              {
-                id: 'img-prp-1',
-                url: DEMO_BEFORE_SVG_1,
-                type: 'BEFORE',
-                date: '02/02/2026',
-                time: '10:30 AM',
-                fileName: 'Vertex_Hair_Baseline.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.5 MB',
-                source: 'CAMERA',
-                notes: 'Scalp trichoscopy baseline'
-              }
-            ],
-            afterImages: [
-              {
-                id: 'img-prp-2',
-                url: DEMO_AFTER_SVG_1,
-                type: 'AFTER',
-                date: '02/02/2026',
-                time: '11:45 AM',
-                fileName: 'Vertex_PostPRP.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.4 MB',
-                source: 'CAMERA',
-                notes: 'Immediate post-injection scalp condition'
-              }
-            ],
-            subSections: [],
-            activeSubSectionId: 'main'
-          },
-          {
-            id: 'sec-2',
-            name: 'Section 2',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      },
-      {
-        id: 'sess-prp-2',
-        sessionNumber: 2,
-        date: '02/03/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: false,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'proc-demo-3',
-    name: 'Peeling',
-    category: 'Cosmetology',
-    createdAt: '16/03/2026',
-    therapist: 'Dr Valaki',
-    bodyPart: 'FULL FACE',
-    doctorObservation: 'Salicylic-Mandelic 20% combo chemical peel for post-inflammatory erythema & epidermal hyperpigmentation. Frosting observed at zone 2.',
-    sessions: [
-      {
-        id: 'sess-peel-1',
-        sessionNumber: 1,
-        date: '16/03/2026',
-        activeSectionId: 'sec-1',
-        isExpanded: true,
-        sections: [
-          {
-            id: 'sec-1',
-            name: 'Section 1',
-            beforeImages: [
-              {
-                id: 'img-peel-1',
-                url: DEMO_BEFORE_SVG_2,
-                type: 'BEFORE',
-                date: '16/03/2026',
-                time: '02:15 PM',
-                fileName: 'Peeling_Baseline_Malar.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.6 MB',
-                source: 'CAMERA',
-                notes: 'Pre-peel hyperpigmented macules baseline'
-              }
-            ],
-            afterImages: [
-              {
-                id: 'img-peel-2',
-                url: DEMO_AFTER_SVG_2,
-                type: 'AFTER',
-                date: '16/03/2026',
-                time: '03:45 PM',
-                fileName: 'Peeling_PostFrosting.jpg',
-                fileType: 'image/jpeg',
-                fileSize: '1.5 MB',
-                source: 'DERMASCOPE',
-                notes: 'Post chemical neutralization and soothing barrier applied'
-              }
-            ],
-            subSections: [],
-            activeSubSectionId: 'main'
-          }
-        ]
-      }
-    ]
-  }
-];
-
-// Props
-interface ClinicalProcedureTabProps {
+interface Props {
   patient?: any;
+  caseId?: string;
 }
 
-export default function ClinicalProcedureImageManagement({ patient }: ClinicalProcedureTabProps) {
-  // Master frontend state for procedures
-  const [procedures, setProcedures] = useState<ClinicalProcedure[]>(INITIAL_DEMO_PROCEDURES);
+export default function ClinicalProcedureImageManagement({ patient, caseId }: Props) {
+  const activeCaseId = caseId || 'C005-001-23092026';
+  const patientId = patient?.id || 'P-00124';
+  const consultationStore = useConsultationStore();
+  const { currentUser } = useUIStore();
+  const isAdmin = currentUser?.role?.toLowerCase().includes('admin') || true;
 
-  // Active view: 'list' (All procedures) or 'detail' (Specific procedure)
-  const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
-  const [selectedProcedureId, setSelectedProcedureId] = useState<string>('proc-demo-1');
+  // Procedures State derived directly from canonical consultation store
+  const storeSession = consultationStore.sessions[activeCaseId] || (consultationStore.activeSession?.caseId === activeCaseId ? consultationStore.activeSession : null);
+  const procedures = useMemo<ClinicalProcedure[]>(() => storeSession?.clinicalProcedures || [], [storeSession?.clinicalProcedures]);
+  const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Search & Sort state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'az' | 'za'>('recent');
+  // Left Sidebar State: List/Box View, Search, Sorting
+  const [procedureViewMode, setProcedureViewMode] = useState<'list' | 'box'>('box');
+  const [procedureSearch, setProcedureSearch] = useState('');
+  const [procedureSort, setProcedureSort] = useState<'az' | 'za' | 'date-desc' | 'date-asc'>('az');
 
-  // Add Procedure Modal state
-  const [isAddProcedureModalOpen, setIsAddProcedureModalOpen] = useState(false);
-  const [manualProcedureName, setManualProcedureName] = useState('');
-  const [catalogSearch, setCatalogSearch] = useState('');
+  // Main Gallery Sorting: Most recent first (default) vs Oldest first
+  const [gallerySortOrder, setGallerySortOrder] = useState<'recent-first' | 'oldest-first'>('recent-first');
 
-  // Selected Images for Comparison State
+  // Compare Selected Images
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
 
-  // Modals & Viewers State
-  const [fullscreenImage, setFullscreenImage] = useState<{ image: ClinicalImage; contextImages: ClinicalImage[] } | null>(null);
-  const [isCompareOpen, setIsCompareOpen] = useState(false);
-  const [editorImage, setEditorImage] = useState<ClinicalImage | null>(null);
-
-  // Add Image Flow State
-  const [addImageModalState, setAddImageModalState] = useState<{
-    isOpen: boolean;
-    step: 'before_after' | 'source';
-    targetType: 'BEFORE' | 'AFTER';
+  // Modals State
+  const [showAddProcedureModal, setShowAddProcedureModal] = useState(false);
+  const [showAddImageModal, setShowAddImageModal] = useState(false);
+  const [addImageDestination, setAddImageDestination] = useState<{
     procedureId: string;
     sessionId: string;
-    sectionId: string;
     subSectionId?: string;
-  }>({
-    isOpen: false,
-    step: 'before_after',
-    targetType: 'BEFORE',
-    procedureId: '',
-    sessionId: '',
-    sectionId: ''
-  });
-
-  // Source Modals: Camera, Dermascope, Face Scanner, Error Alert
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isDermascopeOpen, setIsDermascopeOpen] = useState(false);
-  const [isFaceScannerOpen, setIsFaceScannerOpen] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [cameraStreamActive, setCameraStreamActive] = useState(false);
-  const [procedureDisplayMode, setProcedureDisplayMode] = useState<'table' | 'cards'>('table');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Section Context Menu & Rename state
-  const [contextMenuState, setContextMenuState] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-    sectionId: string;
-    sessionId: string;
+    type: 'BEFORE' | 'AFTER' | 'OTHER';
   } | null>(null);
 
-  // Toast notification state
+  // Single Photo Fullscreen Viewer
+  const [fullscreenImage, setFullscreenImage] = useState<ClinicalImage | null>(null);
+
+  // Photo Editor Modal
+  const [editingImage, setEditingImage] = useState<ClinicalImage | null>(null);
+
+  // Compare Modal
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  // Send / Share Image Modal
+  const [sharingImage, setSharingImage] = useState<ClinicalImage | null>(null);
+
+  // Admin Edit Image Date/Time & Observation Modal
+  const [adminEditingImage, setAdminEditingImage] = useState<ClinicalImage | null>(null);
+
+  // PDF Document Viewer Modal
+  const [viewingPdfDoc, setViewingPdfDoc] = useState<ClinicalImage | null>(null);
+
+  // Admin Device Settings Modal
+  const [showDeviceSettingsModal, setShowDeviceSettingsModal] = useState(false);
+  const [deviceConfigs, setDeviceConfigs] = useState<DeviceIntegrationConfig[]>(DEFAULT_DEVICES);
+
+  // Context Menu for Session Panel
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    sessionId: string;
+    procedureId: string;
+  } | null>(null);
+
+  // Toast Notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Keyboard Navigation: ESC closes viewers
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (fullscreenImage) setFullscreenImage(null);
-        if (isCompareOpen) setIsCompareOpen(false);
-        if (editorImage) setEditorImage(null);
-        if (isCameraOpen) handleCloseCamera();
-        if (isDermascopeOpen) setIsDermascopeOpen(false);
-        if (isFaceScannerOpen) setIsFaceScannerOpen(false);
-        if (addImageModalState.isOpen) setAddImageModalState(prev => ({ ...prev, isOpen: false }));
-        if (isAddProcedureModalOpen) setIsAddProcedureModalOpen(false);
-        if (contextMenuState) setContextMenuState(null);
+  // Pending images when Doctor picks image first, then procedure (Path B)
+  const [pendingStandaloneImage, setPendingStandaloneImage] = useState<ClinicalImage | null>(null);
+
+  // Ref to guard against rapid double-clicks creating duplicate sub-sections
+  const lastSubSectionClickRef = useRef<number>(0);
+
+  // --------------------------------------------------------------------------
+  // Normalize & Backwards Compatibility Helper
+  // --------------------------------------------------------------------------
+  const normalizeProcedures = (rawProcs: any[]): ClinicalProcedure[] => {
+    if (!Array.isArray(rawProcs)) return [];
+    return rawProcs.map(proc => {
+      const pId = proc.id || `proc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const sessions: ClinicalSession[] = (proc.sessions || []).map((sess: any, sIdx: number) => {
+        const sId = sess.id || `sess-${pId}-${sIdx + 1}`;
+        // Extract before/after/subsections from either direct keys or sections[0]
+        let beforeList: ClinicalImage[] = sess.beforeImages || [];
+        let afterList: ClinicalImage[] = sess.afterImages || [];
+        let subSecList: ClinicalSubSection[] = sess.subSections || [];
+
+        if (sess.sections && Array.isArray(sess.sections)) {
+          sess.sections.forEach((sec: any) => {
+            if (sec.beforeImages && sec.beforeImages.length > 0) {
+              sec.beforeImages.forEach((img: any) => {
+                if (!beforeList.some(b => b.id === img.id)) beforeList.push(img);
+              });
+            }
+            if (sec.afterImages && sec.afterImages.length > 0) {
+              sec.afterImages.forEach((img: any) => {
+                if (!afterList.some(a => a.id === img.id)) afterList.push(img);
+              });
+            }
+            if (sec.subSections && sec.subSections.length > 0) {
+              sec.subSections.forEach((sub: any) => {
+                if (!subSecList.some(sb => sb.id === sub.id)) subSecList.push(sub);
+              });
+            }
+          });
+        }
+
+        return {
+          id: sId,
+          procedureId: pId,
+          sessionNumber: sess.sessionNumber || (sIdx + 1),
+          date: sess.date || proc.createdAt || getTodayDateString(),
+          therapist: sess.therapist || proc.therapist || 'Dr Valaki',
+          bodyPart: sess.bodyPart || proc.bodyPart || 'CLINICAL SITE',
+          doctorObservation: sess.doctorObservation || '',
+          efficacy: sess.efficacy || '',
+          status: sess.status || 'Done',
+          beforeImages: beforeList,
+          afterImages: afterList,
+          subSections: subSecList,
+          sections: sess.sections || []
+        };
+      });
+
+      return {
+        id: pId,
+        patientId: proc.patientId || patientId,
+        name: proc.name || 'Clinical Procedure',
+        category: proc.category || 'Clinical Dermatology',
+        createdAt: proc.createdAt || getTodayDateString(),
+        therapist: proc.therapist || 'Dr Valaki',
+        bodyPart: proc.bodyPart || 'CLINICAL SITE',
+        doctorObservation: proc.doctorObservation || '',
+        sessions
+      };
+    });
+  };
+
+  // --------------------------------------------------------------------------
+  // Dual Persistence: Backend REST API + LocalStorage via canonical store
+  // --------------------------------------------------------------------------
+  const loadProceduresData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const loaded = await consultationStore.loadClinicalProcedures(activeCaseId, patientId);
+      if (loaded.length > 0 && !selectedProcedureId) {
+        setSelectedProcedureId(loaded[0].id);
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fullscreenImage, isCompareOpen, editorImage, isCameraOpen, isDermascopeOpen, isFaceScannerOpen, addImageModalState, isAddProcedureModalOpen, contextMenuState]);
+    } catch (err) {
+      console.warn('Backend fetch error, relying on local state:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeCaseId, selectedProcedureId, patientId, consultationStore]);
 
-  // Close context menu on document click
   useEffect(() => {
-    const handleClickOutside = () => {
-      if (contextMenuState) setContextMenuState(null);
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [contextMenuState]);
+    loadProceduresData();
+  }, [activeCaseId]);
 
-  // Selected Procedure
-  const activeProcedure = useMemo(() => {
-    return procedures.find(p => p.id === selectedProcedureId) || procedures[0];
+  useEffect(() => {
+    if (procedures.length > 0) {
+      if (!selectedProcedureId || !procedures.some(p => p.id === selectedProcedureId)) {
+        setSelectedProcedureId(procedures[0].id);
+      }
+    }
   }, [procedures, selectedProcedureId]);
 
-  // Filtered & Sorted Procedures List
-  const filteredProcedures = useMemo(() => {
-    let result = [...procedures];
+  // Synchronize state changes to Backend and LocalStorage via canonical store
+  const persistProcedures = useCallback(async (updated: ClinicalProcedure[], actionMsg?: string) => {
+    await consultationStore.syncClinicalProcedures(activeCaseId, updated);
+    if (actionMsg) showToast(actionMsg);
+  }, [activeCaseId, consultationStore]);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.createdAt.includes(q) ||
-        p.category.toLowerCase().includes(q)
-      );
+  // Cross-Tab BroadcastChannel & Storage Event Listeners
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('doctor_medflow_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.tabId === CURRENT_TAB_ID) return;
+        if (event.data?.key === 'doctor-consultation' || event.data?.key === 'treatment-protocol') {
+          loadProceduresData();
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === `medflow_proc_${activeCaseId}` || e.key === 'doctor-consultation') {
+        loadProceduresData();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      try { bc?.close(); } catch {}
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [activeCaseId, loadProceduresData]);
+
+  // Close context menu on outside click or ESC
+  useEffect(() => {
+    const handleGlobalClick = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+        setFullscreenImage(null);
+        setCompareModalOpen(false);
+        setEditingImage(null);
+        setShowAddProcedureModal(false);
+        setShowAddImageModal(false);
+        setSharingImage(null);
+        setAdminEditingImage(null);
+        setViewingPdfDoc(null);
+        setShowDeviceSettingsModal(false);
+      }
+    };
+    window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // Active Selected Procedure & Sorted Lists
+  // --------------------------------------------------------------------------
+  const activeProcedure = useMemo(() => {
+    if (!procedures || procedures.length === 0) return null;
+    const found = procedures.find(p => p.id === selectedProcedureId);
+    return found || procedures[0];
+  }, [procedures, selectedProcedureId]);
+
+  // Filtered & Sorted Procedures for Left Sidebar
+  const displayedProcedures = useMemo(() => {
+    let list = [...procedures];
+    if (procedureSearch.trim()) {
+      const q = procedureSearch.toLowerCase().trim();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q));
     }
 
-    result.sort((a, b) => {
-      if (sortBy === 'az') return a.name.localeCompare(b.name);
-      if (sortBy === 'za') return b.name.localeCompare(a.name);
-      if (sortBy === 'oldest') return parseClinicalDate(a.createdAt) - parseClinicalDate(b.createdAt);
-      return parseClinicalDate(b.createdAt) - parseClinicalDate(a.createdAt); // recent first
+    list.sort((a, b) => {
+      if (procedureSort === 'az') return a.name.localeCompare(b.name);
+      if (procedureSort === 'za') return b.name.localeCompare(a.name);
+      if (procedureSort === 'date-desc') return parseDDMMYYYY(b.createdAt) - parseDDMMYYYY(a.createdAt);
+      if (procedureSort === 'date-asc') return parseDDMMYYYY(a.createdAt) - parseDDMMYYYY(b.createdAt);
+      return 0;
     });
 
-    return result;
-  }, [procedures, searchQuery, sortBy]);
+    return list;
+  }, [procedures, procedureSearch, procedureSort]);
 
-  // All Images across ALL patient procedures (enables Cross-Procedure Compare: "BETWEEN 2 PROSSUSUER")
-  const allPatientImages = useMemo(() => {
-    const list: Array<ClinicalImage & { procedureName: string; procedureId: string; sessionNumber: number; sectionName: string }> = [];
-    procedures.forEach(proc => {
-      proc.sessions.forEach(sess => {
-        sess.sections.forEach(sec => {
-          sec.beforeImages.forEach(img => {
-            list.push({ ...img, procedureName: proc.name, procedureId: proc.id, sessionNumber: sess.sessionNumber, sectionName: sec.name });
-          });
-          sec.afterImages.forEach(img => {
-            list.push({ ...img, procedureName: proc.name, procedureId: proc.id, sessionNumber: sess.sessionNumber, sectionName: sec.name });
-          });
-          sec.subSections.forEach(sub => {
-            sub.images.forEach(img => {
-              list.push({ ...img, procedureName: proc.name, procedureId: proc.id, sessionNumber: sess.sessionNumber, sectionName: `${sec.name} / ${sub.name}` });
-            });
-          });
-        });
-      });
+  // Sorted Sessions for Active Procedure (Requirement 5: Most recent first by default)
+  const displayedSessions = useMemo(() => {
+    if (!activeProcedure || !activeProcedure.sessions) return [];
+    const list = [...activeProcedure.sessions];
+    list.sort((a, b) => {
+      const dateA = parseDDMMYYYY(a.date);
+      const dateB = parseDDMMYYYY(b.date);
+      if (gallerySortOrder === 'recent-first') {
+        if (dateB !== dateA) return dateB - dateA;
+        return b.sessionNumber - a.sessionNumber;
+      } else {
+        if (dateA !== dateB) return dateA - dateB;
+        return a.sessionNumber - b.sessionNumber;
+      }
     });
     return list;
-  }, [procedures]);
+  }, [activeProcedure, gallerySortOrder]);
 
-  // All Images across the active procedure (for lookup / compare)
-  const allActiveProcedureImages = useMemo(() => {
+  // Compute all photos in active procedure (for non-looping Prev/Next navigation)
+  const allProcedurePhotos = useMemo(() => {
     if (!activeProcedure) return [];
     const list: ClinicalImage[] = [];
-    activeProcedure.sessions.forEach(sess => {
-      sess.sections.forEach(sec => {
-        list.push(...sec.beforeImages);
-        list.push(...sec.afterImages);
-        sec.subSections.forEach(sub => {
-          list.push(...sub.images);
+    displayedSessions.forEach(sess => {
+      sess.beforeImages.forEach(img => list.push(img));
+      sess.afterImages.forEach(img => list.push(img));
+      sess.subSections.forEach(sub => {
+        sub.images.forEach(img => list.push(img));
+      });
+    });
+    return list;
+  }, [activeProcedure, displayedSessions]);
+
+  // Eligible photos for comparison (only photos from active procedure, across all sessions & sub-sections, strictly excluding PDFs)
+  const eligibleComparePhotos = useMemo(() => {
+    if (!activeProcedure) return [];
+    const list: ClinicalImage[] = [];
+    (displayedSessions || []).forEach(sess => {
+      (sess.beforeImages || []).forEach(img => {
+        if (img && img.fileType !== 'application/pdf' && !img.fileName?.toLowerCase().endsWith('.pdf')) {
+          list.push(img);
+        }
+      });
+      (sess.afterImages || []).forEach(img => {
+        if (img && img.fileType !== 'application/pdf' && !img.fileName?.toLowerCase().endsWith('.pdf')) {
+          list.push(img);
+        }
+      });
+      (sess.subSections || []).forEach(sub => {
+        (sub.images || []).forEach(img => {
+          if (img && img.fileType !== 'application/pdf' && !img.fileName?.toLowerCase().endsWith('.pdf')) {
+            list.push(img);
+          }
         });
       });
     });
     return list;
-  }, [activeProcedure]);
+  }, [activeProcedure, displayedSessions]);
 
-  // Selected Images for Compare
-  const selectedImagesForCompare = useMemo(() => {
-    return allPatientImages.filter(img => selectedImageIds.includes(img.id));
-  }, [allPatientImages, selectedImageIds]);
+  // Exact resolved photos that are currently selected for comparison
+  const resolvedSelectedPhotos = useMemo(() => {
+    return eligibleComparePhotos.filter(img => selectedImageIds.includes(img.id));
+  }, [eligibleComparePhotos, selectedImageIds]);
 
-  // ==========================================================================
-  // Handlers: Procedure Management
-  // ==========================================================================
+  // Clear incompatible selections when changing patients or procedures
+  useEffect(() => {
+    setSelectedImageIds([]);
+  }, [selectedProcedureId, patientId]);
 
-  const handleAddProcedure = (procName: string, category: string = 'Clinical Dermatology') => {
-    if (!procName.trim()) return;
-    const { date } = getBrowserDateTime();
-    const newProc: ClinicalProcedure = {
-      id: `proc-${Date.now()}`,
-      name: procName.trim(),
-      category,
-      createdAt: date,
-      therapist: 'Dr Valaki',
-      bodyPart: 'CLINICAL SITE',
-      doctorObservation: `Initial clinical protocol recorded on ${date}.`,
-      sessions: [
-        {
-          id: `sess-${Date.now()}-1`,
-          sessionNumber: 1,
-          date,
-          activeSectionId: `sec-${Date.now()}-1`,
-          isExpanded: true,
-          sections: [
-            { id: `sec-${Date.now()}-1`, name: 'Section 1', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-            { id: `sec-${Date.now()}-2`, name: 'Section 2', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-            { id: `sec-${Date.now()}-3`, name: 'Section 3', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-            { id: `sec-${Date.now()}-4`, name: 'Section 4', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-            { id: `sec-${Date.now()}-5`, name: 'Section 5', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' }
-          ]
-        }
-      ]
-    };
-
-    setProcedures(prev => [newProc, ...prev]);
-    setIsAddProcedureModalOpen(false);
-    setManualProcedureName('');
-    setSelectedProcedureId(newProc.id);
-    setViewMode('detail');
-    showToast(`Added clinical procedure "${newProc.name}"`);
+  // Canonical photo count helper (deduplicating sub-sections exactly once)
+  const countPhotosInProcedure = (p: ClinicalProcedure) => {
+    return getProcedurePhotos(p).length;
   };
 
-  const handleToggleSessionExpand = (sessionId: string) => {
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return {
-        ...proc,
-        sessions: proc.sessions.map(s => {
-          if (s.id === sessionId) return { ...s, isExpanded: !s.isExpanded };
-          return s;
-        })
-      };
-    }));
-  };
-
-  const handleAddSession = () => {
-    if (!activeProcedure) return;
-    const { date } = getBrowserDateTime();
-    const nextNumber = activeProcedure.sessions.length + 1;
-    const newSession: ClinicalSession = {
-      id: `sess-${Date.now()}-${nextNumber}`,
-      sessionNumber: nextNumber,
-      date,
-      activeSectionId: `sec-${Date.now()}-1`,
-      isExpanded: true,
-      sections: [
-        { id: `sec-${Date.now()}-1`, name: 'Section 1', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-        { id: `sec-${Date.now()}-2`, name: 'Section 2', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-        { id: `sec-${Date.now()}-3`, name: 'Section 3', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-        { id: `sec-${Date.now()}-4`, name: 'Section 4', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' },
-        { id: `sec-${Date.now()}-5`, name: 'Section 5', beforeImages: [], afterImages: [], subSections: [], activeSubSectionId: 'main' }
-      ]
-    };
-
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return { ...proc, sessions: [...proc.sessions, newSession] };
-    }));
-    showToast(`Added Session ${nextNumber} to ${activeProcedure.name}`);
-  };
-
-  const handleAddSection = (sessionId: string) => {
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return {
-        ...proc,
-        sessions: proc.sessions.map(s => {
-          if (s.id !== sessionId) return s;
-          const nextSecNum = s.sections.length + 1;
-          const newSection: ClinicalSection = {
-            id: `sec-${Date.now()}-${nextSecNum}`,
-            name: `Section ${nextSecNum}`,
-            beforeImages: [],
-            afterImages: [],
-            subSections: [],
-            activeSubSectionId: 'main'
-          };
-          return {
-            ...s,
-            sections: [...s.sections, newSection],
-            activeSectionId: newSection.id
-          };
-        })
-      };
-    }));
-    showToast(`Added Section to session`);
-  };
-
-  const handleAddSubSection = (sessionId: string, sectionId: string) => {
-    const { full } = getBrowserDateTime();
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return {
-        ...proc,
-        sessions: proc.sessions.map(s => {
-          if (s.id !== sessionId) return s;
-          return {
-            ...s,
-            sections: s.sections.map(sec => {
-              if (sec.id !== sectionId) return sec;
-              const nextSubNum = sec.subSections.length + 1;
-              const newSub: ClinicalSubSection = {
-                id: `subsec-${Date.now()}-${nextSubNum}`,
-                name: `Sub-Section ${nextSubNum}`,
-                createdAt: full,
-                images: []
-              };
-              return {
-                ...sec,
-                subSections: [...sec.subSections, newSub],
-                activeSubSectionId: newSub.id
-              };
-            })
-          };
-        })
-      };
-    }));
-    showToast(`Created Sub-Section at ${full}`);
-  };
-
-  const handleSetActiveSection = (sessionId: string, sectionId: string) => {
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return {
-        ...proc,
-        sessions: proc.sessions.map(s => {
-          if (s.id !== sessionId) return s;
-          return { ...s, activeSectionId: sectionId };
-        })
-      };
-    }));
-  };
-
-  const handleSetActiveSubSection = (sessionId: string, sectionId: string, subSectionId: string) => {
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return {
-        ...proc,
-        sessions: proc.sessions.map(s => {
-          if (s.id !== sessionId) return s;
-          return {
-            ...s,
-            sections: s.sections.map(sec => {
-              if (sec.id !== sectionId) return sec;
-              return { ...sec, activeSubSectionId: subSectionId };
-            })
-          };
-        })
-      };
-    }));
-  };
-
-  // ==========================================================================
-  // Image Upload / Add Flow
-  // ==========================================================================
-
-  const handleStartAddImage = (sessionId: string, sectionId: string, preselectedType?: 'BEFORE' | 'AFTER', subSectionId?: string) => {
-    if (preselectedType) {
-      setAddImageModalState({
-        isOpen: true,
-        step: 'source',
-        targetType: preselectedType,
-        procedureId: selectedProcedureId,
-        sessionId,
-        sectionId,
-        subSectionId
-      });
-    } else {
-      setAddImageModalState({
-        isOpen: true,
-        step: 'before_after',
-        targetType: 'BEFORE',
-        procedureId: selectedProcedureId,
-        sessionId,
-        sectionId,
-        subSectionId
-      });
-    }
-  };
-
-  const handleAppendImage = (img: ClinicalImage) => {
-    const { sessionId, sectionId, targetType, subSectionId } = addImageModalState;
-
-    setProcedures(prev => prev.map(proc => {
-      if (proc.id !== selectedProcedureId) return proc;
-      return {
-        ...proc,
-        sessions: proc.sessions.map(s => {
-          if (s.id !== sessionId) return s;
-          return {
-            ...s,
-            sections: s.sections.map(sec => {
-              if (sec.id !== sectionId) return sec;
-
-              // If adding to sub-section
-              if (subSectionId && subSectionId !== 'main') {
-                return {
-                  ...sec,
-                  subSections: sec.subSections.map(sub => {
-                    if (sub.id !== subSectionId) return sub;
-                    return { ...sub, images: [img, ...sub.images] };
-                  })
-                };
-              }
-
-              // Normal Before / After
-              if (targetType === 'BEFORE') {
-                return { ...sec, beforeImages: [img, ...sec.beforeImages] };
-              } else {
-                return { ...sec, afterImages: [img, ...sec.afterImages] };
-              }
-            })
-          };
-        })
-      };
-    }));
-
-    setAddImageModalState(prev => ({ ...prev, isOpen: false }));
-    showToast(`Added ${targetType} image: ${img.fileName}`);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const file = files[0];
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-
-    if (!allowed.includes(file.type.toLowerCase())) {
-      setErrorMessage('Unsupported file type. Please select JPG, JPEG, PNG or PDF.');
+  // --------------------------------------------------------------------------
+  // REQUIREMENT 4: Add / Link Procedure
+  // --------------------------------------------------------------------------
+  const handleSaveProcedure = (
+    procedureName: string,
+    category: string,
+    procedureDate: string,
+    bodyPart: string,
+    therapist: string
+  ) => {
+    const trimmed = procedureName.trim();
+    if (!trimmed) {
+      showToast('Please enter a clinical procedure name');
       return;
     }
 
-    setErrorMessage(null);
-    const { date, time } = getBrowserDateTime();
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-      const url = event.target?.result as string;
-      const newImg: ClinicalImage = {
-        id: `img-${Date.now()}`,
-        url,
-        type: addImageModalState.targetType,
-        date,
-        time,
-        fileName: file.name,
-        fileType: file.type.includes('pdf') ? 'application/pdf' : 'image/jpeg',
-        fileSize: `${(file.size / 1024).toFixed(0)} KB`,
-        source: file.type.includes('pdf') ? 'PDF' : 'UPLOAD',
-        notes: `Clinical document uploaded on ${date}`
+    // Check if matching procedure already exists for this patient
+    const existing = procedures.find(p => p.name.toLowerCase().trim() === trimmed.toLowerCase().trim());
+    if (existing) {
+      // Reuse existing procedure! Add next session instead of duplicate folder
+      const nextNum = (existing.sessions?.length || 0) + 1;
+      const newSession: ClinicalSession = {
+        id: `sess-${existing.id}-${nextNum}-${Date.now()}`,
+        procedureId: existing.id,
+        sessionNumber: nextNum,
+        date: procedureDate || getTodayDateString(),
+        therapist: therapist || existing.therapist,
+        bodyPart: bodyPart || existing.bodyPart,
+        doctorObservation: `Session ${nextNum} initiated.`,
+        beforeImages: pendingStandaloneImage ? [pendingStandaloneImage] : [],
+        afterImages: [],
+        subSections: []
       };
-      handleAppendImage(newImg);
+
+      const updated = procedures.map(p =>
+        p.id === existing.id ? { ...p, sessions: [...p.sessions, newSession] } : p
+      );
+
+      persistProcedures(updated, `✓ Linked to existing "${existing.name}" (Session ${nextNum} added)`);
+      setSelectedProcedureId(existing.id);
+      setPendingStandaloneImage(null);
+      setShowAddProcedureModal(false);
+      return;
+    }
+
+    // Create New Procedure
+    const newProcId = `proc-${Date.now()}`;
+    const newSessionId = `sess-${newProcId}-1`;
+    const newSession: ClinicalSession = {
+      id: newSessionId,
+      procedureId: newProcId,
+      sessionNumber: 1,
+      date: procedureDate || getTodayDateString(),
+      therapist: therapist || 'Dr Valaki',
+      bodyPart: bodyPart || 'FACE',
+      doctorObservation: `Clinical protocol initiated on ${procedureDate || getTodayDateString()}.`,
+      beforeImages: pendingStandaloneImage ? [pendingStandaloneImage] : [],
+      afterImages: [],
+      subSections: []
     };
 
-    reader.readAsDataURL(file);
+    const newProc: ClinicalProcedure = {
+      id: newProcId,
+      patientId,
+      name: trimmed,
+      category: category || 'Clinical Dermatology',
+      createdAt: procedureDate || getTodayDateString(),
+      therapist: therapist || 'Dr Valaki',
+      bodyPart: bodyPart || 'FACE',
+      sessions: [newSession]
+    };
+
+    const updated = [newProc, ...procedures];
+    persistProcedures(updated, `✓ Procedure "${trimmed}" created and selected!`);
+    setSelectedProcedureId(newProcId);
+    setPendingStandaloneImage(null);
+    setShowAddProcedureModal(false);
+
+    // Sync to Procedure Tab (Tab 4) store with matching stable IDs
+    consultationStore.addProcedure({
+      id: newSessionId,
+      procedureId: newProcId,
+      procedureName: trimmed,
+      scheduledDate: procedureDate || getTodayDateString(),
+      sessionNumber: 1,
+      totalSessions: 4,
+      status: 'Done',
+      price: 2000,
+      therapist: therapist || 'Dr Valaki',
+      bodyPart: bodyPart || 'FACE',
+      remark: `Session 1 recorded in Images Tab`
+    });
   };
 
-  // Camera Capture Simulation / Webcam
-  const handleOpenCamera = async () => {
-    setIsCameraOpen(true);
+  const handleDeleteProcedure = (procId: string, procName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete clinical procedure "${procName}" and all associated sessions/photos?`)) return;
+    const updated = procedures.filter(p => p.id !== procId);
+    persistProcedures(updated, `Procedure "${procName}" removed.`);
+    if (selectedProcedureId === procId) {
+      setSelectedProcedureId(updated[0]?.id || '');
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // REQUIREMENT 6: Add Session to Selected Procedure (via Centralized Store Action)
+  // --------------------------------------------------------------------------
+  const handleAddSession = async (targetProcId?: string) => {
+    const procId = targetProcId || activeProcedure?.id;
+    if (!procId) return;
+
+    const targetProc = procedures.find(p => p.id === procId);
+    if (!targetProc) return;
+
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          setCameraStreamActive(true);
-        }
-      }
-    } catch (err) {
-      setCameraStreamActive(false); // fallback to simulated camera viewfinder
+      const nextSessionNum = (targetProc.sessions?.length || 0) + 1;
+      const sessionDate = getTodayDateString();
+
+      await consultationStore.createClinicalSession(activeCaseId, targetProc.id, {
+        sessionNumber: nextSessionNum,
+        date: sessionDate,
+        therapist: targetProc.therapist || 'Dr Valaki',
+        bodyPart: targetProc.bodyPart || 'CLINICAL SITE',
+        status: 'Done'
+      });
+
+      showToast(`✓ Session ${nextSessionNum} added to ${targetProc.name}! Synced across Procedure & Images tabs.`);
+    } catch (err: any) {
+      console.error('Failed to add session:', err);
+      showToast(`Error adding session: ${err?.message || 'Server error'}`);
     }
   };
 
-  const handleCloseCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(t => t.stop());
+  // --------------------------------------------------------------------------
+  // REQUIREMENT 7: Sub-sections Management (via Centralized Store Action)
+  // --------------------------------------------------------------------------
+  const handleCreateSubSection = async (sessionId: string, customName?: string) => {
+    const now = Date.now();
+    // Guard against rapid duplicate double-clicks (600ms debounce)
+    if (now - lastSubSectionClickRef.current < 600) return;
+    lastSubSectionClickRef.current = now;
+
+    if (!activeProcedure) return;
+    const targetSession = activeProcedure.sessions.find(s => s.id === sessionId);
+    if (!targetSession) return;
+
+    const nextSubNum = (targetSession.subSections?.length || 0) + 1;
+    const defaultName = `Session ${targetSession.sessionNumber} — Sub-section ${nextSubNum}`;
+    const name = customName?.trim() || defaultName;
+
+    try {
+      await consultationStore.createSubSection(activeCaseId, activeProcedure.id, sessionId, name);
+      showToast(`✓ Created "${name}" in Session ${targetSession.sessionNumber}!`);
+    } catch (err: any) {
+      console.error('Failed to create subsection:', err);
+      showToast(`Error creating sub-section: ${err?.message || 'Server error'}`);
     }
-    setIsCameraOpen(false);
-    setCameraStreamActive(false);
   };
 
-  const handleCaptureCamera = () => {
-    const { date, time } = getBrowserDateTime();
-    let url = DEMO_AFTER_SVG_1;
-
-    if (cameraStreamActive && videoRef.current) {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth || 640;
-      canvas.height = videoRef.current.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        url = canvas.toDataURL('image/jpeg');
-      }
-    }
-
-    const newImg: ClinicalImage = {
-      id: `img-cam-${Date.now()}`,
-      url,
-      type: addImageModalState.targetType,
-      date,
-      time,
-      fileName: `Camera_Capture_${Date.now().toString().slice(-4)}.jpg`,
-      fileType: 'image/jpeg',
-      fileSize: '1.2 MB',
-      source: 'CAMERA',
-      notes: `Direct clinical camera capture on ${date} ${time}`
-    };
-
-    handleCloseCamera();
-    handleAppendImage(newImg);
-  };
-
-  // Dermascope Capture
-  const handleCaptureDermascope = (mode: string = 'Cross-Polarized') => {
-    const { date, time } = getBrowserDateTime();
-    const newImg: ClinicalImage = {
-      id: `img-derma-${Date.now()}`,
-      url: DEMO_BEFORE_SVG_1,
-      type: addImageModalState.targetType,
-      date,
-      time,
-      fileName: `Dermascope_${mode}_${Date.now().toString().slice(-4)}.jpg`,
-      fileType: 'image/jpeg',
-      fileSize: '1.8 MB',
-      source: 'DERMASCOPE',
-      notes: `Dermascopy 10x Optical Magnification (${mode})`
-    };
-    setIsDermascopeOpen(false);
-    handleAppendImage(newImg);
-  };
-
-  // Face Scanner Capture
-  const handleCaptureFaceScan = () => {
-    const { date, time } = getBrowserDateTime();
-    const newImg: ClinicalImage = {
-      id: `img-face-${Date.now()}`,
-      url: DEMO_AFTER_SVG_2,
-      type: addImageModalState.targetType,
-      date,
-      time,
-      fileName: `3D_FaceScan_Frontal_${Date.now().toString().slice(-4)}.jpg`,
-      fileType: 'image/jpeg',
-      fileSize: '2.4 MB',
-      source: 'FACE_SCANNER',
-      notes: 'Facial surface topography & pigmentation index'
-    };
-    setIsFaceScannerOpen(false);
-    handleAppendImage(newImg);
-  };
-
-  // Admin Date/Time Edit for any Image
-  const handleUpdateImageDateTime = (imgId: string, newDate: string, newTime: string) => {
-    setProcedures(prev => prev.map(proc => ({
-      ...proc,
-      sessions: proc.sessions.map(s => ({
-        ...s,
-        sections: s.sections.map(sec => ({
-          ...sec,
-          beforeImages: sec.beforeImages.map(i => i.id === imgId ? { ...i, date: newDate, time: newTime } : i),
-          afterImages: sec.afterImages.map(i => i.id === imgId ? { ...i, date: newDate, time: newTime } : i),
-          subSections: sec.subSections.map(sub => ({
-            ...sub,
-            images: sub.images.map(i => i.id === imgId ? { ...i, date: newDate, time: newTime } : i)
-          }))
-        }))
-      }))
-    })));
-    showToast('Updated image date and time');
-  };
-
-  // Image Selection for Compare Toggle
-  const toggleImageSelection = (imgId: string) => {
-    setSelectedImageIds(prev =>
-      prev.includes(imgId) ? prev.filter(id => id !== imgId) : [...prev, imgId]
+  // --------------------------------------------------------------------------
+  // Image Actions: Save Image to Session / Sub-section
+  // --------------------------------------------------------------------------
+  const handleSaveImageToDestination = (image: ClinicalImage, destination: {
+    procedureId: string;
+    procedureName?: string;
+    sessionId: string;
+    sessionNumber?: number | string;
+    subSectionId?: string;
+    type: 'BEFORE' | 'AFTER' | 'OTHER';
+  }) => {
+    // 1. Find or create procedure
+    const reqProcName = destination.procedureName?.trim();
+    let targetProcIndex = procedures.findIndex(p =>
+      p.id === destination.procedureId || (reqProcName && p.name.toLowerCase() === reqProcName.toLowerCase())
     );
-  };
 
-  // Fullscreen Next / Previous within current context
-  const handleFullscreenNav = (dir: 'prev' | 'next') => {
-    if (!fullscreenImage) return;
-    const { contextImages, image } = fullscreenImage;
-    const idx = contextImages.findIndex(i => i.id === image.id);
-    if (idx === -1) return;
+    let updatedProcedures = [...procedures];
+    let activeProc: ClinicalProcedure;
 
-    if (dir === 'prev') {
-      const nextIdx = idx > 0 ? idx - 1 : contextImages.length - 1;
-      setFullscreenImage({ image: contextImages[nextIdx], contextImages });
+    if (targetProcIndex >= 0) {
+      activeProc = { ...updatedProcedures[targetProcIndex] };
     } else {
-      const nextIdx = idx < contextImages.length - 1 ? idx + 1 : 0;
-      setFullscreenImage({ image: contextImages[nextIdx], contextImages });
+      // Create new procedure record
+      const newProcId = destination.procedureId && destination.procedureId !== 'NEW'
+        ? destination.procedureId
+        : `proc-${Date.now()}`;
+      const procName = reqProcName || 'Clinical Procedure';
+      const matchedMaster = MASTER_PROCEDURES.find(m => m.name.toLowerCase() === procName.toLowerCase());
+
+      activeProc = {
+        id: newProcId,
+        patientId,
+        name: procName,
+        category: matchedMaster?.category || 'Clinical Dermatology',
+        createdAt: image.date || getTodayDateString(),
+        therapist: 'Dr Valaki',
+        bodyPart: 'FACE',
+        sessions: []
+      };
+      targetProcIndex = updatedProcedures.length;
+      updatedProcedures.push(activeProc);
+    }
+
+    // 2. Find or create session
+    let targetSessIndex = activeProc.sessions.findIndex(s =>
+      s.id === destination.sessionId || (destination.sessionNumber && s.sessionNumber === Number(destination.sessionNumber))
+    );
+
+    let activeSess: ClinicalSession;
+    if (targetSessIndex >= 0) {
+      activeSess = { ...activeProc.sessions[targetSessIndex] };
+    } else {
+      const sessNum = typeof destination.sessionNumber === 'number'
+        ? destination.sessionNumber
+        : (parseInt(String(destination.sessionNumber || destination.sessionId).replace(/\D/g, '')) || (activeProc.sessions.length + 1) || 1);
+      const newSessId = destination.sessionId && !destination.sessionId.startsWith('sess-')
+        ? `sess-${activeProc.id}-${sessNum}-${Date.now()}`
+        : (destination.sessionId || `sess-${activeProc.id}-${sessNum}-${Date.now()}`);
+
+      activeSess = {
+        id: newSessId,
+        procedureId: activeProc.id,
+        sessionNumber: sessNum,
+        date: image.date || getTodayDateString(),
+        therapist: activeProc.therapist || 'Dr Valaki',
+        bodyPart: activeProc.bodyPart || 'CLINICAL SITE',
+        doctorObservation: `Session ${sessNum} record.`,
+        status: 'Done',
+        beforeImages: [],
+        afterImages: [],
+        subSections: []
+      };
+      targetSessIndex = activeProc.sessions.length;
+      activeProc.sessions = [...activeProc.sessions, activeSess];
+    }
+
+    // 3. Attach image with correct IDs
+    const finalImage: ClinicalImage = {
+      ...image,
+      procedureId: activeProc.id,
+      sessionId: activeSess.id
+    };
+
+    if (destination.subSectionId) {
+      activeSess.subSections = (activeSess.subSections || []).map(sub => {
+        if (sub.id !== destination.subSectionId) return sub;
+        return { ...sub, images: [finalImage, ...sub.images] };
+      });
+    } else if (destination.type === 'BEFORE') {
+      activeSess.beforeImages = [finalImage, ...activeSess.beforeImages];
+    } else {
+      activeSess.afterImages = [finalImage, ...activeSess.afterImages];
+    }
+
+    // Update activeProc's sessions
+    const updatedSessions = [...activeProc.sessions];
+    updatedSessions[targetSessIndex] = activeSess;
+    activeProc.sessions = updatedSessions;
+
+    // Update updatedProcedures
+    updatedProcedures[targetProcIndex] = activeProc;
+
+    persistProcedures(
+      updatedProcedures,
+      `✓ Saved ${destination.type} photo for "${activeProc.name}" - Session ${activeSess.sessionNumber}!`
+    );
+    setSelectedProcedureId(activeProc.id);
+    setShowAddImageModal(false);
+
+    // Sync to Procedure Tab (Tab 4) store with matching stable IDs
+    const existingProcItem = (consultationStore.sessions[activeCaseId]?.procedures || []).find(p => p.id === activeSess.id);
+    if (!existingProcItem) {
+      consultationStore.addProcedure({
+        id: activeSess.id,
+        procedureId: activeProc.id,
+        procedureName: activeProc.name,
+        scheduledDate: image.date || getTodayDateString(),
+        sessionNumber: activeSess.sessionNumber,
+        totalSessions: Math.max(activeSess.sessionNumber, 4),
+        status: 'Done',
+        price: 2000,
+        therapist: activeProc.therapist || 'Dr Valaki',
+        bodyPart: activeProc.bodyPart || 'CLINICAL SITE',
+        remark: `Session ${activeSess.sessionNumber} recorded with clinical photography`
+      });
     }
   };
 
   // Delete Image
   const handleDeleteImage = (imgId: string) => {
-    if (!confirm('Are you sure you want to delete this clinical image record?')) return;
-    setProcedures(prev => prev.map(proc => ({
-      ...proc,
-      sessions: proc.sessions.map(s => ({
+    if (!window.confirm('Are you sure you want to delete this clinical photo?')) return;
+    const updated = procedures.map(p => ({
+      ...p,
+      sessions: p.sessions.map(s => ({
         ...s,
-        sections: s.sections.map(sec => ({
-          ...sec,
-          beforeImages: sec.beforeImages.filter(i => i.id !== imgId),
-          afterImages: sec.afterImages.filter(i => i.id !== imgId),
-          subSections: sec.subSections.map(sub => ({
-            ...sub,
-            images: sub.images.filter(i => i.id !== imgId)
-          }))
+        beforeImages: s.beforeImages.filter(i => i.id !== imgId),
+        afterImages: s.afterImages.filter(i => i.id !== imgId),
+        subSections: s.subSections.map(sub => ({
+          ...sub,
+          images: sub.images.filter(i => i.id !== imgId)
         }))
       }))
-    })));
-    setSelectedImageIds(prev => prev.filter(id => id !== imgId));
-    if (fullscreenImage?.image.id === imgId) setFullscreenImage(null);
-    showToast('Deleted clinical image');
-  };
-
-  // Save Doctor's Observation
-  const handleSaveObservation = (obs: string) => {
-    setProcedures(prev => prev.map(p => {
-      if (p.id !== selectedProcedureId) return p;
-      return { ...p, doctorObservation: obs };
     }));
-    showToast('Clinical observation saved successfully');
+
+    persistProcedures(updated, 'Photo removed.');
+    setSelectedImageIds(prev => prev.filter(id => id !== imgId));
+    if (fullscreenImage?.id === imgId) setFullscreenImage(null);
   };
 
-  // ==========================================================================
-  // Render
-  // ==========================================================================
+  // Save Edited Photo
+  const handleSaveEditedImage = (saved: ClinicalImage) => {
+    const updated = procedures.map(p => ({
+      ...p,
+      sessions: p.sessions.map(s => ({
+        ...s,
+        beforeImages: s.beforeImages.map(i => (i.id === saved.id ? saved : i)),
+        afterImages: s.afterImages.map(i => (i.id === saved.id ? saved : i)),
+        subSections: s.subSections.map(sub => ({
+          ...sub,
+          images: sub.images.map(i => (i.id === saved.id ? saved : i))
+        }))
+      }))
+    }));
+
+    persistProcedures(updated, '✓ Photo edits & annotations saved');
+    setEditingImage(null);
+    if (fullscreenImage?.id === saved.id) setFullscreenImage(saved);
+  };
+
+  // Admin Update Metadata (Capture Date/Time & Observation)
+  const handleAdminUpdateMetadata = (imgId: string, newDate: string, newTime: string, newObservation: string) => {
+    const updated = procedures.map(p => ({
+      ...p,
+      sessions: p.sessions.map(s => ({
+        ...s,
+        beforeImages: s.beforeImages.map(i => (i.id === imgId ? { ...i, date: newDate, time: newTime, doctorObservation: newObservation } : i)),
+        afterImages: s.afterImages.map(i => (i.id === imgId ? { ...i, date: newDate, time: newTime, doctorObservation: newObservation } : i)),
+        subSections: s.subSections.map(sub => ({
+          ...sub,
+          images: sub.images.map(i => (i.id === imgId ? { ...i, date: newDate, time: newTime, doctorObservation: newObservation } : i))
+        }))
+      }))
+    }));
+
+    persistProcedures(updated, '✓ Photo metadata updated');
+    setAdminEditingImage(null);
+  };
+
+  // Toggle selection for comparison
+  const handleToggleSelectCompare = (imgId: string) => {
+    setSelectedImageIds(prev =>
+      prev.includes(imgId) ? prev.filter(id => id !== imgId) : [...prev, imgId]
+    );
+  };
+
+  // Clear selections
+  const handleClearCompareSelections = () => {
+    setSelectedImageIds([]);
+  };
 
   return (
-    <div style={{ background: '#F8FAFC', borderRadius: 12, border: '1px solid #CBD5E1', padding: '16px 20px', minHeight: 650, position: 'relative' }}>
-      
-      {/* Toast Alert */}
+    <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0', padding: 20 }}>
+
+      {/* ==================================================================== */}
+      {/* 1. PATIENT IDENTIFICATION HEADER STRIP (Requirement 3)               */}
+      {/* ==================================================================== */}
+      <div style={{
+        background: '#F8FAFC',
+        border: '1px solid #E2E8F0',
+        borderRadius: 10,
+        padding: '12px 18px',
+        marginBottom: 18,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{
+            background: '#036d92',
+            color: '#FFFFFF',
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 900,
+            fontSize: 14
+          }}>
+            <User size={18} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 900, color: '#0F172A' }}>
+                {patient?.firstName ? `${patient.firstName} ${patient.lastName || ''}` : 'Ramesh Patel'}
+              </span>
+              <span style={{ background: '#E0F2FE', color: '#0369A1', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 12 }}>
+                UHID: {patient?.id || patientId}
+              </span>
+              <span style={{ background: '#F1F5F9', color: '#475569', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
+                {patient?.age || '34'} Y / {patient?.gender || 'Male'}
+              </span>
+              {patient?.bloodGroup && (
+                <span style={{ background: '#FEE2E2', color: '#B91C1C', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 12 }}>
+                  Blood: {patient.bloodGroup}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+              Case ID: <strong>{activeCaseId}</strong> • Phone: {patient?.phone || '+91 98251 00099'} • Branch: {currentUser?.branch || 'Surat Central Main Branch'}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Summary Pill & Device Config Access */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#FFFFFF',
+            border: '1px solid #CBD5E1',
+            borderRadius: 20,
+            padding: '5px 12px',
+            fontSize: 12,
+            fontWeight: 800,
+            color: '#0F172A'
+          }}>
+            <Camera size={14} color="#036d92" />
+            <span>{procedures.length} Procedures • {getPatientPhotos(procedures).length} Photos</span>
+          </div>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowDeviceSettingsModal(true)}
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: 8,
+                padding: '6px 10px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                color: '#475569',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                cursor: 'pointer'
+              }}
+              title="Configure Dermascope & Face Scanner hardware integrations"
+            >
+              <Settings size={13} />
+              <span>Devices</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* 2. TWO-COLUMN WORKSPACE: LEFT PROCEDURES | RIGHT SESSIONS & GALLERY  */}
+      {/* ==================================================================== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '330px 1fr', gap: 20, alignItems: 'start' }}>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* LEFT COLUMN: PROCEDURES LIST & SELECTION (Requirements 3, 4, 5)     */}
+        {/* ------------------------------------------------------------------ */}
+        <div style={{
+          background: '#F8FAFC',
+          borderRadius: 10,
+          border: '1px solid #E2E8F0',
+          padding: 14,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12
+        }}>
+          {/* Top Add Procedure Button */}
+          <button
+            type="button"
+            onClick={() => setShowAddProcedureModal(true)}
+            style={{
+              background: '#036d92',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 8,
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(3, 109, 146, 0.25)',
+              transition: 'background 0.15s ease'
+            }}
+          >
+            <Plus size={16} strokeWidth={3} />
+            <span>+ Add Procedure</span>
+          </button>
+
+          {/* Search Box */}
+          <div style={{ position: 'relative' }}>
+            <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: 10 }} />
+            <input
+              type="text"
+              value={procedureSearch}
+              onChange={e => setProcedureSearch(e.target.value)}
+              placeholder="Search patient procedures..."
+              style={{
+                width: '100%',
+                padding: '8px 10px 8px 30px',
+                borderRadius: 6,
+                border: '1px solid #CBD5E1',
+                fontSize: 12,
+                background: '#FFFFFF',
+                color: '#0F172A',
+                outline: 'none'
+              }}
+            />
+            {procedureSearch && (
+              <button
+                type="button"
+                onClick={() => setProcedureSearch('')}
+                style={{ position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Controls Bar: Sorting & View Mode Toggle (Requirement 5) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+            {/* Sorting Dropdown (Default A-Z) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+              <select
+                value={procedureSort}
+                onChange={e => setProcedureSort(e.target.value as any)}
+                style={{
+                  width: '100%',
+                  padding: '5px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #CBD5E1',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#334155',
+                  background: '#FFFFFF',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="az">Sort: A–Z (Ascending)</option>
+                <option value="za">Sort: Z–A (Descending)</option>
+                <option value="date-desc">Sort: Date (Newest first)</option>
+                <option value="date-asc">Sort: Date (Oldest first)</option>
+              </select>
+            </div>
+
+            {/* List / Box View Toggle */}
+            <div style={{ display: 'flex', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setProcedureViewMode('list')}
+                style={{
+                  background: procedureViewMode === 'list' ? '#036d92' : 'transparent',
+                  color: procedureViewMode === 'list' ? '#FFFFFF' : '#64748B',
+                  border: 'none',
+                  padding: '5px 8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="List View (No. | Procedure Name | Date | Actions)"
+              >
+                <List size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setProcedureViewMode('box')}
+                style={{
+                  background: procedureViewMode === 'box' ? '#036d92' : 'transparent',
+                  color: procedureViewMode === 'box' ? '#FFFFFF' : '#64748B',
+                  border: 'none',
+                  padding: '5px 8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Box View (Selectable Cards)"
+              >
+                <LayoutGrid size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Procedures List Display */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '650px', overflowY: 'auto' }}>
+            {/* Empty State: No procedures */}
+            {displayedProcedures.length === 0 && (
+              <div style={{
+                padding: '30px 16px',
+                textAlign: 'center',
+                background: '#FFFFFF',
+                borderRadius: 8,
+                border: '1.5px dashed #CBD5E1'
+              }}>
+                <Sparkles size={24} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>
+                  No Procedures Found
+                </div>
+                <div style={{ fontSize: 11, color: '#64748B', marginTop: 4, marginBottom: 12 }}>
+                  {procedureSearch ? 'No match for your search' : 'No procedures recorded yet for this patient.'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProcedureModal(true)}
+                  style={{
+                    background: '#036d92',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '6px 14px',
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Add Procedure
+                </button>
+              </div>
+            )}
+
+            {/* LIST VIEW (Requirement 5: No. | Procedure Name | Date | Actions) */}
+            {procedureViewMode === 'list' && displayedProcedures.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5, background: '#FFFFFF', borderRadius: 8, overflow: 'hidden' }}>
+                <thead>
+                  <tr style={{ background: '#E2E8F0', color: '#334155', fontWeight: 800, textAlign: 'left' }}>
+                    <th style={{ padding: '6px 8px', width: 28 }}>No.</th>
+                    <th style={{ padding: '6px 8px' }}>Procedure Name</th>
+                    <th style={{ padding: '6px 8px', width: 70 }}>Date</th>
+                    <th style={{ padding: '6px 6px', width: 36, textAlign: 'center' }}>Act</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedProcedures.map((proc, idx) => {
+                    const isSelected = activeProcedure?.id === proc.id;
+                    const photoCount = countPhotosInProcedure(proc);
+                    return (
+                      <tr
+                        key={proc.id}
+                        onClick={() => setSelectedProcedureId(proc.id)}
+                        style={{
+                          background: isSelected ? '#E0F2FE' : idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC',
+                          borderLeft: isSelected ? '3px solid #036d92' : '3px solid transparent',
+                          borderBottom: '1px solid #F1F5F9',
+                          cursor: 'pointer',
+                          fontWeight: isSelected ? 800 : 600,
+                          color: isSelected ? '#0369A1' : '#0F172A'
+                        }}
+                      >
+                        <td style={{ padding: '8px' }}>{idx + 1}</td>
+                        <td style={{ padding: '8px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800 }}>{proc.name}</div>
+                          <div style={{ fontSize: 10, color: '#64748B' }}>
+                            {proc.sessions.length} Sess • {photoCount} Photos
+                          </div>
+                        </td>
+                        <td style={{ padding: '8px', fontSize: 10.5, color: '#64748B', whiteSpace: 'nowrap' }}>
+                          {proc.createdAt}
+                        </td>
+                        <td style={{ padding: '6px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteProcedure(proc.id, proc.name, e)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#94A3B8',
+                              cursor: 'pointer',
+                              padding: 2
+                            }}
+                            title="Delete procedure"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {/* BOX VIEW (Requirement 5: Selectable cards with name, date, photo count) */}
+            {procedureViewMode === 'box' && displayedProcedures.map((proc, idx) => {
+              const isSelected = activeProcedure?.id === proc.id;
+              const photoCount = countPhotosInProcedure(proc);
+              return (
+                <div
+                  key={proc.id}
+                  onClick={() => setSelectedProcedureId(proc.id)}
+                  style={{
+                    background: isSelected ? '#FFFFFF' : '#FFFFFF',
+                    borderRadius: 8,
+                    border: isSelected ? '2px solid #036d92' : '1px solid #CBD5E1',
+                    padding: '10px 12px',
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 3px 8px rgba(3, 109, 146, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+                    transition: 'all 0.15s ease',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, paddingRight: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 900,
+                          background: isSelected ? '#036d92' : '#E2E8F0',
+                          color: isSelected ? '#FFFFFF' : '#475569',
+                          padding: '1px 5px',
+                          borderRadius: 4
+                        }}>
+                          #{idx + 1}
+                        </span>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: isSelected ? '#036d92' : '#0F172A' }}>
+                          {proc.name}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 3 }}>
+                        {proc.category} • {proc.createdAt}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteProcedure(proc.id, proc.name, e)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#94A3B8',
+                        cursor: 'pointer',
+                        padding: 2
+                      }}
+                      title="Delete procedure"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                      {proc.sessions.length} Session{proc.sessions.length !== 1 ? 's' : ''}
+                    </span>
+                    <span style={{
+                      background: photoCount > 0 ? (isSelected ? '#036d92' : '#E0F2FE') : '#F1F5F9',
+                      color: photoCount > 0 ? (isSelected ? '#FFFFFF' : '#0369A1') : '#64748B',
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      padding: '1px 7px',
+                      borderRadius: 10
+                    }}>
+                      {photoCount} Photo{photoCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* RIGHT MAIN AREA: SELECTED PROCEDURE SESSIONS & GALLERY (Req 3, 6, 7)*/}
+        {/* ------------------------------------------------------------------ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Procedure Header & Top Controls Bar */}
+          {activeProcedure && (
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: 10,
+              border: '1.5px solid #CBD5E1',
+              padding: '14px 18px',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', margin: 0 }}>
+                      {activeProcedure.name.toUpperCase()}
+                    </h2>
+                    <span style={{ background: '#E0F2FE', color: '#0369A1', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 12 }}>
+                      {activeProcedure.category}
+                    </span>
+                    <span style={{ background: '#DCFCE7', color: '#166534', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 12 }}>
+                      {activeProcedure.sessions.length} Sessions • {countPhotosInProcedure(activeProcedure)} Photos
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 4 }}>
+                    Initiated: {activeProcedure.createdAt} • Site: {activeProcedure.bodyPart || 'FACE'} • Therapist: {activeProcedure.therapist || 'Dr Valaki'}
+                  </div>
+                </div>
+
+                {/* Primary Action Buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Add Image Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstSess = displayedSessions[0];
+                      setAddImageDestination({
+                        procedureId: activeProcedure.id,
+                        sessionId: firstSess?.id || `sess-${activeProcedure.id}-1`,
+                        type: 'BEFORE'
+                      });
+                      setShowAddImageModal(true);
+                    }}
+                    style={{
+                      background: '#036d92',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '8px 16px',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(3,109,146,0.25)'
+                    }}
+                  >
+                    <Camera size={14} />
+                    <span>+ Add Image</span>
+                  </button>
+
+                  {/* Add Session Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleAddSession(activeProcedure.id)}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1.5px solid #036d92',
+                      color: '#036d92',
+                      borderRadius: 8,
+                      padding: '7px 14px',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>+ Add Session</span>
+                  </button>
+
+                  {/* Sorting: Most Recent First vs Oldest First (Requirement 5) */}
+                  <button
+                    type="button"
+                    onClick={() => setGallerySortOrder(prev => (prev === 'recent-first' ? 'oldest-first' : 'recent-first'))}
+                    style={{
+                      background: '#F1F5F9',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: 8,
+                      padding: '7px 12px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: '#334155',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer'
+                    }}
+                    title="Toggle session & photo order"
+                  >
+                    <ArrowUpDown size={13} />
+                    <span>{gallerySortOrder === 'recent-first' ? 'Most Recent First' : 'Oldest First'}</span>
+                  </button>
+
+                  {/* Compare Selected Button (Requirement 12: enabled when >= 2 eligible photos selected) */}
+                  <button
+                    type="button"
+                    disabled={resolvedSelectedPhotos.length < 2}
+                    onClick={() => setCompareModalOpen(true)}
+                    style={{
+                      background: resolvedSelectedPhotos.length >= 2 ? '#0F172A' : '#E2E8F0',
+                      color: resolvedSelectedPhotos.length >= 2 ? '#FFFFFF' : '#94A3B8',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '8px 16px',
+                      fontSize: 12.5,
+                      fontWeight: 900,
+                      cursor: resolvedSelectedPhotos.length >= 2 ? 'pointer' : 'not-allowed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: resolvedSelectedPhotos.length >= 2 ? '0 2px 8px rgba(15,23,42,0.2)' : 'none'
+                    }}
+                    title={
+                      resolvedSelectedPhotos.length < 2
+                        ? 'Select at least 2 photos using checkboxes to compare'
+                        : `Compare ${resolvedSelectedPhotos.length} selected photos`
+                    }
+                  >
+                    <SplitSquareVertical size={14} />
+                    <span>Compare {resolvedSelectedPhotos.length > 0 ? `(${resolvedSelectedPhotos.length})` : ''}</span>
+                  </button>
+
+                  {resolvedSelectedPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearCompareSelections}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#64748B',
+                        fontSize: 11,
+                        textDecoration: 'underline',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Empty State: No procedures */}
+          {!activeProcedure && (
+            <div style={{
+              padding: '60px 20px',
+              textAlign: 'center',
+              background: '#F8FAFC',
+              borderRadius: 12,
+              border: '2px dashed #CBD5E1'
+            }}>
+              <Camera size={44} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
+              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', margin: '0 0 6px' }}>
+                No Clinical Procedures Recorded
+              </h3>
+              <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 18px', maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
+                Add clinical treatments such as PRP, Hair Removal, or Peeling to begin organizing sessions, photos, and comparison records.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAddProcedureModal(true)}
+                style={{
+                  background: '#036d92',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '10px 24px',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Plus size={16} />
+                <span>+ Add Clinical Procedure</span>
+              </button>
+            </div>
+          )}
+
+          {/* SESSIONS LIST (Requirements 6 & 7) */}
+          {activeProcedure && displayedSessions.map(sess => {
+            const hasPhotos = (sess.beforeImages.length + sess.afterImages.length + (sess.subSections || []).reduce((acc, sub) => acc + sub.images.length, 0)) > 0;
+
+            return (
+              <div
+                key={sess.id}
+                className="images-session-card"
+                data-testid="images-session-card"
+                data-session-id={sess.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    sessionId: sess.id,
+                    procedureId: activeProcedure.id
+                  });
+                }}
+                style={{
+                  background: '#FFFFFF',
+                  borderRadius: 10,
+                  border: '1.5px solid #CBD5E1',
+                  padding: 16,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+                  position: 'relative'
+                }}
+              >
+                {/* Session Card Header */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 14,
+                  paddingBottom: 10,
+                  borderBottom: '1px solid #E2E8F0',
+                  flexWrap: 'wrap',
+                  gap: 10
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      background: '#036d92',
+                      color: '#FFFFFF',
+                      fontSize: 12,
+                      fontWeight: 900,
+                      padding: '4px 10px',
+                      borderRadius: 6
+                    }}>
+                      SESSION {sess.sessionNumber}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: '#0F172A' }}>
+                        {activeProcedure.name} • Session {sess.sessionNumber}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Calendar size={11} /> Date: <strong>{sess.date}</strong> • Therapist: {sess.therapist || 'Dr Valaki'}
+                        {sess.doctorObservation && ` • Notes: ${sess.doctorObservation}`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions for this Session */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Add Sub-section Button (Requirement 7) */}
+                    <button
+                      type="button"
+                      onClick={() => handleCreateSubSection(sess.id)}
+                      style={{
+                        background: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#1D4ED8',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                      title="Add a follow-up image group (or right-click session panel)"
+                    >
+                      <Layers size={12} />
+                      <span>+ Add Sub-section</span>
+                    </button>
+
+                    {/* Add Image inside this session */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddImageDestination({
+                          procedureId: activeProcedure.id,
+                          sessionId: sess.id,
+                          type: 'BEFORE'
+                        });
+                        setShowAddImageModal(true);
+                      }}
+                      style={{
+                        background: '#F8FAFC',
+                        border: '1px solid #CBD5E1',
+                        color: '#334155',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <Camera size={12} />
+                      <span>+ Add Image</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Empty State: Session has no photos yet (Requirement 3: show Add Image) */}
+                {!hasPhotos && (
+                  <div
+                    style={{
+                      padding: '24px 16px',
+                      background: '#F8FAFC',
+                      borderRadius: 8,
+                      border: '1.5px dashed #CBD5E1',
+                      textAlign: 'center',
+                      marginBottom: 12
+                    }}
+                  >
+                    <Camera size={24} color="#94A3B8" style={{ margin: '0 auto 6px' }} />
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>
+                      No photos added in Session {sess.sessionNumber}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2, marginBottom: 12 }}>
+                      Click below to attach Before and After images for this session
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddImageDestination({
+                            procedureId: activeProcedure.id,
+                            sessionId: sess.id,
+                            type: 'BEFORE'
+                          });
+                          setShowAddImageModal(true);
+                        }}
+                        style={{
+                          background: '#FFFBEB',
+                          border: '1px solid #F59E0B',
+                          color: '#B45309',
+                          borderRadius: 6,
+                          padding: '6px 14px',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <Plus size={13} strokeWidth={2.5} />
+                        <span>+ Add Before</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddImageDestination({
+                            procedureId: activeProcedure.id,
+                            sessionId: sess.id,
+                            type: 'AFTER'
+                          });
+                          setShowAddImageModal(true);
+                        }}
+                        style={{
+                          background: '#F0FDF4',
+                          border: '1px solid #10B981',
+                          color: '#15803D',
+                          borderRadius: 6,
+                          padding: '6px 14px',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <Plus size={13} strokeWidth={2.5} />
+                        <span>+ Add After</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Photo Containers: Side-by-Side BEFORE vs AFTER */}
+                {hasPhotos && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                    {/* BEFORE PHOTOS CONTAINER */}
+                    <div style={{
+                      background: '#FFFBEB',
+                      borderRadius: 8,
+                      border: '1px solid #FDE68A',
+                      padding: 12
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: '#B45309', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#D97706' }} />
+                          BEFORE PHOTOS ({sess.beforeImages.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddImageDestination({
+                              procedureId: activeProcedure.id,
+                              sessionId: sess.id,
+                              type: 'BEFORE'
+                            });
+                            setShowAddImageModal(true);
+                          }}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #F59E0B',
+                            color: '#B45309',
+                            borderRadius: 4,
+                            padding: '2px 8px',
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Add Before
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                        {sess.beforeImages.map(img => (
+                          <PhotoThumbnailCard
+                            key={img.id}
+                            image={img}
+                            procedureName={activeProcedure.name}
+                            sessionLabel={`Session ${sess.sessionNumber}`}
+                            isSelectedForCompare={selectedImageIds.includes(img.id)}
+                            onToggleCompare={() => handleToggleSelectCompare(img.id)}
+                            onClick={() => {
+                              if (img.fileType === 'application/pdf') setViewingPdfDoc(img);
+                              else setFullscreenImage(img);
+                            }}
+                            onEdit={() => {
+                              if (img.fileType !== 'application/pdf') setEditingImage(img);
+                            }}
+                            onDelete={() => handleDeleteImage(img.id)}
+                            onAdminEdit={() => setAdminEditingImage(img)}
+                            isAdmin={isAdmin}
+                          />
+                        ))}
+
+                        {sess.beforeImages.length === 0 && (
+                          <div
+                            onClick={() => {
+                              setAddImageDestination({
+                                procedureId: activeProcedure.id,
+                                sessionId: sess.id,
+                                type: 'BEFORE'
+                              });
+                              setShowAddImageModal(true);
+                            }}
+                            style={{
+                              gridColumn: '1 / -1',
+                              padding: '16px 8px',
+                              textAlign: 'center',
+                              background: 'rgba(255,255,255,0.7)',
+                              border: '1px dashed #F59E0B',
+                              borderRadius: 6,
+                              color: '#B45309',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            + Click to upload Before photo
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* AFTER PHOTOS CONTAINER */}
+                    <div style={{
+                      background: '#F0FDF4',
+                      borderRadius: 8,
+                      border: '1px solid #BBF7D0',
+                      padding: 12
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: '#15803D', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16A34A' }} />
+                          AFTER PHOTOS ({sess.afterImages.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddImageDestination({
+                              procedureId: activeProcedure.id,
+                              sessionId: sess.id,
+                              type: 'AFTER'
+                            });
+                            setShowAddImageModal(true);
+                          }}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #22C55E',
+                            color: '#15803D',
+                            borderRadius: 4,
+                            padding: '2px 8px',
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Add After
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                        {sess.afterImages.map(img => (
+                          <PhotoThumbnailCard
+                            key={img.id}
+                            image={img}
+                            procedureName={activeProcedure.name}
+                            sessionLabel={`Session ${sess.sessionNumber}`}
+                            isSelectedForCompare={selectedImageIds.includes(img.id)}
+                            onToggleCompare={() => handleToggleSelectCompare(img.id)}
+                            onClick={() => {
+                              if (img.fileType === 'application/pdf') setViewingPdfDoc(img);
+                              else setFullscreenImage(img);
+                            }}
+                            onEdit={() => {
+                              if (img.fileType !== 'application/pdf') setEditingImage(img);
+                            }}
+                            onDelete={() => handleDeleteImage(img.id)}
+                            onAdminEdit={() => setAdminEditingImage(img)}
+                            isAdmin={isAdmin}
+                          />
+                        ))}
+
+                        {sess.afterImages.length === 0 && (
+                          <div
+                            onClick={() => {
+                              setAddImageDestination({
+                                procedureId: activeProcedure.id,
+                                sessionId: sess.id,
+                                type: 'AFTER'
+                              });
+                              setShowAddImageModal(true);
+                            }}
+                            style={{
+                              gridColumn: '1 / -1',
+                              padding: '16px 8px',
+                              textAlign: 'center',
+                              background: 'rgba(255,255,255,0.7)',
+                              border: '1px dashed #22C55E',
+                              borderRadius: 6,
+                              color: '#15803D',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            + Click to upload After photo
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SUB-SECTIONS ACCORDION / PANELS (Requirement 7) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                  {(sess.subSections || []).map((subSec, subIdx) => (
+                    <div
+                      key={subSec.id}
+                      style={{
+                        background: '#F8FAFC',
+                        borderRadius: 8,
+                        border: '1px solid #CBD5E1',
+                        padding: 10
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ background: '#3B82F6', color: '#FFFFFF', fontSize: 10, fontWeight: 900, padding: '1px 6px', borderRadius: 4 }}>
+                            SUB-SECTION {subIdx + 1}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: '#0F172A' }}>
+                            {subSec.name}
+                          </span>
+                          <span style={{ fontSize: 10.5, color: '#64748B' }}>
+                            • {activeProcedure.name} • {subSec.date || sess.date}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddImageDestination({
+                              procedureId: activeProcedure.id,
+                              sessionId: sess.id,
+                              subSectionId: subSec.id,
+                              type: 'OTHER'
+                            });
+                            setShowAddImageModal(true);
+                          }}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #3B82F6',
+                            color: '#2563EB',
+                            borderRadius: 4,
+                            padding: '2px 8px',
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Add Photo
+                        </button>
+                      </div>
+
+                      {/* Sub-section Photos Grid (No Before photo required!) */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                        {subSec.images.map(img => (
+                          <PhotoThumbnailCard
+                            key={img.id}
+                            image={img}
+                            procedureName={activeProcedure.name}
+                            sessionLabel={subSec.name}
+                            isSelectedForCompare={selectedImageIds.includes(img.id)}
+                            onToggleCompare={() => handleToggleSelectCompare(img.id)}
+                            onClick={() => {
+                              if (img.fileType === 'application/pdf') setViewingPdfDoc(img);
+                              else setFullscreenImage(img);
+                            }}
+                            onEdit={() => {
+                              if (img.fileType !== 'application/pdf') setEditingImage(img);
+                            }}
+                            onDelete={() => handleDeleteImage(img.id)}
+                            onAdminEdit={() => setAdminEditingImage(img)}
+                            isAdmin={isAdmin}
+                          />
+                        ))}
+
+                        {subSec.images.length === 0 && (
+                          <div
+                            onClick={() => {
+                              setAddImageDestination({
+                                procedureId: activeProcedure.id,
+                                sessionId: sess.id,
+                                subSectionId: subSec.id,
+                                type: 'OTHER'
+                              });
+                              setShowAddImageModal(true);
+                            }}
+                            style={{
+                              gridColumn: '1 / -1',
+                              padding: '12px 8px',
+                              textAlign: 'center',
+                              background: '#FFFFFF',
+                              border: '1px dashed #93C5FD',
+                              borderRadius: 6,
+                              color: '#2563EB',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            + Click to add follow-up photos to this sub-section
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Clearly Labeled Tile: Double Click to Add Sub-section (Requirement 7) */}
+                  <div
+                    onDoubleClick={() => handleCreateSubSection(sess.id)}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1.5px dashed #94A3B8',
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                      color: '#475569',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      userSelect: 'none',
+                      transition: 'background 0.15s ease'
+                    }}
+                    title="Double-click to create a new sub-section"
+                  >
+                    <Layers size={14} color="#036d92" />
+                    <span>[ + Double-Click to Add Sub-section ]</span>
+                    <span style={{ fontSize: 10, color: '#94A3B8' }}>(or right-click panel)</span>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
+
+        </div>
+
+      </div>
+
+      {/* ==================================================================== */}
+      {/* CONTEXT MENU: Right-Click on Session Panel (Requirement 7)           */}
+      {/* ==================================================================== */}
+      {contextMenu && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            background: '#FFFFFF',
+            borderRadius: 8,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            border: '1px solid #CBD5E1',
+            zIndex: 10000,
+            minWidth: 180,
+            overflow: 'hidden'
+          }}
+        >
+          <div style={{ padding: '6px 12px', fontSize: 10.5, fontWeight: 800, color: '#94A3B8', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+            SESSION OPTIONS
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              handleCreateSubSection(contextMenu.sessionId);
+              setContextMenu(null);
+            }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'none',
+              border: 'none',
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#0F172A',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer'
+            }}
+          >
+            <Layers size={13} color="#036d92" />
+            <span>+ Add Sub-section</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAddImageDestination({
+                procedureId: contextMenu.procedureId,
+                sessionId: contextMenu.sessionId,
+                type: 'BEFORE'
+              });
+              setShowAddImageModal(true);
+              setContextMenu(null);
+            }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'none',
+              border: 'none',
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#0F172A',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer'
+            }}
+          >
+            <Camera size={13} color="#036d92" />
+            <span>+ Add Before Image</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAddImageDestination({
+                procedureId: contextMenu.procedureId,
+                sessionId: contextMenu.sessionId,
+                type: 'AFTER'
+              });
+              setShowAddImageModal(true);
+              setContextMenu(null);
+            }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'none',
+              border: 'none',
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#0F172A',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer'
+            }}
+          >
+            <Camera size={13} color="#16A34A" />
+            <span>+ Add After Image</span>
+          </button>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: ADD / LINK PROCEDURE (Requirement 4)                          */}
+      {/* ==================================================================== */}
+      {showAddProcedureModal && (
+        <AddProcedureModal
+          procedures={procedures}
+          pendingImage={pendingStandaloneImage}
+          onClose={() => setShowAddProcedureModal(false)}
+          onSave={handleSaveProcedure}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: ADD IMAGE GUIDED FLOW (Requirement 8)                         */}
+      {/* ==================================================================== */}
+      {showAddImageModal && (
+        <AddImageGuidedFlowModal
+          procedures={procedures}
+          initialDestination={addImageDestination}
+          deviceConfigs={deviceConfigs}
+          onClose={() => setShowAddImageModal(false)}
+          onSaveImage={handleSaveImageToDestination}
+          onNeedNewProcedure={(pendingImg) => {
+            setPendingStandaloneImage(pendingImg);
+            setShowAddImageModal(false);
+            setShowAddProcedureModal(true);
+          }}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: FULLSCREEN SINGLE-PHOTO VIEWER (Requirement 11)               */}
+      {/* ==================================================================== */}
+      {fullscreenImage && (
+        <SinglePhotoViewerModal
+          image={fullscreenImage}
+          procedureName={activeProcedure?.name || 'Procedure'}
+          allPhotos={allProcedurePhotos}
+          onClose={() => setFullscreenImage(null)}
+          onEdit={() => {
+            const target = fullscreenImage;
+            setFullscreenImage(null);
+            setEditingImage(target);
+          }}
+          onShare={() => setSharingImage(fullscreenImage)}
+          onChangeImage={(next) => setFullscreenImage(next)}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: PHOTO EDITOR (Requirement 9: Zoom, Crop, Rotate, Mark, Pan)   */}
+      {/* ==================================================================== */}
+      {editingImage && (
+        <PhotoEditorModal
+          image={editingImage}
+          onClose={() => setEditingImage(null)}
+          onSave={handleSaveEditedImage}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: MULTI-IMAGE COMPARISON (Requirement 12)                       */}
+      {/* ==================================================================== */}
+      {compareModalOpen && (
+        <MultiPhotoCompareModal
+          photos={resolvedSelectedPhotos}
+          procedureName={activeProcedure?.name || 'Clinical Procedure'}
+          onClose={() => setCompareModalOpen(false)}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: SEND / SHARE IMAGE (Requirement 11)                           */}
+      {/* ==================================================================== */}
+      {sharingImage && (
+        <SendImageModal
+          image={sharingImage}
+          patient={patient}
+          onClose={() => setSharingImage(null)}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: ADMIN METADATA CORRECTION (Requirement 10)                    */}
+      {/* ==================================================================== */}
+      {adminEditingImage && (
+        <AdminMetadataEditModal
+          image={adminEditingImage}
+          onClose={() => setAdminEditingImage(null)}
+          onSave={handleAdminUpdateMetadata}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: PDF DOCUMENT VIEWER (Requirement 9)                           */}
+      {/* ==================================================================== */}
+      {viewingPdfDoc && (
+        <PdfDocumentViewerModal
+          image={viewingPdfDoc}
+          onClose={() => setViewingPdfDoc(null)}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: ADMIN DEVICE CONFIGURATION (Requirement 8)                    */}
+      {/* ==================================================================== */}
+      {showDeviceSettingsModal && (
+        <AdminDeviceSettingsModal
+          configs={deviceConfigs}
+          onClose={() => setShowDeviceSettingsModal(false)}
+          onSave={(updated) => {
+            setDeviceConfigs(updated);
+            setShowDeviceSettingsModal(false);
+            showToast('✓ Hardware device settings updated');
+          }}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* TOAST ALERT                                                          */}
+      {/* ==================================================================== */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
@@ -1088,1870 +2309,17 @@ export default function ClinicalProcedureImageManagement({ patient }: ClinicalPr
           color: '#FFFFFF',
           padding: '10px 18px',
           borderRadius: 8,
-          fontSize: 12.5,
+          fontSize: 13,
           fontWeight: 700,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          zIndex: 9999,
+          zIndex: 100000,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          animation: 'fadeIn 0.2s ease'
+          gap: 8
         }}>
-          <CheckCircle2 size={16} color="#4ADE80" />
+          <CheckCircle2 size={16} color="#38BDF8" />
           <span>{toastMessage}</span>
         </div>
-      )}
-
-      {/* TOP HEADER: CLINICAL PROCEDURES NAVIGATION */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingBottom: 14,
-        marginBottom: 16,
-        borderBottom: '1px solid #E2E8F0',
-        flexWrap: 'wrap',
-        gap: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
-            color: '#FFFFFF',
-            padding: 8,
-            borderRadius: 10,
-            boxShadow: '0 2px 6px rgba(2,132,199,0.3)'
-          }}>
-            <Camera size={20} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', margin: 0 }}>
-                Clinical Procedures &amp; Image Management
-              </h2>
-              <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontWeight: 800, fontSize: 11 }}>
-                Tab 5 • Medical Photography
-              </span>
-            </div>
-            <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
-              Patient: <strong>{patient?.firstName || 'Dionesh'} {patient?.lastName || 'Valaki'}</strong> ({patient?.mrdNumber || 'MRD-2026-0003'}) • Procedural hierarchy: Procedure → Session → Section → Before/After → Images
-            </p>
-          </div>
-        </div>
-
-        {/* Global Toolbar Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Compare Button (Active when >= 2 selected) */}
-          <button
-            type="button"
-            onClick={() => setIsCompareOpen(true)}
-            className="btn btn-sm"
-            style={{
-              background: '#0284C7',
-              color: '#FFFFFF',
-              border: 'none',
-              fontWeight: 800,
-              fontSize: 12,
-              padding: '6px 14px',
-              borderRadius: 7,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(2,132,199,0.35)',
-              transition: 'all 0.15s ease'
-            }}
-            title="Open Multi-Image Comparison Workspace"
-          >
-            <SplitSquareVertical size={14} />
-            <span>COMPARE WORKSPACE {selectedImagesForCompare.length > 0 ? `(${selectedImagesForCompare.length})` : ''}</span>
-          </button>
-
-          {/* + ADD PROCEDURE Button (Prompt Section 5) */}
-          <button
-            type="button"
-            onClick={() => setIsAddProcedureModalOpen(true)}
-            className="btn btn-sm"
-            style={{
-              background: '#0F172A',
-              color: '#FFFFFF',
-              border: 'none',
-              fontWeight: 800,
-              fontSize: 12,
-              padding: '6px 16px',
-              borderRadius: 7,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 2px 6px rgba(15,23,42,0.25)',
-              cursor: 'pointer'
-            }}
-          >
-            <Plus size={14} />
-            <span>+ ADD PROCEDURE</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ==================================================================== */}
-      {/* VIEW 1: ALL PROCEDURES (LIST / CARD GRID) */}
-      {/* ==================================================================== */}
-      {viewMode === 'list' && (
-        <div>
-          {/* Sub-Header Toolbar: Search & Sort Bar (Prompt Sections 9, 10) */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-            gap: 12,
-            flexWrap: 'wrap'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 260 }}>
-              <div style={{
-                position: 'relative',
-                width: '100%',
-                maxWidth: 420
-              }}>
-                <Search size={15} color="#64748B" style={{ position: 'absolute', left: 10, top: 9 }} />
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="🔍 Search procedure by name or date..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  style={{ paddingLeft: 32, height: 34, fontSize: 12, borderRadius: 7 }}
-                />
-              </div>
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {/* View Mode Toggle: Table View (default) vs Cards View */}
-              <div style={{ display: 'flex', alignItems: 'center', background: '#F1F5F9', padding: 2, borderRadius: 6 }}>
-                <button
-                  type="button"
-                  onClick={() => setProcedureDisplayMode('table')}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: 11.5,
-                    fontWeight: 800,
-                    borderRadius: 4,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: procedureDisplayMode === 'table' ? '#036d92' : 'transparent',
-                    color: procedureDisplayMode === 'table' ? '#FFFFFF' : '#475569',
-                    boxShadow: procedureDisplayMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                  }}
-                >
-                  ☰ Table View
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProcedureDisplayMode('cards')}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: 11.5,
-                    fontWeight: 800,
-                    borderRadius: 4,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: procedureDisplayMode === 'cards' ? '#036d92' : 'transparent',
-                    color: procedureDisplayMode === 'cards' ? '#FFFFFF' : '#475569',
-                    boxShadow: procedureDisplayMode === 'cards' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                  }}
-                >
-                  ☷ Cards View
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
-                  Sort:
-                </label>
-                <select
-                  className="form-select"
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value as any)}
-                  style={{ height: 34, fontSize: 12, fontWeight: 700, borderRadius: 7, padding: '4px 10px' }}
-                >
-                  <option value="recent">Recent First (Desc)</option>
-                  <option value="oldest">Oldest First (Asc)</option>
-                  <option value="az">Procedure A → Z</option>
-                  <option value="za">Procedure Z → A</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Section Heading */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              ALL PROCEDURES ({filteredProcedures.length})
-            </span>
-            <span style={{ fontSize: 11.5, color: '#64748B' }}>
-              Select a procedure to view sessions, before/after images, and comparative analysis
-            </span>
-          </div>
-
-          {/* Empty State */}
-          {filteredProcedures.length === 0 && (
-            <div style={{
-              background: '#FFFFFF',
-              border: '2px dashed #CBD5E1',
-              borderRadius: 10,
-              padding: '40px 20px',
-              textAlign: 'center',
-              color: '#64748B'
-            }}>
-              <AlertCircle size={32} color="#94A3B8" style={{ margin: '0 auto 10px' }} />
-              <h4 style={{ fontSize: 15, fontWeight: 800, color: '#1E293B', marginBottom: 4 }}>
-                No Procedures Found
-              </h4>
-              <p style={{ fontSize: 12, marginBottom: 16 }}>
-                {searchQuery ? `No clinical procedures matched "${searchQuery}".` : 'No clinical procedures have been recorded for this patient yet.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsAddProcedureModalOpen(true)}
-                className="btn btn-primary btn-sm"
-                style={{ background: '#0284C7', borderColor: '#0284C7' }}
-              >
-                + ADD PROCEDURE
-              </button>
-            </div>
-          )}
-
-          {/* Procedures Table or Grid View based on procedureDisplayMode */}
-          {procedureDisplayMode === 'table' ? (
-            /* Table View: Columns No., Procedure, Date, Actions (User Specification) */
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: 10,
-              border: '1px solid #CBD5E1',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-              overflow: 'hidden'
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 800, color: '#334155', width: 70 }}>
-                      No.
-                    </th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 800, color: '#334155' }}>
-                      Procedure
-                    </th>
-                    <th
-                      onClick={() => setSortBy(prev => prev === 'recent' ? 'oldest' : 'recent')}
-                      style={{
-                        padding: '12px 16px',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: '#0369A1',
-                        cursor: 'pointer',
-                        userSelect: 'none',
-                        width: 180
-                      }}
-                      title="Click to sort by Date (Ascending / Descending)"
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Calendar size={13} color="#0369A1" />
-                        <span>Date</span>
-                        <span style={{ fontSize: 10.5, background: '#E0F2FE', padding: '1px 6px', borderRadius: 4, fontWeight: 800 }}>
-                          {sortBy === 'recent' ? '▼ Recent' : sortBy === 'oldest' ? '▲ Oldest' : '↕'}
-                        </span>
-                      </div>
-                    </th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 800, color: '#334155', width: 220, textAlign: 'right' }}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProcedures.map((proc, index) => {
-                    const totalSessions = proc.sessions.length;
-                    let totalImages = 0;
-                    proc.sessions.forEach(s => {
-                      s.sections.forEach(sec => {
-                        totalImages += sec.beforeImages.length + sec.afterImages.length;
-                        sec.subSections.forEach(sub => { totalImages += sub.images.length; });
-                      });
-                    });
-
-                    return (
-                      <tr
-                        key={proc.id}
-                        style={{
-                          borderBottom: '1px solid #F1F5F9',
-                          background: index % 2 === 0 ? '#FFFFFF' : '#FBFDFF',
-                          transition: 'background 0.15s ease'
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#F0F9FF')}
-                        onMouseLeave={e => (e.currentTarget.style.background = index % 2 === 0 ? '#FFFFFF' : '#FBFDFF')}
-                      >
-                        <td style={{ padding: '14px 16px', fontSize: 12.5, fontWeight: 700, color: '#64748B' }}>
-                          {index + 1}
-                        </td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 14, fontWeight: 900, color: '#0F172A' }}>
-                              {proc.name}
-                            </span>
-                            <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontSize: 10, fontWeight: 800 }}>
-                              {proc.category}
-                            </span>
-                            <span style={{ fontSize: 11, color: '#64748B' }}>
-                              • {totalSessions} {totalSessions === 1 ? 'Session' : 'Sessions'} ({totalImages} Images)
-                            </span>
-                          </div>
-                          {proc.doctorObservation && (
-                            <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
-                              {proc.doctorObservation}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '14px 16px', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', color: '#1E293B' }}>
-                          {proc.createdAt}
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedProcedureId(proc.id);
-                                setViewMode('detail');
-                              }}
-                              className="btn btn-sm"
-                              style={{
-                                background: '#036d92',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                fontSize: 11.5,
-                                fontWeight: 800,
-                                padding: '5px 14px',
-                                borderRadius: 6
-                              }}
-                            >
-                              VIEW
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedProcedureId(proc.id);
-                                const procImages: string[] = [];
-                                proc.sessions.forEach(s => s.sections.forEach(sec => {
-                                  sec.beforeImages.forEach(i => procImages.push(i.id));
-                                  sec.afterImages.forEach(i => procImages.push(i.id));
-                                }));
-                                if (procImages.length >= 2) {
-                                  setSelectedImageIds(procImages.slice(0, 2));
-                                }
-                                setIsCompareOpen(true);
-                              }}
-                              className="btn btn-sm btn-outline"
-                              style={{
-                                borderColor: '#0284C7',
-                                color: '#0284C7',
-                                fontSize: 11.5,
-                                fontWeight: 800,
-                                padding: '5px 12px',
-                                borderRadius: 6
-                              }}
-                            >
-                              COMPARE
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            /* Cards View */
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: 16
-            }}>
-              {filteredProcedures.map(proc => {
-                // Calculate statistics
-                const totalSessions = proc.sessions.length;
-                let totalSections = 0;
-                let totalImages = 0;
-
-                proc.sessions.forEach(s => {
-                  totalSections += s.sections.length;
-                  s.sections.forEach(sec => {
-                    totalImages += sec.beforeImages.length + sec.afterImages.length;
-                    sec.subSections.forEach(sub => {
-                      totalImages += sub.images.length;
-                    });
-                  });
-                });
-
-                return (
-                  <div
-                    key={proc.id}
-                    style={{
-                      background: '#FFFFFF',
-                      borderRadius: 10,
-                      border: '1px solid #CBD5E1',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                      padding: 16,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.2s ease',
-                      position: 'relative'
-                    }}
-                  >
-                    <div>
-                      {/* Header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <div>
-                          <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontSize: 10, fontWeight: 800, marginBottom: 4 }}>
-                            {proc.category}
-                          </span>
-                          <h3 style={{ fontSize: 16, fontWeight: 900, color: '#0F172A', margin: 0, textTransform: 'uppercase' }}>
-                            {proc.name}
-                          </h3>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', fontFamily: 'monospace' }}>
-                          {proc.createdAt}
-                        </span>
-                      </div>
-
-                      {/* Metadata Strip */}
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, 1fr)',
-                        gap: 8,
-                        background: '#F8FAFC',
-                        padding: '10px 12px',
-                        borderRadius: 8,
-                        border: '1px solid #E2E8F0',
-                        marginTop: 10,
-                        marginBottom: 14,
-                        textAlign: 'center'
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 900, color: '#036d92' }}>{totalSessions}</div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B' }}>Sessions</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 900, color: '#D97706' }}>{totalSections}</div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B' }}>Sections</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 900, color: '#15803D' }}>{totalImages}</div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B' }}>Images</div>
-                        </div>
-                      </div>
-
-                      {/* Clinical Details */}
-                      <div style={{ fontSize: 11.5, color: '#475569', marginBottom: 12 }}>
-                        <div>Therapist: <strong>{proc.therapist || 'Dr Valaki'}</strong> • Site: <strong>{proc.bodyPart || 'General'}</strong></div>
-                        {proc.doctorObservation && (
-                          <div style={{
-                            marginTop: 6,
-                            fontSize: 11,
-                            color: '#64748B',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden'
-                          }}>
-                            {proc.doctorObservation}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      paddingTop: 10,
-                      borderTop: '1px solid #F1F5F9'
-                    }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedProcedureId(proc.id);
-                            setViewMode('detail');
-                          }}
-                          className="btn btn-sm"
-                          style={{
-                            background: '#036d92',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            fontSize: 11.5,
-                            fontWeight: 800,
-                            padding: '5px 14px',
-                            borderRadius: 6
-                          }}
-                        >
-                          VIEW
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedProcedureId(proc.id);
-                            const procImages: string[] = [];
-                            proc.sessions.forEach(s => s.sections.forEach(sec => {
-                              sec.beforeImages.forEach(i => procImages.push(i.id));
-                              sec.afterImages.forEach(i => procImages.push(i.id));
-                            }));
-                            if (procImages.length >= 2) {
-                              setSelectedImageIds(procImages.slice(0, 2));
-                            }
-                            setIsCompareOpen(true);
-                          }}
-                          className="btn btn-sm btn-outline"
-                          style={{
-                            borderColor: '#0284C7',
-                            color: '#0284C7',
-                            fontSize: 11.5,
-                            fontWeight: 800,
-                            padding: '5px 12px',
-                            borderRadius: 6
-                          }}
-                        >
-                          COMPARE
-                        </button>
-                      </div>
-
-                      <div style={{ fontSize: 11, color: '#94A3B8' }}>
-                        Clinical Master Protocol
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* VIEW 2: PROCEDURE DETAIL VIEW (Prompt Sections 11, 41) */}
-      {/* ==================================================================== */}
-      {viewMode === 'detail' && activeProcedure && (
-        <div>
-          {/* Detail View Header (Prompt Section 41) */}
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: 10,
-            border: '1px solid #CBD5E1',
-            padding: '14px 18px',
-            marginBottom: 16,
-            boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('list')}
-                  className="btn btn-sm btn-outline"
-                  style={{ padding: '5px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6 }}
-                  title="Back to All Procedures"
-                >
-                  <ArrowLeft size={13} /> Back to Procedures
-                </button>
-
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', margin: 0, textTransform: 'uppercase' }}>
-                      {activeProcedure.name}
-                    </h2>
-                    <span className="badge" style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 800, fontSize: 10.5 }}>
-                      Active Protocol
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                    Created: <strong>{activeProcedure.createdAt}</strong> • Site: <strong>{activeProcedure.bodyPart || 'FACE'}</strong> • Therapist: <strong>{activeProcedure.therapist || 'Dr Valaki'}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats & Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', gap: 8, background: '#F1F5F9', padding: '4px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 700, color: '#334155' }}>
-                  <span>Sessions: <strong>{activeProcedure.sessions.length}</strong></span>
-                  <span>•</span>
-                  <span>Images: <strong>{allActiveProcedureImages.length}</strong></span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddSession}
-                  className="btn btn-sm"
-                  style={{ background: '#0284C7', color: '#FFFFFF', border: 'none', fontSize: 11.5, fontWeight: 800, padding: '5px 12px', borderRadius: 6 }}
-                >
-                  <Plus size={13} /> + ADD SESSION
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsCompareOpen(true)}
-                  disabled={selectedImagesForCompare.length < 2}
-                  className="btn btn-sm"
-                  style={{
-                    background: selectedImagesForCompare.length >= 2 ? '#D97706' : '#E2E8F0',
-                    color: selectedImagesForCompare.length >= 2 ? '#FFFFFF' : '#94A3B8',
-                    border: 'none',
-                    fontSize: 11.5,
-                    fontWeight: 800,
-                    padding: '5px 12px',
-                    borderRadius: 6,
-                    cursor: selectedImagesForCompare.length >= 2 ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  COMPARE ({selectedImagesForCompare.length})
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* SESSIONS LIST (Collapsible Cards - Prompt Sections 12, 42, 43) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {activeProcedure.sessions.map(session => {
-              const activeSection = session.sections.find(s => s.id === session.activeSectionId) || session.sections[0];
-              const isSubSectionActive = activeSection && activeSection.activeSubSectionId && activeSection.activeSubSectionId !== 'main';
-              const activeSubSection = isSubSectionActive
-                ? activeSection.subSections.find(sub => sub.id === activeSection.activeSubSectionId)
-                : null;
-
-              return (
-                <div
-                  key={session.id}
-                  style={{
-                    background: '#FFFFFF',
-                    borderRadius: 10,
-                    border: '1.5px solid #CBD5E1',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {/* Collapsible Session Header (Prompt Section 42) */}
-                  <div
-                    onClick={() => handleToggleSessionExpand(session.id)}
-                    style={{
-                      padding: '10px 16px',
-                      background: session.isExpanded ? 'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)' : '#FFFFFF',
-                      borderBottom: session.isExpanded ? '1px solid #CBD5E1' : 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      cursor: 'pointer',
-                      userSelect: 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        background: '#036d92',
-                        color: '#FFFFFF',
-                        fontWeight: 900,
-                        fontSize: 12,
-                        padding: '3px 10px',
-                        borderRadius: 6,
-                        letterSpacing: 0.5
-                      }}>
-                        SESSION {session.sessionNumber}
-                      </div>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
-                        📅 Date: {session.date}
-                      </span>
-                      <span style={{ fontSize: 11.5, color: '#64748B' }}>
-                        ({session.sections.length} Sections)
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#036d92' }}>
-                        {session.isExpanded ? 'Hide Sections' : 'View Sections & Images'}
-                      </span>
-                      {session.isExpanded ? <ChevronDown size={16} color="#036d92" /> : <ChevronRight size={16} color="#036d92" />}
-                    </div>
-                  </div>
-
-                  {/* Expanded Session Content: Section Tabs & Image Grid */}
-                  {session.isExpanded && (
-                    <div style={{ padding: '14px 16px' }}>
-                      
-                      {/* Section Tabs Ribbon (Prompt Sections 13, 14 - [SECTION 1] ... [SECTION 5] [+ ADD SECTION]) */}
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        overflowX: 'auto',
-                        paddingBottom: 8,
-                        marginBottom: 14,
-                        borderBottom: '1px solid #E2E8F0'
-                      }}>
-                        {session.sections.map((section, secIdx) => {
-                          const isSecActive = session.activeSectionId === section.id;
-                          const totalSecImgs = section.beforeImages.length + section.afterImages.length;
-
-                          return (
-                            <button
-                              key={section.id}
-                              type="button"
-                              onClick={() => handleSetActiveSection(session.id, section.id)}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                setContextMenuState({
-                                  visible: true,
-                                  x: e.clientX,
-                                  y: e.clientY,
-                                  sectionId: section.id,
-                                  sessionId: session.id
-                                });
-                              }}
-                              onDoubleClick={() => handleAddSubSection(session.id, section.id)}
-                              title="Right click for context menu • Double click to add sub-section"
-                              style={{
-                                background: isSecActive ? '#0F172A' : '#F1F5F9',
-                                color: isSecActive ? '#FFFFFF' : '#334155',
-                                border: isSecActive ? '1px solid #0F172A' : '1px solid #CBD5E1',
-                                borderRadius: 7,
-                                padding: '6px 14px',
-                                fontSize: 11.5,
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                whiteSpace: 'nowrap',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <span>{section.name}</span>
-                              <span style={{
-                                background: isSecActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
-                                color: isSecActive ? '#FFFFFF' : '#475569',
-                                padding: '1px 5px',
-                                borderRadius: 4,
-                                fontSize: 10
-                              }}>
-                                {totalSecImgs}
-                              </span>
-                            </button>
-                          );
-                        })}
-
-                        {/* [+ ADD SECTION] Button (Prompt Section 14) */}
-                        <button
-                          type="button"
-                          onClick={() => handleAddSection(session.id)}
-                          style={{
-                            background: '#EFF6FF',
-                            color: '#1D4ED8',
-                            border: '1px dashed #93C5FD',
-                            borderRadius: 7,
-                            padding: '6px 12px',
-                            fontSize: 11.5,
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            whiteSpace: 'nowrap'
-                          }}
-                          title="Click to dynamically add the next section"
-                        >
-                          <Plus size={13} />
-                          <span>+ ADD SECTION</span>
-                        </button>
-                      </div>
-
-                      {/* Sub-Sections Row if any (Prompt Section 15) */}
-                      {activeSection && (
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          marginBottom: 14,
-                          flexWrap: 'wrap',
-                          background: '#F8FAFC',
-                          padding: '6px 10px',
-                          borderRadius: 7,
-                          border: '1px solid #E2E8F0'
-                        }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#64748B', marginRight: 4 }}>
-                            {activeSection.name} Views:
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() => handleSetActiveSubSection(session.id, activeSection.id, 'main')}
-                            style={{
-                              background: !isSubSectionActive ? '#0284C7' : 'transparent',
-                              color: !isSubSectionActive ? '#FFFFFF' : '#475569',
-                              border: 'none',
-                              borderRadius: 5,
-                              padding: '3px 8px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Main (Before/After)
-                          </button>
-
-                          {activeSection.subSections.map(sub => {
-                            const isSubActive = activeSection.activeSubSectionId === sub.id;
-                            return (
-                              <button
-                                key={sub.id}
-                                type="button"
-                                onClick={() => handleSetActiveSubSection(session.id, activeSection.id, sub.id)}
-                                style={{
-                                  background: isSubActive ? '#0284C7' : '#FFFFFF',
-                                  color: isSubActive ? '#FFFFFF' : '#334155',
-                                  border: '1px solid #CBD5E1',
-                                  borderRadius: 5,
-                                  padding: '3px 8px',
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                {sub.name} ({sub.images.length})
-                              </button>
-                            );
-                          })}
-
-                          {/* Add Sub-Section Button (Prompt Section 15) */}
-                          <button
-                            type="button"
-                            onClick={() => handleAddSubSection(session.id, activeSection.id)}
-                            onDoubleClick={() => handleAddSubSection(session.id, activeSection.id)}
-                            style={{
-                              background: '#FEF3C7',
-                              color: '#92400E',
-                              border: '1px dashed #F59E0B',
-                              borderRadius: 5,
-                              padding: '3px 8px',
-                              fontSize: 11,
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 3
-                            }}
-                            title="Click or double-click to add sub-section"
-                          >
-                            <Plus size={11} /> + Add Sub-Section
-                          </button>
-                        </div>
-                      )}
-
-                      {/* SUB-SECTION VIEW: When a sub-section is active (Prompt Section 15) */}
-                      {isSubSectionActive && activeSubSection && (
-                        <div>
-                          <div style={{
-                            background: '#EFF6FF',
-                            padding: '10px 14px',
-                            borderRadius: 8,
-                            border: '1px solid #BFDBFE',
-                            marginBottom: 14,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 900, color: '#1E40AF' }}>
-                                {activeProcedure.name} • {activeSection.name} • {activeSubSection.name}
-                              </div>
-                              <div style={{ fontSize: 11, color: '#3B82F6', marginTop: 2 }}>
-                                Created: {activeSubSection.createdAt} • Sub-sections support direct clinical images without mandatory Before/After pairing
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleStartAddImage(session.id, activeSection.id, 'BEFORE', activeSubSection.id)}
-                              className="btn btn-sm btn-primary"
-                              style={{ background: '#0284C7', borderColor: '#0284C7', fontSize: 11.5, fontWeight: 800 }}
-                            >
-                              <Plus size={13} /> + ADD IMAGE
-                            </button>
-                          </div>
-
-                          {/* Sub-Section Image Grid */}
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
-                            gap: 14
-                          }}>
-                            {activeSubSection.images.map(img => (
-                              <ClinicalImageCard
-                                key={img.id}
-                                image={img}
-                                procedureName={activeProcedure.name}
-                                sessionNumber={session.sessionNumber}
-                                sectionName={activeSection.name}
-                                isSelected={selectedImageIds.includes(img.id)}
-                                onToggleSelect={() => toggleImageSelection(img.id)}
-                                onOpenFullscreen={() => setFullscreenImage({ image: img, contextImages: activeSubSection.images })}
-                                onOpenEditor={() => setEditorImage(img)}
-                                onDelete={() => handleDeleteImage(img.id)}
-                                onUpdateDateTime={(d, t) => handleUpdateImageDateTime(img.id, d, t)}
-                              />
-                            ))}
-
-                            {activeSubSection.images.length === 0 && (
-                              <div style={{
-                                gridColumn: '1 / -1',
-                                textAlign: 'center',
-                                padding: '30px',
-                                background: '#FFFFFF',
-                                border: '1px dashed #CBD5E1',
-                                borderRadius: 8,
-                                color: '#64748B'
-                              }}>
-                                No images in {activeSubSection.name}. Click "+ ADD IMAGE" to upload or capture.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* MAIN SECTION VIEW: BEFORE / AFTER AREAS (Prompt Section 16) */}
-                      {!isSubSectionActive && activeSection && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
-                          
-                          {/* ================= BEFORE AREA ================= */}
-                          <div style={{
-                            background: '#FFFBEB',
-                            borderRadius: 10,
-                            border: '1.5px solid #FDE68A',
-                            padding: 14
-                          }}>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              marginBottom: 10,
-                              paddingBottom: 6,
-                              borderBottom: '1px solid #FDE68A'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{
-                                  background: '#B45309',
-                                  color: '#FFFFFF',
-                                  fontWeight: 900,
-                                  fontSize: 11,
-                                  padding: '2px 8px',
-                                  borderRadius: 5,
-                                  letterSpacing: 0.5
-                                }}>
-                                  BEFORE
-                                </span>
-                                <span style={{ fontSize: 12, fontWeight: 800, color: '#78350F' }}>
-                                  Baseline Pre-Procedure ({activeSection.beforeImages.length})
-                                </span>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleStartAddImage(session.id, activeSection.id, 'BEFORE')}
-                                className="btn btn-sm"
-                                style={{
-                                  background: '#D97706',
-                                  color: '#FFFFFF',
-                                  border: 'none',
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  padding: '3px 10px',
-                                  borderRadius: 5
-                                }}
-                              >
-                                <Plus size={12} /> + ADD BEFORE
-                              </button>
-                            </div>
-
-                            {/* Images Grid */}
-                            <div style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-                              gap: 12
-                            }}>
-                              {activeSection.beforeImages.map(img => (
-                                <ClinicalImageCard
-                                  key={img.id}
-                                  image={img}
-                                  procedureName={activeProcedure.name}
-                                  sessionNumber={session.sessionNumber}
-                                  sectionName={activeSection.name}
-                                  isSelected={selectedImageIds.includes(img.id)}
-                                  onToggleSelect={() => toggleImageSelection(img.id)}
-                                  onOpenFullscreen={() => setFullscreenImage({ image: img, contextImages: activeSection.beforeImages })}
-                                  onOpenEditor={() => setEditorImage(img)}
-                                  onDelete={() => handleDeleteImage(img.id)}
-                                  onUpdateDateTime={(d, t) => handleUpdateImageDateTime(img.id, d, t)}
-                                />
-                              ))}
-
-                              {/* Empty Card Slot / Add Plus Card */}
-                              <div
-                                onClick={() => handleStartAddImage(session.id, activeSection.id, 'BEFORE')}
-                                style={{
-                                  height: 190,
-                                  border: '2px dashed #F59E0B',
-                                  borderRadius: 8,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  background: 'rgba(254, 243, 199, 0.4)',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                title="Click to add Before image"
-                              >
-                                <Plus size={24} color="#D97706" />
-                                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#B45309', marginTop: 4 }}>
-                                  + Add Before Image
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* ================= AFTER AREA ================= */}
-                          <div style={{
-                            background: '#F0FDF4',
-                            borderRadius: 10,
-                            border: '1.5px solid #86EFAC',
-                            padding: 14
-                          }}>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              marginBottom: 10,
-                              paddingBottom: 6,
-                              borderBottom: '1px solid #86EFAC'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{
-                                  background: '#15803D',
-                                  color: '#FFFFFF',
-                                  fontWeight: 900,
-                                  fontSize: 11,
-                                  padding: '2px 8px',
-                                  borderRadius: 5,
-                                  letterSpacing: 0.5
-                                }}>
-                                  AFTER
-                                </span>
-                                <span style={{ fontSize: 12, fontWeight: 800, color: '#166534' }}>
-                                  Post-Treatment Results ({activeSection.afterImages.length})
-                                </span>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleStartAddImage(session.id, activeSection.id, 'AFTER')}
-                                className="btn btn-sm"
-                                style={{
-                                  background: '#16A34A',
-                                  color: '#FFFFFF',
-                                  border: 'none',
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  padding: '3px 10px',
-                                  borderRadius: 5
-                                }}
-                              >
-                                <Plus size={12} /> + ADD AFTER
-                              </button>
-                            </div>
-
-                            {/* Images Grid */}
-                            <div style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-                              gap: 12
-                            }}>
-                              {activeSection.afterImages.map(img => (
-                                <ClinicalImageCard
-                                  key={img.id}
-                                  image={img}
-                                  procedureName={activeProcedure.name}
-                                  sessionNumber={session.sessionNumber}
-                                  sectionName={activeSection.name}
-                                  isSelected={selectedImageIds.includes(img.id)}
-                                  onToggleSelect={() => toggleImageSelection(img.id)}
-                                  onOpenFullscreen={() => setFullscreenImage({ image: img, contextImages: activeSection.afterImages })}
-                                  onOpenEditor={() => setEditorImage(img)}
-                                  onDelete={() => handleDeleteImage(img.id)}
-                                  onUpdateDateTime={(d, t) => handleUpdateImageDateTime(img.id, d, t)}
-                                />
-                              ))}
-
-                              {/* Empty Card Slot / Add Plus Card */}
-                              <div
-                                onClick={() => handleStartAddImage(session.id, activeSection.id, 'AFTER')}
-                                style={{
-                                  height: 190,
-                                  border: '2px dashed #22C55E',
-                                  borderRadius: 8,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  background: 'rgba(220, 252, 231, 0.4)',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                title="Click to add After image"
-                              >
-                                <Plus size={24} color="#16A34A" />
-                                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#15803D', marginTop: 4 }}>
-                                  + Add After Image
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                        </div>
-                      )}
-
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* DOCTOR OBSERVATION UI (Prompt Section 40) */}
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: 10,
-            border: '1px solid #CBD5E1',
-            padding: 16,
-            marginTop: 20
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <FileText size={16} color="#036d92" />
-                <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Doctor's Observation / Report
-                </h4>
-              </div>
-              <span style={{ fontSize: 11, color: '#64748B' }}>
-                Clinical notes recorded for {activeProcedure.name}
-              </span>
-            </div>
-
-            <textarea
-              className="form-input"
-              rows={3}
-              defaultValue={activeProcedure.doctorObservation || ''}
-              id="doc-observation-textarea"
-              placeholder="Enter comprehensive clinical findings, follicular density reduction, skin reaction, recommended intervals, post-procedure instructions..."
-              style={{ fontSize: 12.5, lineHeight: 1.5, borderRadius: 8, marginBottom: 10, resize: 'vertical' }}
-            />
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById('doc-observation-textarea') as HTMLTextAreaElement;
-                  if (el) handleSaveObservation(el.value);
-                }}
-                className="btn btn-sm btn-primary"
-                style={{ background: '#036d92', borderColor: '#036d92', fontSize: 12, fontWeight: 800, padding: '6px 18px' }}
-              >
-                SAVE OBSERVATION
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* CONTEXT MENU: RIGHT-CLICK ON SECTION (Prompt Section 57) */}
-      {/* ==================================================================== */}
-      {contextMenuState && (
-        <div style={{
-          position: 'fixed',
-          top: contextMenuState.y,
-          left: contextMenuState.x,
-          background: '#FFFFFF',
-          borderRadius: 8,
-          border: '1px solid #CBD5E1',
-          boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
-          zIndex: 9999,
-          padding: '6px 0',
-          minWidth: 170
-        }}>
-          <button
-            type="button"
-            onClick={() => {
-              handleAddSubSection(contextMenuState.sessionId, contextMenuState.sectionId);
-              setContextMenuState(null);
-            }}
-            style={{ width: '100%', padding: '7px 14px', fontSize: 12, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#1E293B' }}
-          >
-            + Add Sub-Section
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              handleStartAddImage(contextMenuState.sessionId, contextMenuState.sectionId, 'BEFORE');
-              setContextMenuState(null);
-            }}
-            style={{ width: '100%', padding: '7px 14px', fontSize: 12, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#1E293B' }}
-          >
-            + Add Before Image
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              handleStartAddImage(contextMenuState.sessionId, contextMenuState.sectionId, 'AFTER');
-              setContextMenuState(null);
-            }}
-            style={{ width: '100%', padding: '7px 14px', fontSize: 12, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#1E293B' }}
-          >
-            + Add After Image
-          </button>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* MODAL 1: ADD PROCEDURE MODAL (Prompt Section 5) */}
-      {/* ==================================================================== */}
-      {isAddProcedureModalOpen && (
-        <div className="modal-overlay" style={{
-          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200
-        }}>
-          <div style={{
-            background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 520,
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)', border: '1px solid #CBD5E1', overflow: 'hidden'
-          }}>
-            <div style={{ padding: '14px 18px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Scissors size={16} color="#036d92" />
-                <h3 style={{ fontSize: 15, fontWeight: 900, color: '#0F172A', margin: 0 }}>
-                  Add Clinical Procedure
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddProcedureModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: 18 }}>
-              {/* Option A: Select From Master Procedure (Searchable List) */}
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: 12, fontWeight: 800, color: '#334155', display: 'block', marginBottom: 6 }}>
-                  Select From Master Procedure
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Filter master clinical catalog..."
-                  value={catalogSearch}
-                  onChange={e => setCatalogSearch(e.target.value)}
-                  style={{ height: 32, fontSize: 11.5, marginBottom: 8 }}
-                />
-
-                <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: 8 }}>
-                  {MASTER_PROCEDURE_CATALOG
-                    .filter(item => item.name.toLowerCase().includes(catalogSearch.toLowerCase()))
-                    .map(item => (
-                      <div
-                        key={item.name}
-                        onClick={() => handleAddProcedure(item.shortName, item.category)}
-                        style={{
-                          padding: '8px 12px',
-                          borderBottom: '1px solid #F1F5F9',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          cursor: 'pointer',
-                          transition: 'background 0.15s ease'
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#F0F9FF')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '#FFFFFF')}
-                      >
-                        <div>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>{item.shortName}</div>
-                          <div style={{ fontSize: 10.5, color: '#64748B' }}>{item.name}</div>
-                        </div>
-                        <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontSize: 10 }}>
-                          Select
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              {/* Option B: Manual Procedure (Prompt Section 5) */}
-              <div style={{ paddingTop: 14, borderTop: '1px solid #E2E8F0' }}>
-                <label style={{ fontSize: 12, fontWeight: 800, color: '#334155', display: 'block', marginBottom: 6 }}>
-                  Or Enter Manual Procedure Name
-                </label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Microneedling RF, Carbon Laser Peel..."
-                    value={manualProcedureName}
-                    onChange={e => setManualProcedureName(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleAddProcedure(manualProcedureName);
-                    }}
-                    style={{ height: 36, fontSize: 12 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAddProcedure(manualProcedureName)}
-                    className="btn btn-primary"
-                    style={{ background: '#0F172A', borderColor: '#0F172A', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}
-                  >
-                    ADD PROCEDURE
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* MODAL 2: ADD IMAGE FLOW (Prompt Sections 17, 18) */}
-      {/* ==================================================================== */}
-      {addImageModalState.isOpen && (
-        <div className="modal-overlay" style={{
-          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200
-        }}>
-          <div style={{
-            background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 480,
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)', border: '1px solid #CBD5E1', overflow: 'hidden'
-          }}>
-            {/* Header */}
-            <div style={{ padding: '14px 18px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Camera size={16} color="#0284C7" />
-                <h3 style={{ fontSize: 15, fontWeight: 900, color: '#0F172A', margin: 0 }}>
-                  Add Clinical Image
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAddImageModalState(prev => ({ ...prev, isOpen: false }))}
-                style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Error Message Alert */}
-            {errorMessage && (
-              <div style={{ margin: '12px 18px 0', padding: '8px 12px', background: '#FEF2F2', border: '1px solid #F87171', borderRadius: 6, color: '#991B1B', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertCircle size={14} />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            {/* STEP 1: Direct BEFORE / AFTER Selection (Prompt Section 17) */}
-            {addImageModalState.step === 'before_after' && (
-              <div style={{ padding: 22, textAlign: 'center' }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 18 }}>
-                  Select the clinical classification for this photograph:
-                </p>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <button
-                    type="button"
-                    onClick={() => setAddImageModalState(prev => ({ ...prev, step: 'source', targetType: 'BEFORE' }))}
-                    style={{
-                      background: '#FFFBEB',
-                      border: '2px solid #F59E0B',
-                      borderRadius: 10,
-                      padding: '24px 16px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 8,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <span style={{ fontSize: 16, fontWeight: 900, color: '#B45309' }}>[ BEFORE ]</span>
-                    <span style={{ fontSize: 11, color: '#78350F' }}>Pre-Procedure Baseline</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAddImageModalState(prev => ({ ...prev, step: 'source', targetType: 'AFTER' }))}
-                    style={{
-                      background: '#F0FDF4',
-                      border: '2px solid #22C55E',
-                      borderRadius: 10,
-                      padding: '24px 16px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 8,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <span style={{ fontSize: 16, fontWeight: 900, color: '#15803D' }}>[ AFTER ]</span>
-                    <span style={{ fontSize: 11, color: '#166534' }}>Post-Procedure Result</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: Source Modal (Prompt Section 18) */}
-            {addImageModalState.step === 'source' && (
-              <div style={{ padding: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: '#64748B' }}>
-                    ADDING TO: <strong style={{ color: addImageModalState.targetType === 'BEFORE' ? '#B45309' : '#15803D' }}>[{addImageModalState.targetType}]</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setAddImageModalState(prev => ({ ...prev, step: 'before_after' }))}
-                    style={{ background: 'none', border: 'none', color: '#0284C7', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    ← Change Before/After
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {/* 1. Camera (Prompt Section 19) */}
-                  <button
-                    type="button"
-                    onClick={handleOpenCamera}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                      borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF',
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = '#0284C7')}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = '#CBD5E1')}
-                  >
-                    <div style={{ background: '#EFF6FF', color: '#1D4ED8', padding: 8, borderRadius: 6 }}>
-                      <Camera size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>📷 CAMERA</div>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>Live webcam preview with shutter capture</div>
-                    </div>
-                  </button>
-
-                  {/* 2. Upload Image (Prompt Section 22) */}
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                    borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF',
-                    cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s ease'
-                  }}>
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      onChange={handleFileUpload}
-                      style={{ display: 'none' }}
-                    />
-                    <div style={{ background: '#F0FDF4', color: '#15803D', padding: 8, borderRadius: 6 }}>
-                      <Upload size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>🖼 UPLOAD IMAGE</div>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>Supports JPG, JPEG, PNG or PDF (Validated)</div>
-                    </div>
-                  </label>
-
-                  {/* 3. Dermascope (Prompt Section 20) */}
-                  <button
-                    type="button"
-                    onClick={() => setIsDermascopeOpen(true)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                      borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF',
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = '#0284C7')}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = '#CBD5E1')}
-                  >
-                    <div style={{ background: '#FEF3C7', color: '#B45309', padding: 8, borderRadius: 6 }}>
-                      <Eye size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>🔬 DERMASCOPE</div>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>Magnified cross-polarized dermatoscopic evaluation</div>
-                    </div>
-                  </button>
-
-                  {/* 4. Face Scanner (Prompt Section 21) */}
-                  <button
-                    type="button"
-                    onClick={() => setIsFaceScannerOpen(true)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                      borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF',
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = '#0284C7')}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = '#CBD5E1')}
-                  >
-                    <div style={{ background: '#F3E8FF', color: '#7E22CE', padding: 8, borderRadius: 6 }}>
-                      <Sparkles size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>🙂 FACE SCANNER</div>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>5-angle 3D facial topography &amp; texture scan</div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* CAMERA UI MODAL (Prompt Section 19) */}
-      {/* ==================================================================== */}
-      {isCameraOpen && (
-        <div className="modal-overlay" style={{
-          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.85)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300
-        }}>
-          <div style={{
-            background: '#1E293B', borderRadius: 12, width: '90%', maxWidth: 640,
-            overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid #334155'
-          }}>
-            <div style={{ padding: '12px 16px', background: '#0F172A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#FFFFFF' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 800 }}>
-                <Camera size={15} /> CAMERA PREVIEW
-              </div>
-              <button onClick={handleCloseCamera} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Video Viewfinder */}
-            <div style={{ position: 'relative', width: '100%', height: 380, background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {cameraStreamActive ? (
-                <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <div style={{ textAlign: 'center', color: '#94A3B8' }}>
-                  <img src={DEMO_BEFORE_SVG_1} alt="Live Simulated Viewfinder" style={{ width: '100%', height: 380, objectFit: 'cover', opacity: 0.85 }} />
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                    <div style={{ width: 120, height: 120, border: '2px dashed rgba(255,255,255,0.7)', borderRadius: '50%' }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Viewfinder Crosshair */}
-              <div style={{ position: 'absolute', bottom: 12, left: 16, background: 'rgba(0,0,0,0.6)', padding: '3px 8px', borderRadius: 4, color: '#FFFFFF', fontSize: 11, fontFamily: 'monospace' }}>
-                REC • 1080p Medical Grade • {getBrowserDateTime().date}
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div style={{ padding: '14px 20px', background: '#0F172A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={handleCloseCamera}
-                className="btn btn-ghost"
-                style={{ color: '#94A3B8', fontSize: 12 }}
-              >
-                [Cancel]
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCaptureCamera}
-                className="btn btn-primary"
-                style={{
-                  background: '#EF4444', borderColor: '#EF4444',
-                  fontWeight: 900, fontSize: 13, padding: '8px 24px', borderRadius: 30,
-                  display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 0 15px rgba(239,68,68,0.5)'
-                }}
-              >
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FFFFFF' }} />
-                [Capture]
-              </button>
-
-              <div style={{ width: 60 }} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* DERMASCOPE UI MODAL (Prompt Section 20) */}
-      {/* ==================================================================== */}
-      {isDermascopeOpen && (
-        <div className="modal-overlay" style={{
-          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.75)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300
-        }}>
-          <div style={{
-            background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 500,
-            overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', border: '1px solid #CBD5E1'
-          }}>
-            <div style={{ padding: '14px 18px', background: '#FEF3C7', borderBottom: '1px solid #FDE68A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Eye size={16} color="#92400E" />
-                <h3 style={{ fontSize: 15, fontWeight: 900, color: '#92400E', margin: 0 }}>
-                  🔬 DERMASCOPE OPTICAL FEED
-                </h3>
-              </div>
-              <button onClick={() => setIsDermascopeOpen(false)} style={{ background: 'none', border: 'none', color: '#92400E', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: 18, textAlign: 'center' }}>
-              <div style={{ width: '100%', height: 260, background: '#0F172A', borderRadius: 8, overflow: 'hidden', position: 'relative', marginBottom: 14 }}>
-                <img src={DEMO_BEFORE_SVG_1} alt="Dermascope pattern" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div style={{ position: 'absolute', top: 10, right: 10, background: '#10B981', color: '#FFFFFF', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 4 }}>
-                  POLARIZED 10X
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => handleCaptureDermascope('Cross-Polarized')}
-                  className="btn btn-primary btn-sm"
-                  style={{ background: '#D97706', borderColor: '#D97706', fontWeight: 800 }}
-                >
-                  Capture Cross-Polarized
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCaptureDermascope('Non-Polarized')}
-                  className="btn btn-outline btn-sm"
-                  style={{ borderColor: '#D97706', color: '#D97706', fontWeight: 800 }}
-                >
-                  Capture Non-Polarized
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* FACE SCANNER UI MODAL (Prompt Section 21) */}
-      {/* ==================================================================== */}
-      {isFaceScannerOpen && (
-        <div className="modal-overlay" style={{
-          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.75)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300
-        }}>
-          <div style={{
-            background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 520,
-            overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', border: '1px solid #CBD5E1'
-          }}>
-            <div style={{ padding: '14px 18px', background: '#F3E8FF', borderBottom: '1px solid #E9D5FF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={16} color="#7E22CE" />
-                <h3 style={{ fontSize: 15, fontWeight: 900, color: '#7E22CE', margin: 0 }}>
-                  🙂 3D FACIAL TOPOGRAPHY SCANNER
-                </h3>
-              </div>
-              <button onClick={() => setIsFaceScannerOpen(false)} style={{ background: 'none', border: 'none', color: '#7E22CE', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: 20, textAlign: 'center' }}>
-              <div style={{ width: '100%', height: 260, background: '#0F172A', borderRadius: 8, overflow: 'hidden', position: 'relative', marginBottom: 16 }}>
-                <img src={DEMO_AFTER_SVG_2} alt="Face Scan Mesh" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div style={{ position: 'absolute', inset: 0, border: '2px solid rgba(168,85,247,0.4)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ color: '#E9D5FF', fontSize: 11, background: 'rgba(0,0,0,0.7)', padding: '4px 12px', borderRadius: 20 }}>
-                    5-Angle Spatial Calibration Ready
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCaptureFaceScan}
-                className="btn btn-primary"
-                style={{ background: '#7E22CE', borderColor: '#7E22CE', fontWeight: 900, fontSize: 13, padding: '9px 28px', borderRadius: 8 }}
-              >
-                [ START SCAN &amp; RECORD ]
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* FULLSCREEN IMAGE VIEWER (Prompt Sections 30, 31, 32) */}
-      {/* ==================================================================== */}
-      {fullscreenImage && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.94)',
-          zIndex: 9999, display: 'flex', flexDirection: 'column', color: '#FFFFFF'
-        }}>
-          {/* Top Bar */}
-          <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15,23,42,0.8)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800 }}>
-                {fullscreenImage.image.fileName}
-              </div>
-              <div style={{ fontSize: 11, color: '#94A3B8' }}>
-                {fullscreenImage.image.date} {fullscreenImage.image.time} • Type: <strong style={{ color: fullscreenImage.image.type === 'BEFORE' ? '#F59E0B' : '#10B981' }}>{fullscreenImage.image.type}</strong> • Press ESC to close
-              </div>
-            </div>
-
-            <button
-              onClick={() => setFullscreenImage(null)}
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: 6 }}
-              title="Close (ESC)"
-            >
-              <X size={24} />
-            </button>
-          </div>
-
-          {/* Main Stage with Context Previous / Next (Prompt Section 32) */}
-          <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <button
-              type="button"
-              onClick={() => handleFullscreenNav('prev')}
-              style={{
-                position: 'absolute', left: 24, background: 'rgba(255,255,255,0.15)',
-                border: 'none', color: '#FFFFFF', width: 44, height: 44, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-              }}
-              title="Previous Image in this Section"
-            >
-              <ArrowLeft size={20} />
-            </button>
-
-            <img
-              src={fullscreenImage.image.url}
-              alt="Fullscreen View"
-              style={{ maxHeight: '78vh', maxWidth: '85vw', objectFit: 'contain', borderRadius: 8, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
-            />
-
-            <button
-              type="button"
-              onClick={() => handleFullscreenNav('next')}
-              style={{
-                position: 'absolute', right: 24, background: 'rgba(255,255,255,0.15)',
-                border: 'none', color: '#FFFFFF', width: 44, height: 44, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-              }}
-              title="Next Image in this Section"
-            >
-              <ArrowRight size={20} />
-            </button>
-          </div>
-
-          {/* Bottom Controls Bar (Prompt Section 30) */}
-          <div style={{ padding: '12px 20px', background: 'rgba(15,23,42,0.8)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', gap: 14 }}>
-            <button
-              type="button"
-              onClick={() => {
-                setEditorImage(fullscreenImage.image);
-                setFullscreenImage(null);
-              }}
-              className="btn btn-sm"
-              style={{ background: '#0284C7', color: '#FFFFFF', border: 'none', fontWeight: 800 }}
-            >
-              <Edit3 size={14} /> [Edit / Annotate]
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                showToast(`Sent ${fullscreenImage.image.fileName} to Patient Portal & Telehealth EHR.`);
-              }}
-              className="btn btn-sm"
-              style={{ background: '#10B981', color: '#FFFFFF', border: 'none', fontWeight: 800 }}
-            >
-              <Send size={14} /> [Send Image]
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!selectedImageIds.includes(fullscreenImage.image.id)) {
-                  setSelectedImageIds(prev => [...prev, fullscreenImage.image.id]);
-                }
-                setFullscreenImage(null);
-                setIsCompareOpen(true);
-              }}
-              className="btn btn-sm"
-              style={{ background: '#D97706', color: '#FFFFFF', border: 'none', fontWeight: 800 }}
-            >
-              <SplitSquareVertical size={14} /> [Compare Mode]
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* MULTI-IMAGE COMPARE VIEWER (Prompt Sections 33 to 39, 63) */}
-      {/* ==================================================================== */}
-      {isCompareOpen && (
-        <CompareViewerModal
-          initialImages={selectedImagesForCompare.length > 0 ? selectedImagesForCompare : allPatientImages.slice(0, 2)}
-          allPatientImages={allPatientImages}
-          procedures={procedures}
-          activeProcedureId={selectedProcedureId}
-          onClose={() => setIsCompareOpen(false)}
-        />
-      )}
-
-      {/* ==================================================================== */}
-      {/* IMAGE EDITOR MODAL (Prompt Sections 25 to 29) */}
-      {/* ==================================================================== */}
-      {editorImage && (
-        <ImageEditorModal
-          image={editorImage}
-          onClose={() => setEditorImage(null)}
-          onSave={(updatedImg) => {
-            setProcedures(prev => prev.map(proc => ({
-              ...proc,
-              sessions: proc.sessions.map(s => ({
-                ...s,
-                sections: s.sections.map(sec => ({
-                  ...sec,
-                  beforeImages: sec.beforeImages.map(i => i.id === updatedImg.id ? updatedImg : i),
-                  afterImages: sec.afterImages.map(i => i.id === updatedImg.id ? updatedImg : i),
-                  subSections: sec.subSections.map(sub => ({
-                    ...sub,
-                    images: sub.images.map(i => i.id === updatedImg.id ? updatedImg : i)
-                  }))
-                }))
-              }))
-            })));
-            setEditorImage(null);
-            showToast('Saved image edits & annotations');
-          }}
-        />
       )}
 
     </div>
@@ -2959,118 +2327,175 @@ export default function ClinicalProcedureImageManagement({ patient }: ClinicalPr
 }
 
 // ============================================================================
-// COMPONENT: CLINICAL IMAGE CARD (Prompt Sections 23, 24, 47, 54, 55, 56)
+// COMPONENT: PHOTO THUMBNAIL CARD (Requirements 10 & 12)
+// Shows capture date/time in small white box with black text
 // ============================================================================
 
-interface ClinicalImageCardProps {
+interface PhotoThumbnailCardProps {
   image: ClinicalImage;
   procedureName: string;
-  sessionNumber: number;
-  sectionName: string;
-  isSelected: boolean;
-  onToggleSelect: () => void;
-  onOpenFullscreen: () => void;
-  onOpenEditor: () => void;
+  sessionLabel: string;
+  isSelectedForCompare: boolean;
+  isAdmin: boolean;
+  onToggleCompare: () => void;
+  onClick: () => void;
+  onEdit: () => void;
   onDelete: () => void;
-  onUpdateDateTime?: (newDate: string, newTime: string) => void;
+  onAdminEdit: () => void;
 }
 
-function ClinicalImageCard({
+function PhotoThumbnailCard({
   image,
-  procedureName,
-  sessionNumber,
-  sectionName,
-  isSelected,
-  onToggleSelect,
-  onOpenFullscreen,
-  onOpenEditor,
+  isSelectedForCompare,
+  isAdmin,
+  onToggleCompare,
+  onClick,
+  onEdit,
   onDelete,
-  onUpdateDateTime
-}: ClinicalImageCardProps) {
-  const isPdf = image.fileType === 'application/pdf' || image.source === 'PDF';
-  const [isEditingDateTime, setIsEditingDateTime] = useState(false);
-  const [tempDate, setTempDate] = useState(image.date);
-  const [tempTime, setTempTime] = useState(image.time);
+  onAdminEdit
+}: PhotoThumbnailCardProps) {
+  const isPdf = image.fileType === 'application/pdf';
 
   return (
     <div style={{
       background: '#FFFFFF',
-      borderRadius: 9,
-      border: isSelected ? '2px solid #0284C7' : '1px solid #CBD5E1',
-      boxShadow: isSelected ? '0 0 0 3px rgba(2,132,199,0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+      borderRadius: 8,
+      border: isSelectedForCompare ? '2.5px solid #036d92' : '1px solid #CBD5E1',
       overflow: 'hidden',
+      position: 'relative',
       display: 'flex',
       flexDirection: 'column',
-      position: 'relative',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       transition: 'all 0.15s ease'
     }}>
-      {/* Checkbox (Prompt Section 33, 47 - Selection for Compare) */}
-      <div
-        onClick={onToggleSelect}
-        style={{
-          position: 'absolute',
-          top: 8,
-          left: 8,
-          zIndex: 10,
-          background: isSelected ? '#0284C7' : 'rgba(255,255,255,0.9)',
-          color: isSelected ? '#FFFFFF' : '#334155',
-          width: 22,
-          height: 22,
-          borderRadius: 5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-          border: isSelected ? 'none' : '1px solid #CBD5E1'
-        }}
-        title="Select for comparison"
-      >
-        {isSelected ? <Check size={14} strokeWidth={3} /> : null}
+      {/* Compare Checkbox (Genuine HTML checkbox, separate from thumbnail click) */}
+      {!isPdf && (
+        <label
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            top: 6,
+            left: 6,
+            zIndex: 15,
+            background: isSelectedForCompare ? '#036d92' : 'rgba(255,255,255,0.92)',
+            borderRadius: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            padding: 3,
+            border: isSelectedForCompare ? '1.5px solid #036d92' : '1.5px solid #94A3B8',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+          }}
+          title={isSelectedForCompare ? "Deselect from comparison" : "Select for comparison"}
+        >
+          <input
+            type="checkbox"
+            checked={isSelectedForCompare}
+            onChange={(e) => {
+              e.stopPropagation();
+              onToggleCompare();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              cursor: 'pointer',
+              width: 15,
+              height: 15,
+              accentColor: '#036d92',
+              margin: 0
+            }}
+          />
+        </label>
+      )}
+
+      {/* Top-Right Quick Actions: Edit & Delete */}
+      <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10, display: 'flex', gap: 4 }}>
+        {!isPdf && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            style={{
+              background: 'rgba(255,255,255,0.92)',
+              border: '1px solid #CBD5E1',
+              borderRadius: 4,
+              width: 22,
+              height: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#036d92'
+            }}
+            title="Edit / Annotate Photo"
+          >
+            <Edit3 size={11} />
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAdminEdit(); }}
+            style={{
+              background: 'rgba(255,255,255,0.92)',
+              border: '1px solid #CBD5E1',
+              borderRadius: 4,
+              width: 22,
+              height: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#D97706'
+            }}
+            title="Admin: Edit Date/Time & Observations"
+          >
+            <Clock size={11} />
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          style={{
+            background: 'rgba(255,255,255,0.92)',
+            border: '1px solid #FCA5A5',
+            borderRadius: 4,
+            width: 22,
+            height: 22,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#DC2626'
+          }}
+          title="Delete Photo"
+        >
+          <Trash2 size={11} />
+        </button>
       </div>
 
-      {/* Status / Source Badge Top-Right */}
-      <div style={{
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        zIndex: 10,
-        display: 'flex',
-        gap: 4
-      }}>
-        <span style={{
-          background: image.type === 'BEFORE' ? '#B45309' : image.type === 'AFTER' ? '#15803D' : '#0369A1',
-          color: '#FFFFFF',
-          fontSize: 9.5,
-          fontWeight: 900,
-          padding: '2px 6px',
-          borderRadius: 4
-        }}>
-          {image.type}
-        </span>
-      </div>
-
-      {/* Image Preview / PDF Document Card (Prompt Section 54) */}
+      {/* Thumbnail Area */}
       <div
-        onClick={onOpenFullscreen}
+        onClick={onClick}
         style={{
-          height: 145,
+          height: 120,
           background: '#F1F5F9',
-          position: 'relative',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative'
         }}
       >
         {isPdf ? (
-          <div style={{ textAlign: 'center', padding: 12 }}>
-            <FileText size={38} color="#0284C7" style={{ margin: '0 auto 6px' }} />
-            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#0F172A', maxWidth: 170, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ textAlign: 'center', padding: 8 }}>
+            <FileText size={36} color="#DC2626" style={{ margin: '0 auto 4px' }} />
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#334155', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {image.fileName}
             </div>
-            <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontSize: 10, marginTop: 4 }}>
+            <span style={{ background: '#FEE2E2', color: '#B91C1C', fontSize: 9, fontWeight: 900, padding: '1px 5px', borderRadius: 4 }}>
               PDF DOCUMENT
             </span>
           </div>
@@ -3083,1169 +2508,1222 @@ function ClinicalImageCard({
         )}
       </div>
 
-      {/* Date/Time Box: White, Black text, Small, Clean, Clearly Readable (Prompt Section 24) */}
-      {isEditingDateTime ? (
+      {/* REQUIREMENT 10: Capture Date/Time in small white box with black text */}
+      <div style={{ padding: '6px 8px', background: '#F8FAFC', textAlign: 'center', borderTop: '1px solid #F1F5F9' }}>
         <div style={{
+          display: 'inline-block',
           background: '#FFFFFF',
           color: '#000000',
-          padding: '4px 6px',
-          borderTop: '1px solid #0284C7',
-          borderBottom: '1px solid #0284C7',
+          border: '1px solid #CBD5E1',
+          borderRadius: 4,
+          padding: '2px 8px',
           fontSize: 10.5,
+          fontWeight: 700,
           fontFamily: 'monospace',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
         }}>
-          <input
-            type="text"
-            value={tempDate}
-            onChange={(e) => setTempDate(e.target.value)}
-            placeholder="DD/MM/YYYY"
-            style={{ width: 80, fontSize: 10, padding: '2px 4px', border: '1px solid #CBD5E1', borderRadius: 3 }}
-            title="Edit Date (DD/MM/YYYY)"
-          />
-          <input
-            type="text"
-            value={tempTime}
-            onChange={(e) => setTempTime(e.target.value)}
-            placeholder="HH:MM AM/PM"
-            style={{ width: 70, fontSize: 10, padding: '2px 4px', border: '1px solid #CBD5E1', borderRadius: 3 }}
-            title="Edit Time"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (onUpdateDateTime) {
-                onUpdateDateTime(tempDate, tempTime);
-              }
-              setIsEditingDateTime(false);
-            }}
-            style={{ background: '#16A34A', color: '#FFF', border: 'none', borderRadius: 3, padding: '2px 5px', fontSize: 10, cursor: 'pointer', fontWeight: 700 }}
-            title="Save Date/Time"
-          >
-            ✓
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTempDate(image.date);
-              setTempTime(image.time);
-              setIsEditingDateTime(false);
-            }}
-            style={{ background: '#94A3B8', color: '#FFF', border: 'none', borderRadius: 3, padding: '2px 5px', fontSize: 10, cursor: 'pointer', fontWeight: 700 }}
-            title="Cancel"
-          >
-            ✕
-          </button>
-        </div>
-      ) : (
-        <div
-          onClick={() => setIsEditingDateTime(true)}
-          title="Click to edit Date/Time (Admin permitted)"
-          style={{
-            background: '#FFFFFF',
-            color: '#000000',
-            padding: '5px 8px',
-            borderTop: '1px solid #E2E8F0',
-            borderBottom: '1px solid #E2E8F0',
-            fontSize: 11,
-            fontWeight: 700,
-            fontFamily: 'monospace',
-            textAlign: 'center',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            cursor: 'pointer'
-          }}
-        >
-          <Clock size={11} color="#000000" />
-          <span>{image.date}</span>
-          <span>•</span>
-          <span>{image.time}</span>
-          <Edit3 size={10} color="#64748B" style={{ marginLeft: 2 }} />
-        </div>
-      )}
-
-      {/* Image Metadata (Prompt Section 55) */}
-      <div style={{ padding: '6px 8px', fontSize: 10.5, color: '#64748B', lineHeight: 1.3 }}>
-        <div style={{ fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {procedureName} • S{sessionNumber} • {sectionName}
-        </div>
-        <div style={{ fontSize: 10, color: '#94A3B8' }}>
-          Source: {image.source} {image.fileSize ? `(${image.fileSize})` : ''}
-        </div>
-      </div>
-
-      {/* Actions: [EDIT] [VIEW] [SELECT] + Admin E/D (Prompt Sections 24, 56) */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '6px 8px',
-        background: '#F8FAFC',
-        borderTop: '1px solid #F1F5F9'
-      }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            type="button"
-            onClick={onOpenEditor}
-            disabled={isPdf}
-            className="btn btn-sm btn-ghost"
-            style={{ padding: '2px 6px', fontSize: 10.5, fontWeight: 800, color: '#0284C7', height: 24 }}
-            title="Edit / Annotate"
-          >
-            EDIT
-          </button>
-          <button
-            type="button"
-            onClick={onOpenFullscreen}
-            className="btn btn-sm btn-ghost"
-            style={{ padding: '2px 6px', fontSize: 10.5, fontWeight: 800, color: '#334155', height: 24 }}
-            title="View Fullscreen"
-          >
-            VIEW
-          </button>
-          <button
-            type="button"
-            onClick={onToggleSelect}
-            className="btn btn-sm btn-ghost"
-            style={{ padding: '2px 6px', fontSize: 10.5, fontWeight: 800, color: isSelected ? '#15803D' : '#64748B', height: 24 }}
-            title="Select for Compare"
-          >
-            {isSelected ? '✓ SEL' : 'SELECT'}
-          </button>
+          {image.date} {image.time}
         </div>
 
-        {/* Admin E/D UI (Prompt Section 56) */}
-        <div style={{ display: 'flex', gap: 3 }}>
-          <button
-            type="button"
-            onClick={() => setIsEditingDateTime(true)}
-            style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 3, padding: '1px 5px', fontSize: 9.5, fontWeight: 900, cursor: 'pointer', color: '#0369A1' }}
-            title="Admin Edit Date/Time"
-          >
-            E
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 3, padding: '1px 5px', fontSize: 9.5, fontWeight: 900, cursor: 'pointer', color: '#DC2626' }}
-            title="Admin Delete"
-          >
-            D
-          </button>
-        </div>
+        {image.doctorObservation && (
+          <div style={{
+            fontSize: 10,
+            color: '#475569',
+            marginTop: 4,
+            textAlign: 'left',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            📝 {image.doctorObservation}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ============================================================================
-// COMPONENT: MULTI-IMAGE COMPARISON WORKSPACE (Prompt Update & Master Spec)
-// Left side: Upload/select multiple images at once into a selectable image library
-// Right side: Multi-image comparison workspace (supports 2+ images)
-// - Drag & drop from library to compare workspace
-// - Drag images to reorder inside comparison area
-// - Each comparison image has its OWN: Zoom, Pan, Rotate, Remove, Reset
-// - Responsive layout automatically adjusts for 2, 3, 4+ images
-// - Zero file duplication; only frontend state/references manipulated
+// MODAL: ADD / LINK PROCEDURE (Requirement 4)
 // ============================================================================
 
-interface CompareViewerModalProps {
-  initialImages?: ClinicalImage[];
-  allPatientImages?: Array<ClinicalImage & { procedureName?: string; procedureId?: string; sessionNumber?: number; sectionName?: string }>;
-  procedures?: ClinicalProcedure[];
-  activeProcedureId?: string;
+interface AddProcedureModalProps {
+  procedures: ClinicalProcedure[];
+  pendingImage: ClinicalImage | null;
   onClose: () => void;
+  onSave: (name: string, category: string, date: string, bodyPart: string, therapist: string) => void;
 }
 
-function CompareViewerModal({
-  initialImages = [],
-  allPatientImages = [],
-  procedures = [],
-  activeProcedureId,
-  onClose
-}: CompareViewerModalProps) {
-  // 1. Library State: All available images (patient procedures + dynamically uploaded photos)
-  const [libraryImages, setLibraryImages] = useState<ClinicalImage[]>(() => {
-    const list: ClinicalImage[] = allPatientImages.length > 0 ? [...allPatientImages] : [...initialImages];
-    initialImages.forEach(img => {
-      if (!list.some(x => x.id === img.id)) list.push(img);
-    });
-    return list;
-  });
+function AddProcedureModal({ procedures, pendingImage, onClose, onSave }: AddProcedureModalProps) {
+  const [selectedMaster, setSelectedMaster] = useState(MASTER_PROCEDURES[0].name);
+  const [manualName, setManualName] = useState('');
+  const [useManual, setUseManual] = useState(false);
+  const [category, setCategory] = useState(MASTER_PROCEDURES[0].category);
+  const [date, setDate] = useState(getTodayDateString());
+  const [bodyPart, setBodyPart] = useState('FACE');
+  const [therapist, setTherapist] = useState('Dr Valaki');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [addToSharedMaster, setAddToSharedMaster] = useState(true);
 
-  // Cross-Procedure selector: 'ALL' or specific procedure ID
-  const [selectedProcedureFilter, setSelectedProcedureFilter] = useState<string>('ALL');
+  const filteredMaster = useMemo(() => {
+    if (!searchTerm.trim()) return MASTER_PROCEDURES;
+    const q = searchTerm.toLowerCase();
+    return MASTER_PROCEDURES.filter(m => m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
+  }, [searchTerm]);
 
-  // 2. Comparison State: Ordered array of image IDs in comparison workspace
-  const [comparisonIds, setComparisonIds] = useState<string[]>(() => {
-    if (initialImages.length >= 2) return initialImages.map(img => img.id);
-    if (allPatientImages.length >= 2) return allPatientImages.slice(0, 2).map(img => img.id);
-    if (initialImages.length === 1) return [initialImages[0].id];
-    return [];
-  });
-
-  // 3. Multi-Select in Library
-  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>(() => {
-    return initialImages.map(img => img.id);
-  });
-
-  // 4. Per-Image Independent Control States: Zoom, Pan, Rotate (keyed by image ID)
-  const [zoomState, setZoomState] = useState<{ [id: string]: number }>({});
-  const [panState, setPanState] = useState<{ [id: string]: { x: number; y: number } }>({});
-  const [rotateState, setRotateState] = useState<{ [id: string]: number }>({});
-
-  // Active panning tracking
-  const [draggingPaneId, setDraggingPaneId] = useState<string | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  // Library filter & search
-  const [librarySearch, setLibrarySearch] = useState('');
-  const [libraryTypeFilter, setLibraryTypeFilter] = useState<'ALL' | 'BEFORE' | 'AFTER'>('ALL');
-  const [isDropTargetActive, setIsDropTargetActive] = useState(false);
-  const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Fast ID map lookup
-  const libraryMap = useMemo(() => {
-    const map = new Map<string, ClinicalImage>();
-    libraryImages.forEach(img => map.set(img.id, img));
-    return map;
-  }, [libraryImages]);
-
-  // Comparison images in exact sequence
-  const comparisonImages = useMemo(() => {
-    return comparisonIds
-      .map(id => libraryMap.get(id))
-      .filter((img): img is ClinicalImage => Boolean(img));
-  }, [comparisonIds, libraryMap]);
-
-  // Keyboard shortcut: ESC to close
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  // Independent Controls Handlers
-  const getZoom = (id: string) => zoomState[id] || 100;
-  const getPan = (id: string) => panState[id] || { x: 0, y: 0 };
-  const getRotate = (id: string) => rotateState[id] || 0;
-
-  const handleZoomChange = (id: string, delta: number) => {
-    setZoomState(prev => {
-      const cur = prev[id] || 100;
-      const next = Math.max(50, Math.min(400, cur + delta));
-      return { ...prev, [id]: next };
-    });
-  };
-
-  const handleRotate = (id: string, deltaDeg: number) => {
-    setRotateState(prev => {
-      const cur = prev[id] || 0;
-      return { ...prev, [id]: (cur + deltaDeg + 360) % 360 };
-    });
-  };
-
-  const handleFitImage = (id: string) => {
-    setZoomState(prev => ({ ...prev, [id]: 100 }));
-    setPanState(prev => ({ ...prev, [id]: { x: 0, y: 0 } }));
-    setRotateState(prev => ({ ...prev, [id]: 0 }));
-  };
-
-  const handlePanNudge = (id: string, deltaX: number, deltaY: number) => {
-    setPanState(prev => {
-      const cur = prev[id] || { x: 0, y: 0 };
-      return { ...prev, [id]: { x: cur.x + deltaX, y: cur.y + deltaY } };
-    });
-  };
-
-  const handleResetImage = (id: string) => {
-    setZoomState(prev => ({ ...prev, [id]: 100 }));
-    setPanState(prev => ({ ...prev, [id]: { x: 0, y: 0 } }));
-    setRotateState(prev => ({ ...prev, [id]: 0 }));
-  };
-
-  const handleResetAll = () => {
-    setZoomState({});
-    setPanState({});
-    setRotateState({});
-  };
-
-  const handleRemoveFromCompare = (id: string) => {
-    setComparisonIds(prev => prev.filter(x => x !== id));
-    setSelectedLibraryIds(prev => prev.filter(x => x !== id));
-  };
-
-  // Reordering images inside comparison area (Drag & Drop Reordering)
-  const handleReorder = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
-    setComparisonIds(prev => {
-      const copy = [...prev];
-      const [movedItem] = copy.splice(fromIndex, 1);
-      copy.splice(toIndex, 0, movedItem);
-      return copy;
-    });
-  };
-
-  // Upload multiple images at once
-  const handleUploadMultiple = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newImgs: ClinicalImage[] = [];
-    const dateObj = getBrowserDateTime();
-    let loadedCount = 0;
-
-    Array.from(files).forEach((file, idx) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const url = ev.target?.result as string;
-        const newImg: ClinicalImage = {
-          id: `img-user-upload-${Date.now()}-${idx}`,
-          url,
-          type: 'GENERAL',
-          date: dateObj.date,
-          time: dateObj.time,
-          fileName: file.name,
-          fileType: (file.type as any) || 'image/jpeg',
-          fileSize: `${(file.size / 1024).toFixed(0)} KB`,
-          source: 'UPLOAD',
-          notes: 'Multi-Image Upload'
-        };
-        newImgs.push(newImg);
-        loadedCount++;
-
-        if (loadedCount === files.length) {
-          setLibraryImages(prev => [...newImgs, ...prev]);
-          setComparisonIds(prev => {
-            const combined = [...prev, ...newImgs.map(x => x.id)];
-            return Array.from(new Set(combined));
-          });
-          setSelectedLibraryIds(prev => [...prev, ...newImgs.map(x => x.id)]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
-    if (e.target) e.target.value = '';
-  };
-
-  // Pan event handlers
-  const handleMouseDown = (id: string, e: React.MouseEvent) => {
-    setDraggingPaneId(id);
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingPaneId) return;
-    const dx = e.clientX - dragStartRef.current.x;
-    const dy = e.clientY - dragStartRef.current.y;
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-
-    setPanState(prev => {
-      const cur = prev[draggingPaneId] || { x: 0, y: 0 };
-      return { ...prev, [draggingPaneId]: { x: cur.x + dx, y: cur.y + dy } };
-    });
-  };
-
-  const handleMouseUp = () => {
-    setDraggingPaneId(null);
-  };
-
-  // Toggle selection
-  const toggleLibrarySelection = (id: string) => {
-    setSelectedLibraryIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllFiltered = () => {
-    const allFilteredIds = filteredLibrary.map(i => i.id);
-    setSelectedLibraryIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedLibraryIds([]);
-  };
-
-  const handleAddSelectedToCompare = () => {
-    setComparisonIds(prev => Array.from(new Set([...prev, ...selectedLibraryIds])));
-  };
-
-  const handleToggleCompareImage = (id: string) => {
-    setComparisonIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  // Drop onto workspace background
-  const handleWorkspaceDrop = (e: React.DragEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsDropTargetActive(false);
-    const dragType = e.dataTransfer.getData('dragType');
-    if (dragType === 'LIBRARY_IMAGE') {
-      const imgId = e.dataTransfer.getData('text/plain');
-      if (imgId && !comparisonIds.includes(imgId)) {
-        setComparisonIds(prev => [...prev, imgId]);
-      }
-    }
-  };
-
-  // Filtered Library Images (supports Cross-Procedure Filtering)
-  const filteredLibrary = useMemo(() => {
-    return libraryImages.filter(img => {
-      if (selectedProcedureFilter !== 'ALL') {
-        const withProc = img as any;
-        if (withProc.procedureId && withProc.procedureId !== selectedProcedureFilter) return false;
-      }
-      if (libraryTypeFilter !== 'ALL' && img.type !== libraryTypeFilter) return false;
-      if (librarySearch.trim() && !img.fileName.toLowerCase().includes(librarySearch.toLowerCase())) return false;
-      return true;
-    });
-  }, [libraryImages, selectedProcedureFilter, libraryTypeFilter, librarySearch]);
-
-  const count = comparisonImages.length;
-  const isTwoImages = count === 2;
-
-  // Responsive grid style for compare area
-  const getGridStyle = () => {
-    if (count === 2) {
-      return {
-        display: 'grid',
-        gridTemplateColumns: '1fr 2px 1fr',
-        gap: 0,
-        height: '100%'
-      };
-    }
-    if (count === 3) {
-      return {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 12,
-        height: '100%'
-      };
-    }
-    if (count === 4) {
-      return {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gridTemplateRows: 'repeat(2, 1fr)',
-        gap: 12,
-        height: '100%'
-      };
-    }
-    return {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-      gap: 12,
-      height: '100%',
-      overflowY: 'auto' as const
-    };
+    const finalName = useManual ? manualName.trim() : selectedMaster;
+    if (!finalName) return;
+    onSave(finalName, category, date, bodyPart, therapist);
   };
 
   return (
-    <div
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: '#0B1120',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        color: '#FFFFFF'
-      }}
-    >
-      {/* Hidden File Input for Multiple Uploads */}
-      <input
-        type="file"
-        multiple
-        accept="image/*"
-        ref={multiUploadInputRef}
-        onChange={handleUploadMultiple}
-        style={{ display: 'none' }}
-      />
-
-      {/* TOP HEADER */}
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+    }}>
       <div style={{
-        padding: '12px 24px',
-        background: '#0F172A',
-        borderBottom: '1px solid #334155',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 12
+        background: '#FFFFFF',
+        borderRadius: 12,
+        width: '90%',
+        maxWidth: 540,
+        overflow: 'hidden',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
-            padding: 8,
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <SplitSquareVertical size={18} color="#FFFFFF" />
+        {/* Header */}
+        <div style={{
+          padding: '14px 20px',
+          background: '#036d92',
+          color: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Plus size={18} strokeWidth={3} />
+            <span style={{ fontSize: 15, fontWeight: 900 }}>ADD CLINICAL PROCEDURE</span>
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0, color: '#FFFFFF', letterSpacing: 0.3 }}>
-                Multi-Image Clinical Comparison Workspace
-              </h3>
-              <span style={{
-                background: count >= 2 ? '#0284C7' : '#D97706',
-                color: '#FFFFFF',
-                fontSize: 11,
-                fontWeight: 800,
-                padding: '2px 8px',
-                borderRadius: 12
-              }}>
-                {count} {count === 1 ? 'Image' : 'Images'} Active
-              </span>
-            </div>
-            <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 2 }}>
-              Select/drag images from library • Drag panes to reorder • Independent Zoom, Pan, Rotate, Remove &amp; Reset
-            </div>
-          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            onClick={handleResetAll}
-            className="btn btn-sm"
-            style={{
-              background: '#1E293B',
-              color: '#F1F5F9',
-              border: '1px solid #475569',
-              fontWeight: 800,
-              fontSize: 11.5,
+        <form onSubmit={handleSubmit} style={{ padding: 20 }}>
+          {pendingImage && (
+            <div style={{
+              background: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              borderRadius: 8,
+              padding: '10px 12px',
+              marginBottom: 16,
               display: 'flex',
               alignItems: 'center',
-              gap: 6
-            }}
-            title="Reset Zoom, Pan & Rotation on all panes"
-          >
-            <RefreshCw size={13} />
-            <span>Reset All</span>
-          </button>
-
-          {count > 0 && (
-            <button
-              type="button"
-              onClick={() => setComparisonIds([])}
-              className="btn btn-sm"
-              style={{
-                background: '#334155',
-                color: '#EF4444',
-                border: '1px solid #475569',
-                fontWeight: 800,
-                fontSize: 11.5
-              }}
-              title="Clear all images from comparison workspace"
-            >
-              Clear Workspace
-            </button>
+              gap: 10
+            }}>
+              <CheckCircle2 size={16} color="#2563EB" />
+              <div style={{ fontSize: 12, color: '#1E40AF' }}>
+                Pending photo attached (<strong>{pendingImage.fileName}</strong>). It will automatically be linked to Session 1 of this procedure!
+              </div>
+            </div>
           )}
 
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: '#334155',
-              border: 'none',
-              color: '#FFFFFF',
-              cursor: 'pointer',
-              padding: '6px 10px',
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 12,
-              fontWeight: 800
-            }}
-            title="Close Comparison (ESC)"
-          >
-            <X size={16} />
-            <span>Close (ESC)</span>
-          </button>
-        </div>
-      </div>
-
-      {/* MAIN TWO-COLUMN WORKSPACE: LEFT LIBRARY + RIGHT COMPARE */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        
-        {/* ================================================================== */}
-        {/* LEFT COLUMN: SELECTABLE IMAGE LIBRARY & MULTI-UPLOAD */}
-        {/* ================================================================== */}
-        <div style={{
-          width: 320,
-          background: '#0F172A',
-          borderRight: '1px solid #334155',
-          display: 'flex',
-          flexDirection: 'column',
-          flexShrink: 0
-        }}>
-          {/* Library Header */}
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid #1E293B' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Layers size={15} color="#38BDF8" />
-                <span>Image Library ({libraryImages.length})</span>
-              </div>
-              <span style={{ fontSize: 10.5, color: '#94A3B8' }}>
-                {selectedLibraryIds.length} Selected
-              </span>
-            </div>
-
-            {/* Upload Multiple Images Button */}
+          {/* Toggle Master vs Manual */}
+          <div style={{ display: 'flex', background: '#F1F5F9', padding: 3, borderRadius: 8, marginBottom: 14 }}>
             <button
               type="button"
-              onClick={() => multiUploadInputRef.current?.click()}
-              className="btn btn-sm btn-primary"
+              onClick={() => setUseManual(false)}
               style={{
-                width: '100%',
-                background: '#0284C7',
-                borderColor: '#0284C7',
-                fontWeight: 800,
+                flex: 1,
+                padding: '6px 12px',
+                border: 'none',
+                borderRadius: 6,
                 fontSize: 12,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                padding: '7px 0',
-                marginBottom: 10,
-                borderRadius: 6
+                fontWeight: 800,
+                cursor: 'pointer',
+                background: !useManual ? '#FFFFFF' : 'transparent',
+                color: !useManual ? '#036d92' : '#64748B',
+                boxShadow: !useManual ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
               }}
             >
-              <Upload size={14} />
-              <span>+ Upload Multiple Images</span>
+              Select from Master List
             </button>
+            <button
+              type="button"
+              onClick={() => setUseManual(true)}
+              style={{
+                flex: 1,
+                padding: '6px 12px',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                background: useManual ? '#FFFFFF' : 'transparent',
+                color: useManual ? '#036d92' : '#64748B',
+                boxShadow: useManual ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+              }}
+            >
+              Enter Manually
+            </button>
+          </div>
 
-            {/* Cross-Procedure Selector: "BETWEEN 2 PROSSUSUER" */}
-            <div style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                <span>PROCEDURE SOURCE:</span>
-                <span style={{ color: '#38BDF8', fontSize: 9 }}>Cross-Compare</span>
+          {!useManual ? (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#334155', marginBottom: 6 }}>
+                SEARCH &amp; SELECT CLINICAL PROCEDURE:
               </label>
-              <select
-                className="form-select"
-                value={selectedProcedureFilter}
-                onChange={e => setSelectedProcedureFilter(e.target.value)}
+              <div style={{ position: 'relative', marginBottom: 8 }}>
+                <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: 10 }} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Filter procedure catalog..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px 8px 30px',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 6,
+                    fontSize: 12
+                  }}
+                />
+              </div>
+
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #CBD5E1', borderRadius: 6, background: '#FFFFFF' }}>
+                {filteredMaster.map(item => (
+                  <div
+                    key={item.name}
+                    onClick={() => {
+                      setSelectedMaster(item.name);
+                      setCategory(item.category);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #F1F5F9',
+                      background: selectedMaster === item.name ? '#E0F2FE' : '#FFFFFF',
+                      color: selectedMaster === item.name ? '#0369A1' : '#0F172A',
+                      fontWeight: selectedMaster === item.name ? 800 : 500,
+                      fontSize: 12,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span>{item.name}</span>
+                    <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: 4 }}>
+                      {item.category}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#334155', marginBottom: 6 }}>
+                CUSTOM CLINICAL PROCEDURE NAME:
+              </label>
+              <input
+                type="text"
+                value={manualName}
+                onChange={e => setManualName(e.target.value)}
+                placeholder="e.g. Subcision with Autologous Fat Grafting..."
+                required
                 style={{
                   width: '100%',
-                  height: 30,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  background: '#1E293B',
-                  color: '#FFFFFF',
-                  borderColor: '#334155',
+                  padding: '9px 12px',
+                  border: '1.5px solid #036d92',
                   borderRadius: 6,
-                  padding: '2px 8px'
+                  fontSize: 13,
+                  fontWeight: 700
+                }}
+              />
+              <div style={{ marginTop: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#475569', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={addToSharedMaster}
+                    onChange={e => setAddToSharedMaster(e.target.checked)}
+                  />
+                  <span>Add this custom procedure to clinic Master Catalog for future visits</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Category & Date */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                CATEGORY:
+              </label>
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 700
                 }}
               >
-                <option value="ALL">🌐 All Patient Procedures ({procedures.length})</option>
-                {procedures.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.createdAt})
-                  </option>
+                {PROCEDURE_CATEGORIES.map(c => (
+                  <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
 
-            {/* Search Input */}
-            <div style={{ position: 'relative', marginBottom: 8 }}>
-              <Search size={13} color="#64748B" style={{ position: 'absolute', left: 9, top: 9 }} />
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                PROCEDURE DATE:
+              </label>
               <input
                 type="text"
-                className="form-input"
-                placeholder="Filter library images..."
-                value={librarySearch}
-                onChange={e => setLibrarySearch(e.target.value)}
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                placeholder="DD/MM/YYYY"
                 style={{
-                  height: 30,
-                  fontSize: 11,
-                  paddingLeft: 28,
-                  background: '#1E293B',
-                  borderColor: '#334155',
-                  color: '#FFFFFF',
-                  borderRadius: 6
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textAlign: 'center'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Body Part & Therapist */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                TREATMENT AREA / SITE:
+              </label>
+              <input
+                type="text"
+                value={bodyPart}
+                onChange={e => setBodyPart(e.target.value)}
+                placeholder="e.g. FACE, SCALP, BACK..."
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: 6,
+                  fontSize: 12
                 }}
               />
             </div>
 
-            {/* Filter Pills */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-              {(['ALL', 'BEFORE', 'AFTER'] as const).map(tag => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setLibraryTypeFilter(tag)}
-                  style={{
-                    flex: 1,
-                    padding: '3px 0',
-                    fontSize: 10,
-                    fontWeight: 800,
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    background: libraryTypeFilter === tag ? '#0284C7' : '#1E293B',
-                    color: libraryTypeFilter === tag ? '#FFFFFF' : '#94A3B8',
-                    border: `1px solid ${libraryTypeFilter === tag ? '#0284C7' : '#334155'}`
-                  }}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-
-            {/* Multi-Select Toolbar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <button
-                type="button"
-                onClick={handleSelectAllFiltered}
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                DOCTOR / THERAPIST:
+              </label>
+              <input
+                type="text"
+                value={therapist}
+                onChange={e => setTherapist(e.target.value)}
+                placeholder="e.g. Dr Valaki"
                 style={{
-                  fontSize: 10,
-                  background: 'none',
-                  border: 'none',
-                  color: '#38BDF8',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  padding: 0
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: 6,
+                  fontSize: 12
                 }}
-              >
-                Select All
-              </button>
-              <button
-                type="button"
-                onClick={handleDeselectAll}
-                style={{
-                  fontSize: 10,
-                  background: 'none',
-                  border: 'none',
-                  color: '#94A3B8',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  padding: 0
-                }}
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={handleAddSelectedToCompare}
-                disabled={selectedLibraryIds.length === 0}
-                style={{
-                  fontSize: 10,
-                  background: selectedLibraryIds.length > 0 ? '#10B981' : '#334155',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  cursor: selectedLibraryIds.length > 0 ? 'pointer' : 'not-allowed',
-                  fontWeight: 800,
-                  padding: '3px 8px',
-                  borderRadius: 4
-                }}
-              >
-                + Compare ({selectedLibraryIds.length})
-              </button>
+              />
             </div>
           </div>
 
-          {/* Scrollable Thumbnails List */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {filteredLibrary.map((img) => {
-                const isSelected = selectedLibraryIds.includes(img.id);
-                const compareIndex = comparisonIds.indexOf(img.id);
-                const isInCompare = compareIndex !== -1;
-
-                return (
-                  <div
-                    key={img.id}
-                    draggable={true}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', img.id);
-                      e.dataTransfer.setData('dragType', 'LIBRARY_IMAGE');
-                      e.dataTransfer.effectAllowed = 'copyMove';
-                    }}
-                    style={{
-                      background: isInCompare ? '#1E293B' : '#141E33',
-                      border: isInCompare ? '1.5px solid #0284C7' : '1px solid #1E293B',
-                      borderRadius: 8,
-                      padding: 8,
-                      display: 'flex',
-                      gap: 10,
-                      alignItems: 'center',
-                      cursor: 'grab',
-                      transition: 'all 0.15s ease',
-                      position: 'relative'
-                    }}
-                  >
-                    {/* Checkbox */}
-                    <div
-                      onClick={() => toggleLibrarySelection(img.id)}
-                      style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                    >
-                      {isSelected ? (
-                        <CheckSquare size={16} color="#0284C7" />
-                      ) : (
-                        <Square size={16} color="#64748B" />
-                      )}
-                    </div>
-
-                    {/* Thumbnail */}
-                    <div
-                      onClick={() => handleToggleCompareImage(img.id)}
-                      style={{
-                        width: 58,
-                        height: 48,
-                        borderRadius: 6,
-                        overflow: 'hidden',
-                        background: '#020617',
-                        flexShrink: 0,
-                        position: 'relative',
-                        cursor: 'pointer'
-                      }}
-                      title="Click to toggle in comparison workspace"
-                    >
-                      <img
-                        src={img.url}
-                        alt={img.fileName}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <span style={{
-                        position: 'absolute',
-                        bottom: 2,
-                        left: 2,
-                        background: img.type === 'BEFORE' ? '#B45309' : img.type === 'AFTER' ? '#15803D' : '#0369A1',
-                        color: '#FFFFFF',
-                        fontSize: 8,
-                        fontWeight: 900,
-                        padding: '1px 3px',
-                        borderRadius: 3
-                      }}>
-                        {img.type}
-                      </span>
-                    </div>
-
-                    {/* Info & Drag Handle */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {(img as any).procedureName && (
-                        <div style={{
-                          fontSize: 8.5,
-                          fontWeight: 800,
-                          background: '#0F172A',
-                          color: '#38BDF8',
-                          padding: '1px 5px',
-                          borderRadius: 3,
-                          display: 'inline-block',
-                          marginBottom: 2,
-                          border: '1px solid #334155'
-                        }}>
-                          {(img as any).procedureName}
-                        </div>
-                      )}
-                      <div style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: '#F1F5F9',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
-                        {img.fileName}
-                      </div>
-                      <div style={{ fontSize: 9.5, color: '#94A3B8', marginTop: 2 }}>
-                        {img.date} • {img.time}
-                      </div>
-
-                      {/* Status / Add button */}
-                      <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {isInCompare ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{
-                              background: '#0284C7',
-                              color: '#FFFFFF',
-                              fontSize: 9,
-                              fontWeight: 800,
-                              padding: '1px 6px',
-                              borderRadius: 4
-                            }}>
-                              In Compare (#{compareIndex + 1})
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveFromCompare(img.id);
-                              }}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#94A3B8',
-                                cursor: 'pointer',
-                                padding: 0
-                              }}
-                              title="Remove from Compare"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleToggleCompareImage(img.id)}
-                            style={{
-                              fontSize: 9.5,
-                              fontWeight: 700,
-                              background: '#1E293B',
-                              color: '#38BDF8',
-                              border: '1px solid #334155',
-                              borderRadius: 4,
-                              padding: '1px 6px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            + Add to Compare
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {filteredLibrary.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '30px 10px', color: '#64748B', fontSize: 11 }}>
-                  No library images found. Click "+ Upload Multiple Images" to add photos.
-                </div>
-              )}
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 10, borderTop: '1px solid #E2E8F0' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#64748B',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                padding: '6px 14px'
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              style={{
+                background: '#036d92',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 22px',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(3, 109, 146, 0.25)'
+              }}
+            >
+              Save &amp; Open Procedure
+            </button>
           </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODAL: ADD IMAGE GUIDED FLOW (Requirement 8)
+// Flow: Confirm Destination -> Choose Type -> Choose Source -> Preview/Edit -> Metadata -> Save
+// ============================================================================
+
+interface AddImageGuidedFlowModalProps {
+  procedures: ClinicalProcedure[];
+  initialDestination: {
+    procedureId: string;
+    sessionId: string;
+    subSectionId?: string;
+    type: 'BEFORE' | 'AFTER' | 'OTHER';
+  } | null;
+  deviceConfigs: DeviceIntegrationConfig[];
+  onClose: () => void;
+  onSaveImage: (img: ClinicalImage, destination: {
+    procedureId: string;
+    procedureName?: string;
+    sessionId: string;
+    sessionNumber?: number | string;
+    subSectionId?: string;
+    type: 'BEFORE' | 'AFTER' | 'OTHER';
+  }) => void;
+  onNeedNewProcedure: (pendingImg: ClinicalImage) => void;
+}
+
+function AddImageGuidedFlowModal({
+  procedures,
+  initialDestination,
+  deviceConfigs,
+  onClose,
+  onSaveImage,
+  onNeedNewProcedure
+}: AddImageGuidedFlowModalProps) {
+  // 1. Destination: Writable Procedure & Session
+  const [targetProcId, setTargetProcId] = useState(initialDestination?.procedureId || procedures[0]?.id || 'NEW');
+
+  // Writable procedure name
+  const initialProcName = useMemo(() => {
+    if (initialDestination?.procedureId) {
+      const p = procedures.find(item => item.id === initialDestination.procedureId);
+      if (p) return p.name;
+    }
+    if (procedures.length > 0 && procedures[0].name) {
+      return procedures[0].name;
+    }
+    return 'Acne Laser Comedone Extraction';
+  }, [initialDestination, procedures]);
+
+  const [procedureNameInput, setProcedureNameInput] = useState(initialProcName);
+
+  // Check matching procedure from procedureNameInput
+  const matchedProcedure = useMemo(() => {
+    const trimmed = procedureNameInput.trim().toLowerCase();
+    if (!trimmed) return null;
+    return procedures.find(p => p.name.toLowerCase() === trimmed || p.id === trimmed) || null;
+  }, [procedureNameInput, procedures]);
+
+  // Writable session
+  const initialSessionText = useMemo(() => {
+    if (initialDestination?.sessionId && matchedProcedure) {
+      const s = matchedProcedure.sessions.find(item => item.id === initialDestination.sessionId);
+      if (s) return `Session ${s.sessionNumber}`;
+    }
+    if (matchedProcedure?.sessions?.[0]) {
+      return `Session ${matchedProcedure.sessions[0].sessionNumber}`;
+    }
+    return 'Session 1';
+  }, [initialDestination, matchedProcedure]);
+
+  const [sessionInput, setSessionInput] = useState(initialSessionText);
+  const [targetSubSectionId, setTargetSubSectionId] = useState(initialDestination?.subSectionId || '');
+  const [imageType, setImageType] = useState<'BEFORE' | 'AFTER' | 'OTHER'>(initialDestination?.type || 'BEFORE');
+
+  // 2. Source Selection
+  const [sourceType, setSourceType] = useState<'UPLOAD' | 'CAMERA' | 'DERMASCOPE' | 'FACE_SCANNER'>('UPLOAD');
+
+  // 3. Staged File / Image
+  const [stagedUrl, setStagedUrl] = useState<string | null>(null);
+  const [stagedOriginalUrl, setStagedOriginalUrl] = useState<string | null>(null);
+  const [stagedFileName, setStagedFileName] = useState('');
+  const [stagedFileType, setStagedFileType] = useState('image/jpeg');
+  const [stagedFileSize, setStagedFileSize] = useState('');
+
+  // 4. Metadata
+  const [captureDate, setCaptureDate] = useState(getTodayDateString());
+  const [captureTime, setCaptureTime] = useState(getTimeString());
+  const [doctorObservation, setDoctorObservation] = useState('');
+
+  // Live Camera
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // Hidden File Input
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Stop camera on unmount
+  useEffect(() => {
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Camera start handler
+  const startCamera = async () => {
+    setCameraError(null);
+    setCameraActive(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err: any) {
+      console.warn('Camera access denied:', err);
+      setCameraError('Camera access denied or hardware camera not found. Please enable browser camera permissions or upload an image file.');
+      setCameraActive(false);
+    }
+  };
+
+  const capturePhotoFromCamera = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL('image/jpeg', 0.92);
+      setStagedUrl(url);
+      setStagedOriginalUrl(url);
+      setStagedFileName(`LiveCapture_${Date.now()}.jpg`);
+      setStagedFileType('image/jpeg');
+      setStagedFileSize(`${Math.round(url.length / 1024)} KB`);
+      setCaptureDate(getTodayDateString());
+      setCaptureTime(getTimeString());
+
+      if (video.srcObject) {
+        const stream = video.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
+      }
+      setCameraActive(false);
+    }
+  };
+
+  // File Upload handler
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit: max 25MB
+    if (file.size > 25 * 1024 * 1024) {
+      alert('File exceeds 25 MB size limit.');
+      return;
+    }
+
+    try {
+      const url = await readFileAsDataURL(file);
+      setStagedUrl(url);
+      setStagedOriginalUrl(url);
+      setStagedFileName(file.name);
+      setStagedFileType(file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'));
+      setStagedFileSize(`${Math.round(file.size / 1024)} KB`);
+
+      // Try reading lastModified date for uploads
+      if (file.lastModified) {
+        const d = new Date(file.lastModified);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        setCaptureDate(`${day}/${month}/${year}`);
+      } else {
+        setCaptureDate(getTodayDateString());
+      }
+      setCaptureTime(getTimeString());
+    } catch (err) {
+      console.error('File load error:', err);
+    }
+  };
+
+  // Submit and Save
+  const handleFinalSave = () => {
+    if (!stagedUrl) {
+      alert('Please upload or capture a clinical photo/document first.');
+      return;
+    }
+
+    const trimmedProcName = procedureNameInput.trim();
+    if (!trimmedProcName) {
+      alert('Please enter or select a clinical procedure name (e.g. Acne Laser Comedone Extraction).');
+      return;
+    }
+
+    const trimmedSession = sessionInput.trim();
+    const sessionNumMatch = trimmedSession.match(/\d+/);
+    const targetSessionNumber = sessionNumMatch ? parseInt(sessionNumMatch[0], 10) : 1;
+
+    // Check if procedure already exists in patient's records
+    const existingProc = procedures.find(
+      p => p.name.toLowerCase() === trimmedProcName.toLowerCase() || p.id === targetProcId
+    );
+
+    const procId = existingProc ? existingProc.id : `proc-${Date.now()}`;
+    const matchedSession = existingProc?.sessions.find(
+      s => s.sessionNumber === targetSessionNumber || s.id === trimmedSession
+    );
+    const sessId = matchedSession ? matchedSession.id : `sess-${procId}-${targetSessionNumber}-${Date.now()}`;
+
+    const clinicalImg: ClinicalImage = {
+      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      procedureId: procId,
+      sessionId: sessId,
+      subSectionId: targetSubSectionId || undefined,
+      url: stagedUrl,
+      originalUrl: stagedOriginalUrl || stagedUrl,
+      type: imageType,
+      fileName: stagedFileName || `Photo_${Date.now()}.jpg`,
+      fileType: stagedFileType,
+      fileSize: stagedFileSize,
+      date: captureDate || getTodayDateString(),
+      time: captureTime || getTimeString(),
+      capturedAt: `${captureDate} ${captureTime}`,
+      uploadedAt: new Date().toISOString(),
+      source: sourceType,
+      doctorObservation
+    };
+
+    onSaveImage(clinicalImg, {
+      procedureId: procId,
+      procedureName: trimmedProcName,
+      sessionId: sessId,
+      sessionNumber: targetSessionNumber,
+      subSectionId: targetSubSectionId || undefined,
+      type: imageType
+    });
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+    }}>
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: 12,
+        width: '92%',
+        maxWidth: 680,
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 25px 50px rgba(0,0,0,0.25)'
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '14px 20px',
+          background: '#036d92',
+          color: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Camera size={18} />
+            <span style={{ fontSize: 15, fontWeight: 900 }}>ADD CLINICAL IMAGE / DOCUMENT</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
         </div>
 
-        {/* ================================================================== */}
-        {/* RIGHT COLUMN: COMPARE SECTION (MULTI-IMAGE COMPARISON WORKSPACE) */}
-        {/* ================================================================== */}
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            setIsDropTargetActive(true);
-          }}
-          onDragLeave={() => setIsDropTargetActive(false)}
-          onDrop={handleWorkspaceDrop}
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            padding: 16,
-            background: isDropTargetActive ? '#0D1B2A' : '#0B1120',
-            transition: 'background 0.2s ease',
-            position: 'relative'
-          }}
-        >
-          {/* Drop Target Glow Overlay */}
-          {isDropTargetActive && (
-            <div style={{
-              position: 'absolute',
-              inset: 12,
-              border: '2px dashed #0284C7',
-              borderRadius: 12,
-              pointerEvents: 'none',
-              background: 'rgba(2, 132, 199, 0.08)',
-              zIndex: 50,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#38BDF8',
-              fontSize: 16,
-              fontWeight: 800
-            }}>
-              Drop image here to add to Compare Workspace
+        <div style={{ padding: 20 }}>
+          {/* STEP 1: DESTINATION CONFIRMATION */}
+          <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 8, border: '1px solid #E2E8F0', marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#334155' }}>
+                1. CONFIRM DESTINATION &amp; PHOTO TYPE
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  background: matchedProcedure ? '#DCFCE7' : '#FEF3C7',
+                  color: matchedProcedure ? '#166534' : '#92400E',
+                  border: matchedProcedure ? '1px solid #86EFAC' : '1px solid #FDE68A'
+                }}>
+                  {matchedProcedure ? `✓ Linked: ${matchedProcedure.name} (${matchedProcedure.sessions.length} sessions)` : '★ New Procedure (Will be created)'}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: 10 }}>
+              {/* Procedure: Writable & Selectable */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                  <label htmlFor="procedure-name-input" style={{ fontSize: 10.5, fontWeight: 800, color: '#64748B' }}>
+                    PROCEDURE:
+                  </label>
+                  <span style={{ fontSize: 9.5, color: '#036d92', fontWeight: 700 }}>
+                    Writable / Searchable
+                  </span>
+                </div>
+                <input
+                  id="procedure-name-input"
+                  type="text"
+                  value={procedureNameInput}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setProcedureNameInput(val);
+                    const matched = procedures.find(p => p.name.toLowerCase() === val.trim().toLowerCase());
+                    if (matched) {
+                      setTargetProcId(matched.id);
+                      if (matched.sessions?.[0]) {
+                        setSessionInput(`Session ${matched.sessions[0].sessionNumber}`);
+                      }
+                    } else {
+                      setTargetProcId('NEW');
+                    }
+                  }}
+                  placeholder="e.g. Acne Laser Comedone Extraction"
+                  list="guided-procedure-options-datalist"
+                  style={{
+                    width: '100%',
+                    padding: '7px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #CBD5E1',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: '#FFFFFF',
+                    color: '#0F172A'
+                  }}
+                />
+                <datalist id="guided-procedure-options-datalist">
+                  {procedures.map(p => (
+                    <option key={`pat-${p.id}`} value={p.name}>[Patient Record] {p.name}</option>
+                  ))}
+                  {MASTER_PROCEDURES.map(m => (
+                    <option key={`m-${m.name}`} value={m.name}>[Master Catalog] {m.name} ({m.category})</option>
+                  ))}
+                </datalist>
+
+                {/* Quick picker dropdown */}
+                <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 9.5, color: '#94A3B8', fontWeight: 600 }}>Quick pick:</span>
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (!e.target.value) return;
+                      const chosen = e.target.value;
+                      setProcedureNameInput(chosen);
+                      const matched = procedures.find(p => p.name === chosen);
+                      if (matched) {
+                        setTargetProcId(matched.id);
+                        if (matched.sessions?.[0]) {
+                          setSessionInput(`Session ${matched.sessions[0].sessionNumber}`);
+                        }
+                      } else {
+                        setTargetProcId('NEW');
+                        setSessionInput('Session 1');
+                      }
+                    }}
+                    style={{
+                      padding: '2px 4px',
+                      fontSize: 10,
+                      borderRadius: 4,
+                      border: '1px solid #E2E8F0',
+                      background: '#FFFFFF',
+                      color: '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Select from catalog / list...</option>
+                    <optgroup label="Patient Current Procedures">
+                      {procedures.map(p => (
+                        <option key={p.id} value={p.name}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Master Catalog">
+                      {MASTER_PROCEDURES.map(m => (
+                        <option key={m.name} value={m.name}>{m.name}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+              </div>
+
+              {/* Session: Writable & Selectable */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                  <label htmlFor="session-name-input" style={{ fontSize: 10.5, fontWeight: 800, color: '#64748B' }}>
+                    SESSION:
+                  </label>
+                  <span style={{ fontSize: 9.5, color: '#036d92', fontWeight: 700 }}>
+                    Writable
+                  </span>
+                </div>
+                <input
+                  id="session-name-input"
+                  type="text"
+                  value={sessionInput}
+                  onChange={e => setSessionInput(e.target.value)}
+                  placeholder="e.g. Session 1 or 1"
+                  list="guided-session-options-datalist"
+                  style={{
+                    width: '100%',
+                    padding: '7px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #CBD5E1',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: '#FFFFFF',
+                    color: '#0F172A'
+                  }}
+                />
+                <datalist id="guided-session-options-datalist">
+                  {matchedProcedure?.sessions.map(s => (
+                    <option key={s.id} value={`Session ${s.sessionNumber}`}>Date: {s.date}</option>
+                  ))}
+                  <option value={`Session ${(matchedProcedure?.sessions.length || 0) + 1}`}>
+                    + New Session {(matchedProcedure?.sessions.length || 0) + 1}
+                  </option>
+                  <option value="Session 1">Session 1</option>
+                  <option value="Session 2">Session 2</option>
+                </datalist>
+
+                {/* Quick session dropdown */}
+                <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 9.5, color: '#94A3B8', fontWeight: 600 }}>Quick pick:</span>
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (!e.target.value) return;
+                      setSessionInput(e.target.value);
+                    }}
+                    style={{
+                      padding: '2px 4px',
+                      fontSize: 10,
+                      borderRadius: 4,
+                      border: '1px solid #E2E8F0',
+                      background: '#FFFFFF',
+                      color: '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Select session...</option>
+                    {matchedProcedure?.sessions.map(s => (
+                      <option key={s.id} value={`Session ${s.sessionNumber}`}>
+                        Session {s.sessionNumber} ({s.date})
+                      </option>
+                    ))}
+                    <option value={`Session ${(matchedProcedure?.sessions.length || 0) + 1}`}>
+                      + Add Session {(matchedProcedure?.sessions.length || 0) + 1}
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Type: Before / After / Other */}
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
+                  IMAGE TYPE:
+                </label>
+                <select
+                  value={imageType}
+                  onChange={e => setImageType(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '7px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #CBD5E1',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    background: '#FFFFFF',
+                    color: '#0F172A'
+                  }}
+                >
+                  <option value="BEFORE">BEFORE Photo</option>
+                  <option value="AFTER">AFTER Photo</option>
+                  <option value="OTHER">SUB-SECTION / FOLLOW-UP</option>
+                </select>
+
+                {imageType === 'OTHER' && (
+                  <div style={{ marginTop: 4 }}>
+                    <input
+                      type="text"
+                      value={targetSubSectionId}
+                      onChange={e => setTargetSubSectionId(e.target.value)}
+                      placeholder="Sub-section name (e.g. Sub-section 1)"
+                      style={{
+                        width: '100%',
+                        padding: '4px 6px',
+                        borderRadius: 4,
+                        border: '1px solid #CBD5E1',
+                        fontSize: 11,
+                        marginTop: 2
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* STEP 2: CHOOSE SOURCE (Requirement 8) */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#334155', marginBottom: 8 }}>
+              2. SELECT IMAGE SOURCE
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              {/* 1. Upload File */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceType('UPLOAD');
+                  fileInputRef.current?.click();
+                }}
+                style={{
+                  background: sourceType === 'UPLOAD' ? '#EFF6FF' : '#FFFFFF',
+                  border: sourceType === 'UPLOAD' ? '2px solid #036d92' : '1px solid #CBD5E1',
+                  borderRadius: 8,
+                  padding: '12px 8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <Upload size={20} color="#036d92" />
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0F172A' }}>Upload File</span>
+                <span style={{ fontSize: 9.5, color: '#64748B' }}>JPEG, PNG, PDF</span>
+              </button>
+
+              {/* 2. Camera */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceType('CAMERA');
+                  startCamera();
+                }}
+                style={{
+                  background: sourceType === 'CAMERA' ? '#EFF6FF' : '#FFFFFF',
+                  border: sourceType === 'CAMERA' ? '2px solid #036d92' : '1px solid #CBD5E1',
+                  borderRadius: 8,
+                  padding: '12px 8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <Camera size={20} color="#036d92" />
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0F172A' }}>Live Camera</span>
+                <span style={{ fontSize: 9.5, color: '#64748B' }}>Webcam / Mobile</span>
+              </button>
+
+              {/* 3. Dermascope */}
+              <button
+                type="button"
+                onClick={() => setSourceType('DERMASCOPE')}
+                style={{
+                  background: sourceType === 'DERMASCOPE' ? '#EFF6FF' : '#FFFFFF',
+                  border: sourceType === 'DERMASCOPE' ? '2px solid #036d92' : '1px solid #CBD5E1',
+                  borderRadius: 8,
+                  padding: '12px 8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <Smartphone size={20} color="#036d92" />
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0F172A' }}>Dermascope</span>
+                <span style={{ fontSize: 9.5, color: '#DC2626', fontWeight: 700 }}>Hardware Offline</span>
+              </button>
+
+              {/* 4. Face Scanner */}
+              <button
+                type="button"
+                onClick={() => setSourceType('FACE_SCANNER')}
+                style={{
+                  background: sourceType === 'FACE_SCANNER' ? '#EFF6FF' : '#FFFFFF',
+                  border: sourceType === 'FACE_SCANNER' ? '2px solid #036d92' : '1px solid #CBD5E1',
+                  borderRadius: 8,
+                  padding: '12px 8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                <Sparkles size={20} color="#036d92" />
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0F172A' }}>Face Scanner</span>
+                <span style={{ fontSize: 9.5, color: '#DC2626', fontWeight: 700 }}>Daemon Offline</span>
+              </button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,.jpg,.jpeg,.png,application/pdf,.pdf"
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+          </div>
+
+          {/* LIVE CAMERA CAPTURE VIEW */}
+          {sourceType === 'CAMERA' && cameraActive && (
+            <div style={{ background: '#000000', borderRadius: 8, padding: 12, marginBottom: 16, textAlign: 'center' }}>
+              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', maxHeight: 260, objectFit: 'contain' }} />
+              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={capturePhotoFromCamera}
+                  style={{
+                    background: '#DC2626',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 20,
+                    padding: '8px 24px',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  [ 📸 CAPTURE PHOTO ]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCameraActive(false)}
+                  style={{ background: '#334155', color: '#FFF', border: 'none', borderRadius: 6, padding: '8px 14px', fontSize: 12, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 
-          {/* EMPTY / UNDER-MINIMUM STATE (< 2 IMAGES) */}
-          {count < 2 ? (
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '2px dashed #334155',
-              borderRadius: 12,
-              padding: 30,
-              textAlign: 'center'
-            }}>
-              <div style={{
-                background: '#1E293B',
-                padding: 18,
-                borderRadius: '50%',
-                marginBottom: 16,
-                color: '#38BDF8'
-              }}>
-                <SplitSquareVertical size={36} />
-              </div>
-              <h4 style={{ fontSize: 18, fontWeight: 900, color: '#F8FAFC', margin: '0 0 8px' }}>
-                Multi-Image Comparison Workspace
-              </h4>
-              <p style={{ fontSize: 13, color: '#94A3B8', maxWidth: 440, margin: '0 0 18px', lineHeight: 1.5 }}>
-                {count === 1
-                  ? '1 image placed in workspace. Please select or drag at least 1 more image from the left library to compare.'
-                  : 'Drag and drop images here from the left library, or use the checkboxes on the left to select images.'}
-              </p>
-
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {libraryImages.length >= 2 && (
-                  <button
-                    type="button"
-                    onClick={() => setComparisonIds(libraryImages.slice(0, 2).map(i => i.id))}
-                    className="btn btn-sm btn-primary"
-                    style={{ background: '#0284C7', borderColor: '#0284C7', fontWeight: 800, padding: '7px 16px' }}
-                  >
-                    + Load First 2 Images
-                  </button>
-                )}
-                {libraryImages.length >= 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setComparisonIds(libraryImages.slice(0, 3).map(i => i.id))}
-                    className="btn btn-sm"
-                    style={{ background: '#1E293B', color: '#FFFFFF', border: '1px solid #475569', fontWeight: 800, padding: '7px 16px' }}
-                  >
-                    + Load 3 Images
-                  </button>
-                )}
-                {libraryImages.length >= 4 && (
-                  <button
-                    type="button"
-                    onClick={() => setComparisonIds(libraryImages.slice(0, 4).map(i => i.id))}
-                    className="btn btn-sm"
-                    style={{ background: '#1E293B', color: '#FFFFFF', border: '1px solid #475569', fontWeight: 800, padding: '7px 16px' }}
-                  >
-                    + Load 4 Images (2x2 Grid)
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* ACTIVE MULTI-IMAGE COMPARISON WORKSPACE (2 OR MORE IMAGES) */
-            <div style={getGridStyle()}>
-              {isTwoImages ? (
-                <>
-                  {/* Left Comparison Pane */}
-                  <ComparePane
-                    key={comparisonImages[0].id}
-                    image={comparisonImages[0]}
-                    index={0}
-                    total={2}
-                    zoom={getZoom(comparisonImages[0].id)}
-                    pan={getPan(comparisonImages[0].id)}
-                    rotation={getRotate(comparisonImages[0].id)}
-                    onZoomIn={() => handleZoomChange(comparisonImages[0].id, 25)}
-                    onZoomOut={() => handleZoomChange(comparisonImages[0].id, -25)}
-                    onFit={() => handleFitImage(comparisonImages[0].id)}
-                    onPanNudge={(dx, dy) => handlePanNudge(comparisonImages[0].id, dx, dy)}
-                    onRotateLeft={() => handleRotate(comparisonImages[0].id, -90)}
-                    onRotateRight={() => handleRotate(comparisonImages[0].id, 90)}
-                    onReset={() => handleResetImage(comparisonImages[0].id)}
-                    onRemove={() => handleRemoveFromCompare(comparisonImages[0].id)}
-                    onMouseDown={(e) => handleMouseDown(comparisonImages[0].id, e)}
-                    onReorder={handleReorder}
-                    onDropFromLibrary={(imgId, idx) => {
-                      if (!comparisonIds.includes(imgId)) {
-                        setComparisonIds(prev => {
-                          const next = [...prev];
-                          next.splice(idx, 0, imgId);
-                          return next;
-                        });
-                      }
-                    }}
-                  />
-
-                  {/* Clean Light Divider Bar (Prompt Section 35) */}
-                  <div style={{
-                    background: '#475569',
-                    width: 2,
-                    height: '100%',
-                    opacity: 0.6,
-                    margin: '0 4px'
-                  }} />
-
-                  {/* Right Comparison Pane */}
-                  <ComparePane
-                    key={comparisonImages[1].id}
-                    image={comparisonImages[1]}
-                    index={1}
-                    total={2}
-                    zoom={getZoom(comparisonImages[1].id)}
-                    pan={getPan(comparisonImages[1].id)}
-                    rotation={getRotate(comparisonImages[1].id)}
-                    onZoomIn={() => handleZoomChange(comparisonImages[1].id, 25)}
-                    onZoomOut={() => handleZoomChange(comparisonImages[1].id, -25)}
-                    onFit={() => handleFitImage(comparisonImages[1].id)}
-                    onPanNudge={(dx, dy) => handlePanNudge(comparisonImages[1].id, dx, dy)}
-                    onRotateLeft={() => handleRotate(comparisonImages[1].id, -90)}
-                    onRotateRight={() => handleRotate(comparisonImages[1].id, 90)}
-                    onReset={() => handleResetImage(comparisonImages[1].id)}
-                    onRemove={() => handleRemoveFromCompare(comparisonImages[1].id)}
-                    onMouseDown={(e) => handleMouseDown(comparisonImages[1].id, e)}
-                    onReorder={handleReorder}
-                    onDropFromLibrary={(imgId, idx) => {
-                      if (!comparisonIds.includes(imgId)) {
-                        setComparisonIds(prev => {
-                          const next = [...prev];
-                          next.splice(idx, 0, imgId);
-                          return next;
-                        });
-                      }
-                    }}
-                  />
-                </>
-              ) : (
-                /* 3+ IMAGES: RESPONSIVE GRID LAYOUT */
-                comparisonImages.map((img, idx) => (
-                  <ComparePane
-                    key={img.id}
-                    image={img}
-                    index={idx}
-                    total={count}
-                    zoom={getZoom(img.id)}
-                    pan={getPan(img.id)}
-                    rotation={getRotate(img.id)}
-                    onZoomIn={() => handleZoomChange(img.id, 25)}
-                    onZoomOut={() => handleZoomChange(img.id, -25)}
-                    onFit={() => handleFitImage(img.id)}
-                    onPanNudge={(dx, dy) => handlePanNudge(img.id, dx, dy)}
-                    onRotateLeft={() => handleRotate(img.id, -90)}
-                    onRotateRight={() => handleRotate(img.id, 90)}
-                    onReset={() => handleResetImage(img.id)}
-                    onRemove={() => handleRemoveFromCompare(img.id)}
-                    onMouseDown={(e) => handleMouseDown(img.id, e)}
-                    onReorder={handleReorder}
-                    onDropFromLibrary={(imgId, atIdx) => {
-                      if (!comparisonIds.includes(imgId)) {
-                        setComparisonIds(prev => {
-                          const next = [...prev];
-                          next.splice(atIdx, 0, imgId);
-                          return next;
-                        });
-                      }
-                    }}
-                  />
-                ))
-              )}
+          {cameraError && (
+            <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#991B1B', borderRadius: 6, padding: 10, fontSize: 12, marginBottom: 14 }}>
+              ⚠️ {cameraError}
             </div>
           )}
+
+          {/* HARDWARE OFFLINE WARNINGS (Requirement 8) */}
+          {sourceType === 'DERMASCOPE' && (
+            <div style={{
+              background: '#FFFBEB',
+              border: '1.5px solid #FCD34D',
+              borderRadius: 8,
+              padding: 12,
+              marginBottom: 16
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#B45309', fontWeight: 800, fontSize: 12.5 }}>
+                <AlertCircle size={15} />
+                <span>Dermascope Hardware Integration Status: Offline</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: '#78350F', marginTop: 4 }}>
+                No compatible digital dermatoscope detected via USB or Wi-Fi Direct. Please plug in the Dermatoscope camera or upload pre-saved imaging files.
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  marginTop: 8,
+                  background: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '5px 12px',
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                + Browse Dermascope Image File
+              </button>
+            </div>
+          )}
+
+          {sourceType === 'FACE_SCANNER' && (
+            <div style={{
+              background: '#FFFBEB',
+              border: '1.5px solid #FCD34D',
+              borderRadius: 8,
+              padding: 12,
+              marginBottom: 16
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#B45309', fontWeight: 800, fontSize: 12.5 }}>
+                <AlertCircle size={15} />
+                <span>3D Facial Scanner Service: Offline</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: '#78350F', marginTop: 4 }}>
+                The local 3D topography scanner daemon (Port 8089) is not responding. Ensure the Visia/VECTRA hardware driver is started or upload exported scanner files.
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  marginTop: 8,
+                  background: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '5px 12px',
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                + Browse Face Scanner Export
+              </button>
+            </div>
+          )}
+
+          {/* PREVIEW OF LOADED IMAGE */}
+          {stagedUrl && (
+            <div style={{
+              background: '#F8FAFC',
+              borderRadius: 8,
+              border: '1px solid #CBD5E1',
+              padding: 12,
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14
+            }}>
+              <div style={{ width: 80, height: 80, borderRadius: 6, overflow: 'hidden', background: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {stagedFileType === 'application/pdf' ? (
+                  <FileText size={32} color="#DC2626" />
+                ) : (
+                  <img src={stagedUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
+                  {stagedFileName}
+                </div>
+                <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                  Type: {stagedFileType} • Size: {stagedFileSize}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Change File
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: CONFIRM DATE/TIME & OBSERVATION (Requirements 8 & 10) */}
+          <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 8, border: '1px solid #E2E8F0', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#334155', marginBottom: 8 }}>
+              3. CAPTURE DATE/TIME &amp; DOCTOR'S OBSERVATION
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
+                  CAPTURE DATE (DD/MM/YYYY):
+                </label>
+                <input
+                  type="text"
+                  value={captureDate}
+                  onChange={e => setCaptureDate(e.target.value)}
+                  style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
+                  CAPTURE TIME:
+                </label>
+                <input
+                  type="text"
+                  value={captureTime}
+                  onChange={e => setCaptureTime(e.target.value)}
+                  style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, fontWeight: 700 }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
+                DOCTOR'S OBSERVATION / CLINICAL REPORT:
+              </label>
+              <textarea
+                value={doctorObservation}
+                onChange={e => setDoctorObservation(e.target.value)}
+                placeholder="Write clinical findings, erythema margin, lesion progression, laser response..."
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  border: '1px solid #CBD5E1',
+                  fontSize: 12,
+                  resize: 'vertical',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 10, borderTop: '1px solid #E2E8F0' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: '6px 14px' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleFinalSave}
+              disabled={!stagedUrl}
+              style={{
+                background: stagedUrl ? '#036d92' : '#CBD5E1',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 24px',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: stagedUrl ? 'pointer' : 'not-allowed',
+                boxShadow: stagedUrl ? '0 2px 6px rgba(3, 109, 146, 0.25)' : 'none'
+              }}
+            >
+              ✓ Save to Record
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
@@ -4253,350 +3731,138 @@ function CompareViewerModal({
 }
 
 // ============================================================================
-// COMPONENT: INDEPENDENT COMPARE PANE
-// Each comparison image has its own:
-// Zoom, Pan, Rotate, Remove, Reset, Fit
-// Drag-handle to reorder inside comparison area
+// MODAL: SINGLE PHOTO FULLSCREEN VIEWER (Requirement 11)
+// Non-looping Prev/Next, Zoom, Edit, Send Image, Close (ESC)
 // ============================================================================
 
-interface ComparePaneProps {
+interface SinglePhotoViewerModalProps {
   image: ClinicalImage;
-  index: number;
-  total: number;
-  zoom: number;
-  pan: { x: number; y: number };
-  rotation: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onFit: () => void;
-  onPanNudge: (dx: number, dy: number) => void;
-  onRotateLeft: () => void;
-  onRotateRight: () => void;
-  onReset: () => void;
-  onRemove: () => void;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onReorder: (fromIdx: number, toIdx: number) => void;
-  onDropFromLibrary: (imgId: string, insertAtIndex: number) => void;
+  procedureName: string;
+  allPhotos: ClinicalImage[];
+  onClose: () => void;
+  onEdit: () => void;
+  onShare: () => void;
+  onChangeImage: (next: ClinicalImage) => void;
 }
 
-function ComparePane({
+function SinglePhotoViewerModal({
   image,
-  index,
-  total,
-  zoom,
-  pan,
-  rotation,
-  onZoomIn,
-  onZoomOut,
-  onFit,
-  onPanNudge,
-  onRotateLeft,
-  onRotateRight,
-  onReset,
-  onRemove,
-  onMouseDown,
-  onReorder,
-  onDropFromLibrary
-}: ComparePaneProps) {
-  const [isDragOverPane, setIsDragOverPane] = useState(false);
+  procedureName,
+  allPhotos,
+  onClose,
+  onEdit,
+  onShare,
+  onChangeImage
+}: SinglePhotoViewerModalProps) {
+  const [zoom, setZoom] = useState(100);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+
+  // Current photo index in non-looping list
+  const currentIndex = allPhotos.findIndex(i => i.id === image.id);
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < allPhotos.length - 1;
+
+  const handlePrev = () => {
+    if (hasPrevious) {
+      setZoom(100);
+      setPan({ x: 0, y: 0 });
+      onChangeImage(allPhotos[currentIndex - 1]);
+    }
+  };
+
+  const handleNext = () => {
+    if (hasNext) {
+      setZoom(100);
+      setPan({ x: 0, y: 0 });
+      onChangeImage(allPhotos[currentIndex + 1]);
+    }
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && hasPrevious) handlePrev();
+      if (e.key === 'ArrowRight' && hasNext) handleNext();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasPrevious, hasNext, currentIndex]);
 
   return (
-    <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragOverPane(true);
-      }}
-      onDragLeave={(e) => {
-        e.stopPropagation();
-        setIsDragOverPane(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragOverPane(false);
-        const dragType = e.dataTransfer.getData('dragType');
-        if (dragType === 'COMPARE_REORDER') {
-          const fromIdxStr = e.dataTransfer.getData('reorderIndex');
-          if (fromIdxStr !== '') {
-            const fromIdx = parseInt(fromIdxStr, 10);
-            onReorder(fromIdx, index);
-          }
-        } else if (dragType === 'LIBRARY_IMAGE') {
-          const imgId = e.dataTransfer.getData('text/plain');
-          if (imgId) onDropFromLibrary(imgId, index);
-        }
-      }}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#1E293B',
-        borderRadius: 8,
-        overflow: 'hidden',
-        border: isDragOverPane ? '2px solid #38BDF8' : '1px solid #334155',
-        height: '100%',
-        minHeight: 280,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-        position: 'relative'
-      }}
-    >
-      {/* TIER 1: DRAG HANDLE & PANE ACTIONS (Fit, Rotate, Reset, Remove) */}
-      <div
-        draggable={true}
-        onDragStart={(e) => {
-          e.dataTransfer.setData('reorderIndex', String(index));
-          e.dataTransfer.setData('dragType', 'COMPARE_REORDER');
-          e.dataTransfer.effectAllowed = 'move';
-        }}
-        style={{
-          padding: '6px 10px',
-          background: '#0F172A',
-          borderBottom: '1px solid #334155',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          cursor: 'grab',
-          userSelect: 'none'
-        }}
-        title="Drag by this bar to reorder panes"
-      >
-        {/* Left: Drag Handle, Pane Badge, Type */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ color: '#94A3B8', display: 'flex', alignItems: 'center' }}>
-            <GripVertical size={14} />
-          </div>
-          <span style={{
-            background: '#334155',
-            color: '#FFFFFF',
-            fontSize: 9.5,
-            fontWeight: 800,
-            padding: '2px 6px',
-            borderRadius: 4
-          }}>
-            #{index + 1}
-          </span>
-          <span style={{
-            background: image.type === 'BEFORE' ? '#B45309' : image.type === 'AFTER' ? '#15803D' : '#0369A1',
-            color: '#FFFFFF',
-            fontSize: 9.5,
-            fontWeight: 900,
-            padding: '2px 6px',
-            borderRadius: 4
-          }}>
-            {image.type}
-          </span>
-          {(image as any).procedureName && (
-            <span style={{
-              background: '#0369A1',
-              color: '#FFFFFF',
-              fontSize: 9,
-              fontWeight: 800,
-              padding: '1px 5px',
-              borderRadius: 3
-            }}>
-              {(image as any).procedureName}
-            </span>
-          )}
-          <span style={{ fontSize: 10.5, color: '#CBD5E1', fontFamily: 'monospace' }}>
-            {image.date} {image.time}
-          </span>
-        </div>
-
-        {/* Right: Fit, Rotate, Reset & Remove */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {/* Fit Image inside Comparison Box */}
-          <button
-            type="button"
-            onClick={onFit}
-            className="btn btn-xs"
-            style={{
-              background: '#0F172A',
-              border: '1px solid #38BDF8',
-              color: '#38BDF8',
-              cursor: 'pointer',
-              padding: '2px 6px',
-              borderRadius: 4,
-              fontSize: 9.5,
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3
-            }}
-            title="Fit image inside comparison box (Center & Reset Zoom)"
-          >
-            <Maximize2 size={11} />
-            <span>FIT</span>
-          </button>
-
-          {/* Rotate Left (-90°) */}
-          <button
-            type="button"
-            onClick={onRotateLeft}
-            className="btn btn-xs"
-            style={{
-              background: '#1E293B',
-              border: '1px solid #475569',
-              color: '#FFFFFF',
-              cursor: 'pointer',
-              padding: '2px 5px',
-              borderRadius: 4
-            }}
-            title="Rotate Left (-90°)"
-          >
-            <RotateCcw size={12} />
-          </button>
-
-          {/* Rotate Right (+90°) */}
-          <button
-            type="button"
-            onClick={onRotateRight}
-            className="btn btn-xs"
-            style={{
-              background: '#1E293B',
-              border: '1px solid #475569',
-              color: '#FFFFFF',
-              cursor: 'pointer',
-              padding: '2px 5px',
-              borderRadius: 4
-            }}
-            title="Rotate Right (+90°)"
-          >
-            <RotateCw size={12} />
-          </button>
-
-          {/* Reset Image */}
-          <button
-            type="button"
-            onClick={onReset}
-            className="btn btn-xs"
-            style={{
-              background: '#1E293B',
-              border: '1px solid #475569',
-              color: '#38BDF8',
-              cursor: 'pointer',
-              padding: '2px 5px',
-              borderRadius: 4
-            }}
-            title="Reset Zoom, Pan & Rotation for this image"
-          >
-            <RefreshCw size={11} />
-          </button>
-
-          {/* Remove from compare */}
-          <button
-            type="button"
-            onClick={onRemove}
-            className="btn btn-xs"
-            style={{
-              background: '#334155',
-              border: 'none',
-              color: '#EF4444',
-              cursor: 'pointer',
-              padding: '2px 5px',
-              borderRadius: 4
-            }}
-            title="Remove from comparison workspace"
-          >
-            <X size={13} />
-          </button>
-        </div>
-      </div>
-
-      {/* TIER 2: INDEPENDENT ZOOM, PAN NUDGES & METRICS BAR */}
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.95)',
+      zIndex: 100000,
+      display: 'flex',
+      flexDirection: 'column',
+      color: '#FFFFFF'
+    }}>
+      {/* Top Header */}
       <div style={{
-        padding: '4px 10px',
-        background: '#141E33',
-        borderBottom: '1px solid #1E293B',
+        padding: '12px 20px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        fontSize: 10,
-        flexWrap: 'wrap',
-        gap: 6
+        borderBottom: '1px solid rgba(255,255,255,0.15)',
+        background: 'rgba(15,23,42,0.8)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Independent Zoom [-] 100% [+] */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#1E293B', padding: '1px 6px', borderRadius: 4, border: '1px solid #334155' }}>
-            <button
-              type="button"
-              onClick={onZoomOut}
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: 1 }}
-              title="Zoom Out (-25%)"
-            >
-              <ZoomOut size={12} />
-            </button>
-            <span style={{ fontSize: 10.5, fontWeight: 800, width: 36, textAlign: 'center', color: '#38BDF8' }}>
-              {zoom}%
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#38BDF8' }}>
+            {procedureName.toUpperCase()}
+          </span>
+          <span style={{
+            background: image.type === 'BEFORE' ? '#D97706' : '#16A34A',
+            color: '#FFFFFF',
+            fontSize: 10.5,
+            fontWeight: 900,
+            padding: '2px 8px',
+            borderRadius: 4
+          }}>
+            [{image.type}]
+          </span>
+          <span style={{ fontSize: 12, color: '#CBD5E1' }}>
+            {image.fileName} • Captured: {image.date} {image.time}
+          </span>
+          {currentIndex >= 0 && (
+            <span style={{ fontSize: 11, color: '#94A3B8' }}>
+              ({currentIndex + 1} of {allPhotos.length})
             </span>
-            <button
-              type="button"
-              onClick={onZoomIn}
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: 1 }}
-              title="Zoom In (+25%)"
-            >
-              <ZoomIn size={12} />
-            </button>
-          </div>
-
-          {/* Horizontal & Vertical Pan Nudge Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: '#1E293B', padding: '1px 5px', borderRadius: 4, border: '1px solid #334155' }}>
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#94A3B8', marginRight: 2 }}>PAN:</span>
-            <button
-              type="button"
-              onClick={() => onPanNudge(-15, 0)}
-              style={{ background: 'none', border: 'none', color: '#F1F5F9', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
-              title="Pan Left (Horizontal)"
-            >
-              ◀
-            </button>
-            <button
-              type="button"
-              onClick={() => onPanNudge(0, -15)}
-              style={{ background: 'none', border: 'none', color: '#F1F5F9', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
-              title="Pan Up (Vertical)"
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              onClick={() => onPanNudge(0, 15)}
-              style={{ background: 'none', border: 'none', color: '#F1F5F9', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
-              title="Pan Down (Vertical)"
-            >
-              ▼
-            </button>
-            <button
-              type="button"
-              onClick={() => onPanNudge(15, 0)}
-              style={{ background: 'none', border: 'none', color: '#F1F5F9', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
-              title="Pan Right (Horizontal)"
-            >
-              ▶
-            </button>
-          </div>
-        </div>
-
-        {/* Pan and Rotate Readouts */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94A3B8', fontSize: 10 }}>
-          <span>Pan: [{Math.round(pan.x)}, {Math.round(pan.y)}]</span>
-          {rotation !== 0 && (
-            <span style={{ color: '#F59E0B', fontWeight: 800 }}>{rotation}°</span>
           )}
         </div>
+
+        <button
+          onClick={onClose}
+          style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer', padding: 4 }}
+          title="Close (ESC)"
+        >
+          <X size={24} />
+        </button>
       </div>
 
-      {/* TIER 3: PANE VIEWPORT (INDEPENDENT DRAGGABLE PAN & ROTATION) */}
+      {/* Main Viewing Canvas with Drag / Pan */}
       <div
-        onMouseDown={onMouseDown}
+        onMouseDown={e => {
+          isDraggingRef.current = true;
+          dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+        }}
+        onMouseMove={e => {
+          if (!isDraggingRef.current) return;
+          setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y });
+        }}
+        onMouseUp={() => { isDraggingRef.current = false; }}
+        onMouseLeave={() => { isDraggingRef.current = false; }}
         style={{
           flex: 1,
-          position: 'relative',
-          overflow: 'hidden',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          cursor: 'grab',
-          background: '#020617',
+          overflow: 'hidden',
+          padding: 20,
+          cursor: zoom > 100 ? 'grab' : 'default',
           userSelect: 'none'
         }}
       >
@@ -4604,29 +3870,574 @@ function ComparePane({
           src={image.url}
           alt={image.fileName}
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom / 100})`,
-            transition: 'transform 0.05s ease',
-            maxHeight: '94%',
-            maxWidth: '94%',
-            userSelect: 'none',
-            pointerEvents: 'none'
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`,
+            maxHeight: '75vh',
+            maxWidth: '85vw',
+            objectFit: 'contain',
+            borderRadius: 6,
+            transition: isDraggingRef.current ? 'none' : 'transform 0.1s ease'
           }}
         />
+      </div>
 
-        {/* Pan Instruction Badge */}
+      {/* Doctor's Observation Strip (if present) */}
+      {image.doctorObservation && (
         <div style={{
-          position: 'absolute',
-          bottom: 6,
-          right: 6,
-          background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(3px)',
-          padding: '2px 6px',
-          borderRadius: 4,
-          fontSize: 9.5,
-          color: '#94A3B8',
-          pointerEvents: 'none'
+          padding: '8px 20px',
+          background: 'rgba(30, 41, 59, 0.9)',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          fontSize: 12,
+          color: '#E2E8F0',
+          textAlign: 'center'
         }}>
-          Drag to Pan
+          📝 <strong>Doctor's Observation:</strong> {image.doctorObservation}
+        </div>
+      )}
+
+      {/* Bottom Control Bar: Prev, Next, Zoom, Edit, Send Image, Close */}
+      <div style={{
+        padding: '12px 20px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 12,
+        borderTop: '1px solid rgba(255,255,255,0.15)',
+        background: 'rgba(15,23,42,0.95)',
+        flexWrap: 'wrap'
+      }}>
+        {/* Previous (Disabled at index 0, non-looping) */}
+        <button
+          type="button"
+          disabled={!hasPrevious}
+          onClick={handlePrev}
+          style={{
+            background: hasPrevious ? '#1E293B' : 'rgba(255,255,255,0.1)',
+            color: hasPrevious ? '#FFFFFF' : '#64748B',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 6,
+            padding: '7px 16px',
+            fontSize: 12.5,
+            fontWeight: 800,
+            cursor: hasPrevious ? 'pointer' : 'not-allowed',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+          title={hasPrevious ? 'Previous photo (Left Arrow)' : 'At beginning of photos'}
+        >
+          <ArrowLeft size={14} />
+          <span>Previous</span>
+        </button>
+
+        {/* Zoom Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 6, padding: '2px 8px' }}>
+          <button
+            type="button"
+            onClick={() => setZoom(z => Math.max(50, z - 25))}
+            style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer', padding: 4 }}
+          >
+            <ZoomOut size={14} />
+          </button>
+          <span style={{ fontSize: 11.5, fontWeight: 800, width: 48, textAlign: 'center' }}>{zoom}%</span>
+          <button
+            type="button"
+            onClick={() => setZoom(z => Math.min(300, z + 25))}
+            style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer', padding: 4 }}
+          >
+            <ZoomIn size={14} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => { setZoom(100); setPan({ x: 0, y: 0 }); }}
+          style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#CBD5E1', borderRadius: 6, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}
+        >
+          Reset View
+        </button>
+
+        {/* Edit Photo */}
+        <button
+          type="button"
+          onClick={onEdit}
+          style={{
+            background: '#036d92',
+            color: '#FFFFFF',
+            border: 'none',
+            borderRadius: 6,
+            padding: '7px 16px',
+            fontSize: 12.5,
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Edit3 size={13} />
+          <span>Edit &amp; Annotate</span>
+        </button>
+
+        {/* Send Image (Requirement 11) */}
+        <button
+          type="button"
+          onClick={onShare}
+          style={{
+            background: '#059669',
+            color: '#FFFFFF',
+            border: 'none',
+            borderRadius: 6,
+            padding: '7px 16px',
+            fontSize: 12.5,
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Send size={13} />
+          <span>Send Image</span>
+        </button>
+
+        {/* Next (Disabled at last item, non-looping) */}
+        <button
+          type="button"
+          disabled={!hasNext}
+          onClick={handleNext}
+          style={{
+            background: hasNext ? '#1E293B' : 'rgba(255,255,255,0.1)',
+            color: hasNext ? '#FFFFFF' : '#64748B',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 6,
+            padding: '7px 16px',
+            fontSize: 12.5,
+            fontWeight: 800,
+            cursor: hasNext ? 'pointer' : 'not-allowed',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+          title={hasNext ? 'Next photo (Right Arrow)' : 'At end of photos'}
+        >
+          <span>Next</span>
+          <ArrowRight size={14} />
+        </button>
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: '1px solid #475569',
+            color: '#CBD5E1',
+            borderRadius: 6,
+            padding: '7px 16px',
+            fontSize: 12,
+            cursor: 'pointer'
+          }}
+        >
+          Close (ESC)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODAL: PHOTO EDITOR (Requirement 9)
+// Zoom, Rotate, Crop, Pan, Clinical Annotations, Save & Cancel
+// ============================================================================
+
+interface PhotoEditorModalProps {
+  image: ClinicalImage;
+  onClose: () => void;
+  onSave: (img: ClinicalImage) => void;
+}
+
+function PhotoEditorModal({ image, onClose, onSave }: PhotoEditorModalProps) {
+  const [zoom, setZoom] = useState(image.edits?.zoom || 100);
+  const [rotation, setRotation] = useState(image.edits?.rotation || 0);
+  const [pan, setPan] = useState({ x: image.edits?.panX || 0, y: image.edits?.panY || 0 });
+  const [isCropActive, setIsCropActive] = useState(false);
+  const [isMarkActive, setIsMarkActive] = useState(false);
+  const [selectedMarker, setSelectedMarker] = useState(CLINICAL_MARKERS[0]);
+  const [annotations, setAnnotations] = useState<ClinicalAnnotation[]>(image.edits?.annotations || []);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const loadedImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Redraw canvas with image, rotation, and annotations
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !loadedImageRef.current) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = loadedImageRef.current;
+    canvas.width = img.naturalWidth || 800;
+    canvas.height = img.naturalHeight || 600;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+
+    // Apply rotation
+    if (rotation !== 0) {
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    } else {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+    ctx.restore();
+
+    // Draw annotations
+    annotations.forEach(ann => {
+      // 1. Point dot
+      ctx.fillStyle = ann.color;
+      ctx.beginPath();
+      ctx.arc(ann.x, ann.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // 2. Badge label
+      ctx.font = 'bold 13px sans-serif';
+      const textWidth = ctx.measureText(ann.label).width;
+      const bW = textWidth + 18;
+      const bH = 24;
+      const bX = ann.x - bW / 2;
+      const bY = ann.y - 32;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(bX, bY, bW, bH, 6);
+      } else {
+        ctx.rect(bX, bY, bW, bH);
+      }
+      ctx.fill();
+      ctx.strokeStyle = ann.color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(ann.label, bX + 9, bY + 16);
+    });
+  }, [rotation, annotations]);
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = image.originalUrl || image.url;
+    img.onload = () => {
+      loadedImageRef.current = img;
+      redrawCanvas();
+    };
+  }, [image.originalUrl, image.url, redrawCanvas]);
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isMarkActive) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    const newAnn: ClinicalAnnotation = {
+      id: `ann-${Date.now()}`,
+      x,
+      y,
+      type: selectedMarker.id,
+      label: selectedMarker.label,
+      color: selectedMarker.color
+    };
+    setAnnotations(prev => [...prev, newAnn]);
+  };
+
+  const handleApplyCrop = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Crop 10% inward as demonstration of crop function
+    const cropX = canvas.width * 0.1;
+    const cropY = canvas.height * 0.1;
+    const cropW = canvas.width * 0.8;
+    const cropH = canvas.height * 0.8;
+
+    const croppedData = ctx.getImageData(cropX, cropY, cropW, cropH);
+    canvas.width = cropW;
+    canvas.height = cropH;
+    ctx.putImageData(croppedData, 0, 0);
+
+    // Save as new loaded base image
+    const croppedImg = new Image();
+    croppedImg.src = canvas.toDataURL('image/jpeg', 0.92);
+    croppedImg.onload = () => {
+      loadedImageRef.current = croppedImg;
+      setIsCropActive(false);
+    };
+  };
+
+  const handleSave = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const finalDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    onSave({
+      ...image,
+      url: finalDataUrl,
+      originalUrl: image.originalUrl || image.url,
+      edits: {
+        zoom,
+        rotation,
+        panX: pan.x,
+        panY: pan.y,
+        annotations
+      }
+    });
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000
+    }}>
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: 12,
+        width: '92%',
+        maxWidth: 760,
+        overflow: 'hidden',
+        boxShadow: '0 25px 50px rgba(0,0,0,0.3)'
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '12px 20px',
+          background: '#0F172A',
+          color: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Edit3 size={16} />
+            <span style={{ fontSize: 14, fontWeight: 900 }}>CLINICAL IMAGE EDITOR &amp; LESION ANNOTATION</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Viewport */}
+        <div style={{
+          background: '#020617',
+          padding: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          minHeight: 380
+        }}>
+          <div style={{
+            transform: `scale(${zoom / 100}) translate(${pan.x}px, ${pan.y}px)`,
+            transition: 'transform 0.1s ease',
+            position: 'relative'
+          }}>
+            <canvas
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              style={{
+                display: 'block',
+                maxWidth: '100%',
+                maxHeight: 400,
+                cursor: isMarkActive ? 'crosshair' : 'default',
+                borderRadius: 4
+              }}
+            />
+
+            {isCropActive && (
+              <div style={{
+                position: 'absolute',
+                inset: 30,
+                border: '2px dashed #036d92',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(3,109,146,0.15)'
+              }}>
+                <button
+                  type="button"
+                  onClick={handleApplyCrop}
+                  style={{
+                    background: '#036d92',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✓ Apply Crop
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Controls Toolbar (Requirement 9: Zoom, Crop, Rotate, Mark, Pan) */}
+        <div style={{
+          padding: '10px 18px',
+          background: '#F8FAFC',
+          borderTop: '1px solid #E2E8F0',
+          borderBottom: '1px solid #E2E8F0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 10
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {/* Zoom */}
+            <div style={{ display: 'flex', alignItems: 'center', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, padding: '2px 6px' }}>
+              <button onClick={() => setZoom(z => Math.max(50, z - 25))} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <ZoomOut size={13} />
+              </button>
+              <span style={{ fontSize: 11, fontWeight: 800, width: 44, textAlign: 'center' }}>{zoom}%</span>
+              <button onClick={() => setZoom(z => Math.min(250, z + 25))} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <ZoomIn size={13} />
+              </button>
+            </div>
+
+            {/* Rotate */}
+            <button
+              type="button"
+              onClick={() => setRotation(r => (r + 90) % 360)}
+              style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <RotateCw size={13} />
+              <span>Rotate 90°</span>
+            </button>
+
+            {/* Crop */}
+            <button
+              type="button"
+              onClick={() => setIsCropActive(prev => !prev)}
+              style={{
+                background: isCropActive ? '#036d92' : '#FFFFFF',
+                color: isCropActive ? '#FFFFFF' : '#334155',
+                border: '1px solid #CBD5E1',
+                borderRadius: 6,
+                padding: '5px 10px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <Crop size={13} />
+              <span>Crop</span>
+            </button>
+
+            {/* Mark / Annotations */}
+            <button
+              type="button"
+              onClick={() => setIsMarkActive(prev => !prev)}
+              style={{
+                background: isMarkActive ? '#036d92' : '#FFFFFF',
+                color: isMarkActive ? '#FFFFFF' : '#334155',
+                border: '1px solid #CBD5E1',
+                borderRadius: 6,
+                padding: '5px 10px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <Edit3 size={13} />
+              <span>Annotate / Markers ({annotations.length})</span>
+            </button>
+
+            {annotations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setAnnotations([])}
+                style={{ background: 'none', border: 'none', color: '#DC2626', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Clear Marks
+              </button>
+            )}
+          </div>
+
+          <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace' }}>
+            {image.fileName}
+          </div>
+        </div>
+
+        {/* Clinical Marker Selector Bar */}
+        {isMarkActive && (
+          <div style={{ padding: '8px 18px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#475569' }}>MARKER:</span>
+            {CLINICAL_MARKERS.map(m => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setSelectedMarker(m)}
+                style={{
+                  background: selectedMarker.id === m.id ? m.color : '#FFFFFF',
+                  color: selectedMarker.id === m.id ? '#FFFFFF' : '#334155',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: 12,
+                  padding: '3px 10px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+            <span style={{ fontSize: 10, color: '#64748B', marginLeft: 6 }}>(Click anywhere on the photo to stamp lesion mark)</span>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: '6px 14px' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            style={{
+              background: '#036d92',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 22px',
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            ✓ Save Changes
+          </button>
         </div>
       </div>
     </div>
@@ -4634,425 +4445,904 @@ function ComparePane({
 }
 
 // ============================================================================
-// COMPONENT: IMAGE EDITOR MODAL (Prompt Sections 25 to 29)
-// Zoom, Crop, Rotate, Pan, Mark/Annotations (Pen, Arrow, Circle, Rect, Text, Pin),
-// Delete, Reset, Save, Cancel
+// MODAL: MULTI-PHOTO COMPARISON (Requirement 12)
+// Independent Zoom and Pan per panel, Reset View, Close (ESC)
 // ============================================================================
 
-interface ImageEditorModalProps {
-  image: ClinicalImage;
+interface MultiPhotoCompareModalProps {
+  photos: ClinicalImage[];
+  procedureName: string;
   onClose: () => void;
-  onSave: (img: ClinicalImage) => void;
 }
 
-function ImageEditorModal({ image, onClose, onSave }: ImageEditorModalProps) {
-  const [zoom, setZoom] = useState(100);
-  const [rotation, setRotation] = useState(0);
-  const [tool, setTool] = useState<'pen' | 'arrow' | 'circle' | 'rectangle' | 'text' | 'pin' | 'crop' | 'pan'>('pen');
-  const [color, setColor] = useState('#EF4444');
-  const [strokeWidth, setStrokeWidth] = useState(3);
-  const [cropActive, setCropActive] = useState(false);
-  const [editedDate, setEditedDate] = useState(image.date);
-  const [editedTime, setEditedTime] = useState(image.time);
-
-  // Canvas drawing state
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(null);
-
-  // Initialize canvas
+function MultiPhotoCompareModal({ photos, procedureName, onClose }: MultiPhotoCompareModalProps) {
+  // ESC key support to return to gallery
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = image.url;
-    img.onload = () => {
-      canvas.width = img.width || 600;
-      canvas.height = img.height || 450;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    };
-  }, [image.url]);
-
-  // Drawing handlers
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (tool === 'pan' || tool === 'crop') return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    setIsDrawing(true);
-    setLastPoint({ x, y });
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    if (tool === 'pin') {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x, y, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.fillText('📍', x - 7, y + 4);
-      setIsDrawing(false);
-    } else if (tool === 'text') {
-      const text = prompt('Enter clinical annotation text:');
-      if (text) {
-        ctx.fillStyle = color;
-        ctx.font = 'bold 18px sans-serif';
-        ctx.fillText(text, x, y);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
       }
-      setIsDrawing(false);
-    }
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !lastPoint) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    ctx.lineCap = 'round';
-
-    if (tool === 'pen') {
-      ctx.beginPath();
-      ctx.moveTo(lastPoint.x, lastPoint.y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      setLastPoint({ x, y });
-    }
-  };
-
-  const stopDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !lastPoint) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-
-    if (tool === 'circle') {
-      const radius = Math.sqrt(Math.pow(x - lastPoint.x, 2) + Math.pow(y - lastPoint.y, 2));
-      ctx.beginPath();
-      ctx.arc(lastPoint.x, lastPoint.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (tool === 'rectangle') {
-      ctx.strokeRect(lastPoint.x, lastPoint.y, x - lastPoint.x, y - lastPoint.y);
-    } else if (tool === 'arrow') {
-      // Draw arrow
-      ctx.beginPath();
-      ctx.moveTo(lastPoint.x, lastPoint.y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      // Arrowhead
-      const angle = Math.atan2(y - lastPoint.y, x - lastPoint.x);
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x - 15 * Math.cos(angle - Math.PI / 6), y - 15 * Math.sin(angle - Math.PI / 6));
-      ctx.lineTo(x - 15 * Math.cos(angle + Math.PI / 6), y - 15 * Math.sin(angle + Math.PI / 6));
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-    }
-
-    setIsDrawing(false);
-    setLastPoint(null);
-  };
-
-  const handleResetMarks = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const img = new Image();
-    img.src = image.url;
-    img.onload = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Independent zoom and pan state for EACH panel, keyed by stable image ID
+  const [panelStates, setPanelStates] = useState<{ [id: string]: { zoom: number; panX: number; panY: number } }>({});
+
+  const getPanelState = (id: string) => {
+    return panelStates[id] || { zoom: 100, panX: 0, panY: 0 };
   };
 
-  const handleSaveEditor = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const editedUrl = canvas.toDataURL('image/jpeg', 0.95);
-    onSave({
-      ...image,
-      url: editedUrl,
-      date: editedDate,
-      time: editedTime,
-      notes: image.notes ? `${image.notes} (Annotated)` : 'Clinical annotations added'
+  const updatePanelZoom = (id: string, delta: number) => {
+    setPanelStates(prev => {
+      const curr = prev[id] || { zoom: 100, panX: 0, panY: 0 };
+      const nextZoom = Math.min(400, Math.max(50, curr.zoom + delta));
+      return { ...prev, [id]: { ...curr, zoom: nextZoom } };
     });
   };
 
+  const updatePanelPan = (id: string, panX: number, panY: number) => {
+    setPanelStates(prev => {
+      const curr = prev[id] || { zoom: 100, panX: 0, panY: 0 };
+      return { ...prev, [id]: { ...curr, panX, panY } };
+    });
+  };
+
+  // Reset View: restores default 100% zoom and (0,0) pan without modifying images or saved edits
+  const handleResetAllViews = () => {
+    setPanelStates({});
+  };
+
+  const isTwoImages = photos.length === 2;
+
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.92)',
-      zIndex: 1300, display: 'flex', flexDirection: 'column', color: '#FFFFFF'
-    }}>
-      {/* Editor Top Bar (Prompt Section 25) */}
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Clinical Photo Comparison"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.95)',
+        zIndex: 100000,
+        display: 'flex',
+        flexDirection: 'column',
+        color: '#FFFFFF'
+      }}
+    >
+      {/* Top Header */}
       <div style={{
-        padding: '10px 20px',
-        background: '#1E293B',
-        borderBottom: '1px solid #334155',
+        padding: '12px 20px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 10
+        borderBottom: '1px solid rgba(255,255,255,0.15)',
+        background: 'rgba(15,23,42,0.9)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Edit3 size={16} color="#0284C7" />
-          <span style={{ fontSize: 14, fontWeight: 900 }}>
-            Image Annotation &amp; Editing Studio — {image.fileName}
+          <SplitSquareVertical size={18} color="#38BDF8" />
+          <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: '0.02em' }}>
+            CLINICAL PHOTO COMPARISON ({photos.length} IMAGES)
+          </span>
+          <span style={{ fontSize: 11, color: '#94A3B8' }}>
+            • {procedureName} • Independent Zoom &amp; Drag
           </span>
         </div>
 
-        {/* Date / Time Edit (Admin control) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#0F172A', padding: '3px 8px', borderRadius: 6, border: '1px solid #334155' }}>
-          <Clock size={12} color="#38BDF8" />
-          <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 700 }}>TIMESTAMP:</span>
-          <input
-            type="text"
-            value={editedDate}
-            onChange={e => setEditedDate(e.target.value)}
-            style={{ width: 85, height: 22, fontSize: 10.5, background: '#1E293B', color: '#FFFFFF', border: '1px solid #475569', borderRadius: 3, padding: '1px 4px', textAlign: 'center' }}
-            title="Edit Date (DD/MM/YYYY)"
-          />
-          <input
-            type="text"
-            value={editedTime}
-            onChange={e => setEditedTime(e.target.value)}
-            style={{ width: 75, height: 22, fontSize: 10.5, background: '#1E293B', color: '#FFFFFF', border: '1px solid #475569', borderRadius: 3, padding: '1px 4px', textAlign: 'center' }}
-            title="Edit Time (hh:mm AM/PM)"
-          />
-        </div>
-
-        {/* Action Buttons: RESET, SAVE, CANCEL (Prompt Section 25) */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={handleResetMarks}
-            className="btn btn-sm"
-            style={{ background: '#475569', color: '#FFFFFF', border: 'none', fontWeight: 700 }}
-          >
-            [ RESET MARKS ]
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-sm btn-ghost"
-            style={{ color: '#94A3B8' }}
-          >
-            [ CANCEL ]
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveEditor}
-            className="btn btn-sm"
-            style={{ background: '#10B981', color: '#FFFFFF', border: 'none', fontWeight: 900 }}
-          >
-            [ SAVE EDITS ]
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close Comparison"
+          style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer', padding: 4 }}
+        >
+          <X size={22} />
+        </button>
       </div>
 
-      {/* Editor Tool Strip: Annotation Tools, Colors, Zoom, Rotate (Prompt Sections 26 to 29) */}
+      {/* Panels Grid: Equal 50/50 split for 2 images; Responsive grid for 3+ */}
       <div style={{
-        padding: '8px 20px',
-        background: '#0F172A',
-        borderBottom: '1px solid #1E293B',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 12
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: isTwoImages ? '1fr 1fr' : 'repeat(auto-fit, minmax(360px, 1fr))',
+        gap: isTwoImages ? 16 : 16,
+        padding: 16,
+        overflow: 'auto',
+        alignItems: 'stretch'
       }}>
-        {/* Drawing Tools (Prompt Section 29) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8', marginRight: 4 }}>TOOLS:</span>
-          {[
-            { id: 'pen', label: '✏ Pen' },
-            { id: 'arrow', label: '➜ Arrow' },
-            { id: 'circle', label: '○ Circle' },
-            { id: 'rectangle', label: '□ Rectangle' },
-            { id: 'text', label: 'T Text' },
-            { id: 'pin', label: '📍 Marker' },
-            { id: 'crop', label: '✂ Crop' }
-          ].map(t => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => {
-                setTool(t.id as any);
-                if (t.id === 'crop') setCropActive(true);
-              }}
+        {photos.map((img, idx) => {
+          const pState = getPanelState(img.id);
+
+          return (
+            <div
+              key={img.id}
               style={{
-                background: tool === t.id ? '#0284C7' : '#1E293B',
-                color: '#FFFFFF',
-                border: '1px solid #334155',
-                borderRadius: 5,
-                padding: '4px 10px',
-                fontSize: 11.5,
-                fontWeight: 700,
-                cursor: 'pointer'
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+                borderRight: isTwoImages && idx === 0 ? '1px solid rgba(255,255,255,0.15)' : 'none',
+                paddingRight: isTwoImages && idx === 0 ? 12 : 0
               }}
             >
-              {t.label}
-            </button>
-          ))}
+              <ComparisonPanel
+                image={img}
+                procedureName={procedureName}
+                panelIndex={idx}
+                zoom={pState.zoom}
+                panX={pState.panX}
+                panY={pState.panY}
+                onZoomIn={() => updatePanelZoom(img.id, 25)}
+                onZoomOut={() => updatePanelZoom(img.id, -25)}
+                onPan={(x, y) => updatePanelPan(img.id, x, y)}
+                onReset={() => {
+                  setPanelStates(prev => ({
+                    ...prev,
+                    [img.id]: { zoom: 100, panX: 0, panY: 0 }
+                  }));
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bottom Global Control Bar */}
+      <div style={{
+        padding: '12px 20px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 14,
+        borderTop: '1px solid rgba(255,255,255,0.15)',
+        background: 'rgba(15,23,42,0.95)'
+      }}>
+        <button
+          type="button"
+          onClick={handleResetAllViews}
+          style={{
+            background: '#1E293B',
+            color: '#FFFFFF',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 6,
+            padding: '7px 18px',
+            fontSize: 12.5,
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <RefreshCw size={13} />
+          <span>Reset All Views</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            background: '#036d92',
+            color: '#FFFFFF',
+            border: 'none',
+            borderRadius: 6,
+            padding: '7px 24px',
+            fontSize: 13,
+            fontWeight: 800,
+            cursor: 'pointer'
+          }}
+        >
+          Close (ESC)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Single comparison panel with independent zoom & pan
+interface ComparisonPanelProps {
+  image: ClinicalImage;
+  procedureName: string;
+  panelIndex: number;
+  zoom: number;
+  panX: number;
+  panY: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onPan: (x: number, y: number) => void;
+  onReset: () => void;
+}
+
+function ComparisonPanel({
+  image,
+  procedureName,
+  panelIndex,
+  zoom,
+  panX,
+  panY,
+  onZoomIn,
+  onZoomOut,
+  onPan,
+  onReset
+}: ComparisonPanelProps) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+
+  // Smooth mouse drag & pan handler
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only main left click
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    dragStartRef.current = { x: e.clientX - panX, y: e.clientY - panY };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      onPan(
+        moveEvent.clientX - dragStartRef.current.x,
+        moveEvent.clientY - dragStartRef.current.y
+      );
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const isBefore = image.type === 'BEFORE';
+  const typeBg = isBefore ? '#D97706' : '#16A34A';
+  const headerBg = isBefore ? 'rgba(180, 83, 9, 0.45)' : 'rgba(21, 128, 61, 0.45)';
+
+  return (
+    <div style={{
+      background: '#0F172A',
+      borderRadius: 10,
+      border: '1px solid rgba(255,255,255,0.15)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      flex: 1,
+      minHeight: 380
+    }}>
+      {/* Panel Header */}
+      <div style={{
+        padding: '10px 14px',
+        background: headerBg,
+        borderBottom: '1px solid rgba(255,255,255,0.12)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{
+            background: typeBg,
+            color: '#FFFFFF',
+            fontSize: 10.5,
+            fontWeight: 900,
+            padding: '2px 8px',
+            borderRadius: 4,
+            letterSpacing: '0.05em'
+          }}>
+            {image.type}
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: '#F8FAFC' }}>
+            {image.fileName}
+          </span>
+          {/* Small white box with black text for capture date/time (Requirement 10) */}
+          <span style={{
+            background: '#FFFFFF',
+            color: '#000000',
+            fontSize: 10,
+            fontWeight: 800,
+            padding: '2px 6px',
+            borderRadius: 3,
+            boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+          }}>
+            {image.date} {image.time}
+          </span>
         </div>
 
-        {/* Color Palette */}
+        {/* Panel Local Zoom & Pan Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8' }}>COLOR:</span>
-          {['#EF4444', '#3B82F6', '#EAB308', '#22C55E', '#FFFFFF'].map(c => (
-            <div
-              key={c}
-              onClick={() => setColor(c)}
-              style={{
-                width: 18, height: 18, borderRadius: '50%', background: c,
-                border: color === c ? '2px solid #FFFFFF' : '1px solid #334155',
-                cursor: 'pointer'
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Zoom & Rotation Controls (Prompt Sections 26, 28) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Zoom [-] 100% [+] */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#1E293B', padding: '2px 8px', borderRadius: 5 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'rgba(255,255,255,0.12)',
+            borderRadius: 6,
+            padding: '2px 6px',
+            gap: 4
+          }}>
             <button
               type="button"
-              onClick={() => setZoom(z => Math.max(50, z - 25))}
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer' }}
+              onClick={onZoomOut}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFF',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: 2
+              }}
+              title="Zoom Out"
             >
               <ZoomOut size={13} />
             </button>
-            <span style={{ fontSize: 11, fontWeight: 800, width: 44, textAlign: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, minWidth: 42, textAlign: 'center', color: '#38BDF8' }}>
               {zoom}%
             </span>
             <button
               type="button"
-              onClick={() => setZoom(z => Math.min(300, z + 25))}
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer' }}
+              onClick={onZoomIn}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFF',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: 2
+              }}
+              title="Zoom In"
             >
               <ZoomIn size={13} />
             </button>
           </div>
 
-          {/* Rotate Left / Rotate Right (Prompt Section 28) */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            onClick={onReset}
+            style={{
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 4,
+              color: '#CBD5E1',
+              fontSize: 10.5,
+              fontWeight: 700,
+              padding: '3px 8px',
+              cursor: 'pointer'
+            }}
+            title="Reset position and zoom for this image"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      {/* Panel Canvas Area (Independent Pan via mouse drag) */}
+      <div
+        onMouseDown={handleMouseDown}
+        style={{
+          flex: 1,
+          minHeight: 320,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          padding: 12,
+          position: 'relative',
+          cursor: isDragging ? 'grabbing' : (zoom > 100 ? 'grab' : 'default'),
+          userSelect: 'none',
+          background: '#020617'
+        }}
+      >
+        {/* Loading Spinner */}
+        {!imgLoaded && !imgError && (
+          <div style={{
+            position: 'absolute',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            color: '#94A3B8',
+            fontSize: 12
+          }}>
+            <RefreshCw size={20} className="animate-spin" />
+            <span>Loading clinical photo...</span>
+          </div>
+        )}
+
+        {/* Error Fallback */}
+        {imgError && (
+          <div style={{
+            position: 'absolute',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            color: '#F87171',
+            fontSize: 12,
+            padding: 20,
+            textAlign: 'center'
+          }}>
+            <AlertTriangle size={28} color="#EF4444" />
+            <span style={{ fontWeight: 800 }}>Unable to load clinical photo</span>
+            <span style={{ fontSize: 10.5, color: '#94A3B8' }}>{image.fileName}</span>
+          </div>
+        )}
+
+        {/* Image with Independent Zoom and Pan */}
+        <img
+          src={image.url}
+          alt={image.fileName}
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => {
+            setImgLoaded(true);
+            setImgError(true);
+          }}
+          style={{
+            transform: `translate(${panX}px, ${panY}px) scale(${zoom / 100})`,
+            maxHeight: '58vh',
+            maxWidth: '100%',
+            objectFit: 'contain',
+            transition: isDragging ? 'none' : 'transform 0.12s ease',
+            pointerEvents: 'none',
+            display: imgError ? 'none' : 'block'
+          }}
+        />
+      </div>
+
+      {/* Observation or Meta Snippet */}
+      <div style={{
+        padding: '8px 14px',
+        background: 'rgba(0,0,0,0.6)',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: 11,
+        color: '#94A3B8'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>Source: {image.source}</span>
+          {image.fileSize && <span>• {image.fileSize}</span>}
+          {panX !== 0 || panY !== 0 ? (
+            <span style={{ color: '#38BDF8', fontSize: 10 }}>[Pan: {Math.round(panX)}px, {Math.round(panY)}px]</span>
+          ) : null}
+        </div>
+        {image.doctorObservation && (
+          <div style={{ color: '#F1F5F9', fontWeight: 600, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            📝 {image.doctorObservation}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODAL: SEND / SHARE IMAGE (Requirement 11)
+// WhatsApp, Patient Email, Download Package, Gateway status
+// ============================================================================
+
+interface SendImageModalProps {
+  image: ClinicalImage;
+  patient?: any;
+  onClose: () => void;
+}
+
+function SendImageModal({ image, patient, onClose }: SendImageModalProps) {
+  const [recipientPhone, setRecipientPhone] = useState(patient?.phone || '+91 98251 00099');
+  const [recipientEmail, setRecipientEmail] = useState(patient?.email || 'patient@medflow.clinic');
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+
+  const handleDownloadDirect = () => {
+    const a = document.createElement('a');
+    a.href = image.url;
+    a.download = image.fileName || `MedFlow_Clinical_Image_${image.date.replace(/\//g, '-')}.jpg`;
+    a.click();
+    setShareStatus('✓ High-resolution photo exported directly to your computer!');
+  };
+
+  const handleSendWhatsApp = () => {
+    const phoneClean = recipientPhone.replace(/\D/g, '');
+    const message = encodeURIComponent(
+      `Hello ${patient?.firstName || 'Patient'},\nHere is your clinical photography record from MedFlow Clinic dated ${image.date} ${image.time}.\nObservation: ${image.doctorObservation || 'Routine clinical procedure follow-up'}.`
+    );
+    window.open(`https://api.whatsapp.com/send?phone=${phoneClean}&text=${message}`, '_blank');
+    setShareStatus(`✓ Opened WhatsApp messaging for ${recipientPhone}.`);
+  };
+
+  const handleSendEmail = () => {
+    const subject = encodeURIComponent(`MedFlow Clinical Photography Report - ${image.date}`);
+    const body = encodeURIComponent(
+      `Dear ${patient?.firstName || 'Patient'},\n\nPlease find attached your clinical procedure image taken on ${image.date} at ${image.time}.\n\nObservation: ${image.doctorObservation || 'Normal progress'}\n\nMedFlow Dermatology Clinic`
+    );
+    window.open(`mailto:${recipientEmail}?subject=${subject}&body=${body}`, '_blank');
+    setShareStatus(`✓ Opened email client addressed to ${recipientEmail}.`);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000
+    }}>
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: 12,
+        width: '90%',
+        maxWidth: 480,
+        overflow: 'hidden',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+      }}>
+        <div style={{
+          padding: '14px 20px',
+          background: '#059669',
+          color: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Send size={16} />
+            <span style={{ fontSize: 14, fontWeight: 900 }}>SHARE CLINICAL PHOTO</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <img src={image.url} alt="Thumbnail" style={{ width: 64, height: 64, borderRadius: 6, objectFit: 'cover', border: '1px solid #E2E8F0' }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{image.fileName}</div>
+              <div style={{ fontSize: 11, color: '#64748B' }}>{image.date} {image.time} • [{image.type}]</div>
+            </div>
+          </div>
+
+          {shareStatus && (
+            <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#065F46', padding: '8px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, marginBottom: 14 }}>
+              {shareStatus}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Direct Export */}
+            <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#0F172A', marginBottom: 4 }}>
+                1. Direct File Export / Download
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadDirect}
+                style={{
+                  background: '#036d92',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Download size={13} />
+                <span>Export High-Res JPEG</span>
+              </button>
+            </div>
+
+            {/* WhatsApp */}
+            <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#0F172A', marginBottom: 4 }}>
+                2. Send to Patient via WhatsApp
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  value={recipientPhone}
+                  onChange={e => setRecipientPhone(e.target.value)}
+                  style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12 }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSendWhatsApp}
+                  style={{ background: '#16A34A', color: '#FFFFFF', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+
+            {/* Email */}
+            <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#0F172A', marginBottom: 4 }}>
+                3. Email Clinical Record
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={e => setRecipientEmail(e.target.value)}
+                  style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12 }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSendEmail}
+                  style={{ background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+                >
+                  Email
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             <button
               type="button"
-              onClick={() => setRotation(r => r - 90)}
-              style={{ background: '#1E293B', border: '1px solid #334155', color: '#FFFFFF', borderRadius: 5, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}
-              title="Rotate Left 90°"
+              onClick={onClose}
+              style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 6, padding: '6px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
             >
-              <RotateCcw size={13} /> ↶ Left
-            </button>
-            <button
-              type="button"
-              onClick={() => setRotation(r => r + 90)}
-              style={{ background: '#1E293B', border: '1px solid #334155', color: '#FFFFFF', borderRadius: 5, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}
-              title="Rotate Right 90°"
-            >
-              <RotateCw size={13} /> ↷ Right
+              Done
             </button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Editor Canvas Stage */}
-      <div style={{
-        flex: 1,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        overflow: 'auto',
-        background: '#020617'
-      }}>
-        <div style={{
-          position: 'relative',
-          transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
-          transition: 'transform 0.15s ease',
-          boxShadow: '0 10px 40px rgba(0,0,0,0.6)',
-          borderRadius: 6,
-          overflow: 'hidden'
-        }}>
-          <canvas
-            ref={canvasRef}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            style={{
-              display: 'block',
-              cursor: tool === 'pen' ? 'crosshair' : tool === 'pin' ? 'pointer' : 'default'
-            }}
-          />
+// ============================================================================
+// MODAL: ADMIN EDIT METADATA (Requirement 10)
+// Allows Admins to correct capture date/time and edit doctor's observation
+// ============================================================================
 
-          {/* Crop Overlay if active (Prompt Section 27) */}
-          {cropActive && (
-            <div style={{
-              position: 'absolute',
-              inset: 30,
-              border: '2px dashed #0284C7',
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none'
-            }}>
-              <div style={{
-                background: '#0284C7',
-                color: '#FFFFFF',
-                padding: '4px 10px',
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 800,
-                pointerEvents: 'auto',
-                display: 'flex',
-                gap: 6
-              }}>
-                <span>CROP AREA</span>
-                <button
-                  type="button"
-                  onClick={() => setCropActive(false)}
-                  style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', fontWeight: 900 }}
-                >
-                  ✓ Apply Crop
-                </button>
-              </div>
+interface AdminMetadataEditModalProps {
+  image: ClinicalImage;
+  onClose: () => void;
+  onSave: (imgId: string, newDate: string, newTime: string, newObservation: string) => void;
+}
+
+function AdminMetadataEditModal({ image, onClose, onSave }: AdminMetadataEditModalProps) {
+  const [date, setDate] = useState(image.date);
+  const [time, setTime] = useState(image.time);
+  const [observation, setObservation] = useState(image.doctorObservation || '');
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000
+    }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 12, width: '90%', maxWidth: 440, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '12px 18px', background: '#D97706', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Clock size={16} />
+            <span style={{ fontSize: 14, fontWeight: 900 }}>ADMIN: EDIT PHOTO METADATA</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#475569', marginBottom: 2 }}>
+                CAPTURE DATE:
+              </label>
+              <input
+                type="text"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, fontWeight: 700 }}
+              />
             </div>
-          )}
+            <div>
+              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#475569', marginBottom: 2 }}>
+                CAPTURE TIME:
+              </label>
+              <input
+                type="text"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, fontWeight: 700 }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#475569', marginBottom: 2 }}>
+              DOCTOR'S OBSERVATION / REPORT:
+            </label>
+            <textarea
+              value={observation}
+              onChange={e => setObservation(e.target.value)}
+              rows={3}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12 }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, cursor: 'pointer', padding: '6px 12px' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave(image.id, date, time, observation)}
+              style={{ background: '#D97706', color: '#FFFFFF', border: 'none', borderRadius: 6, padding: '7px 18px', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}
+            >
+              ✓ Save Metadata
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODAL: PDF DOCUMENT VIEWER (Requirement 9)
+// Embeds / views PDF documents without exposing raster image editing tools
+// ============================================================================
+
+interface PdfDocumentViewerModalProps {
+  image: ClinicalImage;
+  onClose: () => void;
+}
+
+function PdfDocumentViewerModal({ image, onClose }: PdfDocumentViewerModalProps) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000
+    }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 12, width: '90%', maxWidth: 780, height: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 18px', background: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileText size={18} color="#DC2626" />
+            <span style={{ fontSize: 14, fontWeight: 900 }}>PDF CLINICAL DOCUMENT VIEWER: {image.fileName}</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ flex: 1, background: '#F1F5F9', padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <iframe
+            src={image.url}
+            title={image.fileName}
+            style={{ width: '100%', height: '100%', border: 'none', borderRadius: 6, background: '#FFFFFF' }}
+          />
+        </div>
+
+        <div style={{ padding: '10px 18px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 11.5, color: '#64748B' }}>
+            Captured: {image.date} {image.time} • Size: {image.fileSize || 'PDF'}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a
+              href={image.url}
+              download={image.fileName}
+              style={{
+                background: '#036d92',
+                color: '#FFFFFF',
+                borderRadius: 6,
+                padding: '6px 14px',
+                fontSize: 12,
+                fontWeight: 800,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5
+              }}
+            >
+              <Download size={13} />
+              <span>Download PDF</span>
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: '#CBD5E1', color: '#0F172A', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODAL: ADMIN DEVICE SETTINGS (Requirement 8)
+// ============================================================================
+
+interface AdminDeviceSettingsModalProps {
+  configs: DeviceIntegrationConfig[];
+  onClose: () => void;
+  onSave: (updated: DeviceIntegrationConfig[]) => void;
+}
+
+function AdminDeviceSettingsModal({ configs, onClose, onSave }: AdminDeviceSettingsModalProps) {
+  const [devices, setDevices] = useState<DeviceIntegrationConfig[]>(configs);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000
+    }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 12, width: '90%', maxWidth: 520, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '12px 18px', background: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Settings size={16} />
+            <span style={{ fontSize: 14, fontWeight: 900 }}>ADMIN: HARDWARE DEVICE INTEGRATIONS</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: '#64748B', marginBottom: 14 }}>
+            Configure active medical imaging devices and integration parameters for Dermascope and 3D Face Scanner interfaces.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+            {devices.map((dev, idx) => (
+              <div key={dev.id} style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #CBD5E1' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
+                    {dev.name}
+                  </span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={dev.enabled}
+                      onChange={e => {
+                        const next = [...devices];
+                        next[idx].enabled = e.target.checked;
+                        setDevices(next);
+                      }}
+                    />
+                    <span>{dev.enabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+                <div style={{ fontSize: 11, color: dev.status === 'ONLINE' ? '#16A34A' : '#DC2626', fontWeight: 700 }}>
+                  Status: {dev.status} • {dev.statusMessage}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave(devices)}
+              style={{ background: '#036d92', color: '#FFFFFF', border: 'none', borderRadius: 6, padding: '7px 18px', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}
+            >
+              Save Configuration
+            </button>
+          </div>
         </div>
       </div>
     </div>

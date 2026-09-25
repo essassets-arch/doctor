@@ -168,7 +168,7 @@ export default function AdminSupportPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1560, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       {/* Top Title & SLA Banner */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>

@@ -248,7 +248,10 @@ function VitalsContent() {
 
   if (!selectedPatient) {
     return (
-      <div className="page-container" style={{ maxWidth: 1300, margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
+      <div className="page-container" style={{ width: '100%', padding: '40px 20px', textAlign: 'center' }}>
+        <h1 className="page-title" style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', marginBottom: 16 }}>
+          Pre-Consultation Vitals & Clinical Intake
+        </h1>
         <div className="card" style={{ padding: '50px 20px', borderRadius: 20 }}>
           <Activity size={44} color="#059669" style={{ margin: '0 auto 14px', opacity: 0.6 }} />
           <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>No Patient Selected for Triage</h2>
@@ -273,7 +276,7 @@ function VitalsContent() {
   }
 
   return (
-    <div className="page-container" style={{ maxWidth: 1300, margin: '0 auto', padding: '24px 20px' }}>
+    <div className="page-container" style={{ width: '100%', padding: '24px 20px' }}>
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>

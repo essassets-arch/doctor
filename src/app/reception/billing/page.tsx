@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useBillingStore, useQueueStore, type PaymentMode } from '@/store';
@@ -17,10 +17,10 @@ export default function BillingPage() {
     act(() => { settleAndFinalize(bill.id, tenders.filter(t => t.amount !== 0), request.current); setNotice('Payment saved and invoice finalized.'); setTenders([{ mode: 'CASH', amount: 0 }]); });
     lock.current = false; setBusy(false);
   };
-  return <main className="page-container"><h1>Encounter billing</h1>
+  return <main className="page-container"><h1>OPD Billing & Encounter Settlement</h1>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     <section className="card" style={{ padding: 20 }}><h2>Generate / reconcile bill</h2>
-      <label>Encounter<select className="form-select" defaultValue="" onChange={e => act(() => { if (!e.target.value) return; const b = generateBill(e.target.value); setSelected(b.id); request.current = crypto.randomUUID(); setTenders([{ mode: 'CASH', amount: totals(b).outstanding }]); })}><option value="">Select encounter</option>{queue.map(q => <option key={q.id} value={q.caseNumber}>{q.caseNumber} — {q.patientName}</option>)}</select></label>
+      <label htmlFor="encounter-select">Encounter</label><select id="encounter-select" aria-label="Encounter" className="form-select" defaultValue="" onChange={e => act(() => { if (!e.target.value) return; const b = generateBill(e.target.value); setSelected(b.id); request.current = crypto.randomUUID(); setTenders([{ mode: 'CASH', amount: totals(b).outstanding }]); })}><option value="">Select encounter</option>{queue.map(q => <option key={q.id} value={q.caseNumber}>{q.caseNumber} — {q.patientName}</option>)}</select>
       {!bills.length && <p>No records found</p>}
       {bills.map(b => <button key={b.id} className="btn btn-ghost" onClick={() => { setSelected(b.id); request.current = crypto.randomUUID(); setTenders([{ mode: 'CASH', amount: totals(b).outstanding }]); }}>{b.invoiceNumber || b.encounterId || 'Legacy bill'} — {b.patientName}</button>)}
     </section>

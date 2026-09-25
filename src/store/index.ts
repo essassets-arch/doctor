@@ -4,9 +4,9 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 // SSR-Safe LocalStorage adapter for Next.js Turbopack
 const isClient = typeof window !== 'undefined';
 
-// Automatic clean slate migration: ensure old mock data is wiped from browser storage
+// Automatic clean slate migration: ensure old mock data and bloated storage entries are wiped from browser storage
 if (isClient) {
-  const CLEAN_SLATE_KEY = 'medflow_clean_slate_v5_dynamic';
+  const CLEAN_SLATE_KEY = 'medflow_clean_slate_v8_fresh_seed';
   try {
     if (!localStorage.getItem(CLEAN_SLATE_KEY)) {
       const keysToClear = [
@@ -18,7 +18,28 @@ if (isClient) {
       keysToClear.forEach(k => {
         try { localStorage.removeItem(k); } catch {}
       });
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('medflow_proc_') || k.startsWith('samples_') || k.includes('temp'))) {
+          localStorage.removeItem(k);
+        }
+      }
       localStorage.setItem(CLEAN_SLATE_KEY, 'true');
+    }
+
+    // Proactively evict any oversized entries (> 200KB or containing base64 data)
+    const rawConsultation = localStorage.getItem('doctor-consultation');
+    if (rawConsultation && (rawConsultation.length > 200000 || rawConsultation.includes('data:image'))) {
+      localStorage.removeItem('doctor-consultation');
+    }
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('medflow_proc_')) {
+        const val = localStorage.getItem(k);
+        if (val && (val.length > 100000 || val.includes('data:image'))) {
+          localStorage.removeItem(k);
+        }
+      }
     }
   } catch {}
 }
@@ -29,14 +50,80 @@ const dummyStorage = {
   removeItem: (_key: string) => {},
 };
 
-export const safeStorage = createJSONStorage(() => (isClient ? localStorage : dummyStorage));
+export const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    if (!isClient) return null;
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    if (!isClient) return;
+    try {
+      localStorage.setItem(key, value);
+      try {
+        const rawDb = localStorage.getItem('medflow-browser-state-v1');
+        const db = rawDb ? JSON.parse(rawDb) : { version: 1, slices: {} };
+        if (!db.slices || typeof db.slices !== 'object') db.slices = {};
+        db.slices[key] = JSON.parse(value);
+        localStorage.setItem('medflow-browser-state-v1', JSON.stringify(db));
+      } catch {}
+    } catch (err: any) {
+      console.warn(`[SafeStorage] localStorage.setItem failed for key "${key}" (quota exceeded). Evicting non-essential cache.`, err);
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('medflow_proc_') || k.startsWith('samples_') || k.includes('temp'))) {
+            localStorage.removeItem(k);
+          }
+        }
+        localStorage.setItem(key, value);
+      } catch {
+        // Quota still exceeded: suppress exception so Zustand set() and the app never crash
+        console.warn(`[SafeStorage] Degraded gracefully without persisting key "${key}".`);
+      }
+    }
+  },
+  removeItem: (key: string): void => {
+    if (!isClient) return;
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  },
+};
+
+export function safeSaveProceduresCache(caseId: string, procedures: any[]) {
+  if (!isClient) return;
+  try {
+    if (!Array.isArray(procedures)) return;
+    const sanitized = procedures.map(p => ({
+      ...p,
+      sessions: (p.sessions || []).map((s: any) => ({
+        ...s,
+        beforeImages: (s.beforeImages || []).filter((img: any) => !img?.url?.startsWith('data:')),
+        afterImages: (s.afterImages || []).filter((img: any) => !img?.url?.startsWith('data:')),
+        subSections: (s.subSections || []).map((sub: any) => ({
+          ...sub,
+          images: (sub.images || []).filter((img: any) => !img?.url?.startsWith('data:'))
+        }))
+      }))
+    }));
+    safeLocalStorage.setItem(`medflow_proc_${caseId}`, JSON.stringify(sanitized));
+  } catch {}
+}
+
+export const CURRENT_TAB_ID = isClient ? `tab_${Date.now()}_${Math.random().toString(36).slice(2, 9)}` : '';
+
+export const safeStorage = createJSONStorage(() => (isClient ? safeLocalStorage : dummyStorage));
 
 export const notifyTabSync = (storeKey: string) => {
   if (typeof window === 'undefined') return;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
       const bc = new BroadcastChannel('doctor_medflow_sync');
-      bc.postMessage({ key: storeKey, timestamp: Date.now() });
+      bc.postMessage({ key: storeKey, tabId: CURRENT_TAB_ID, timestamp: Date.now() });
       bc.close();
     }
   } catch {}
@@ -270,11 +357,41 @@ const DOCTORS: Doctor[] = [
   { id: 'doc-4', name: 'Dr. Suresh Kumar', specialization: 'Orthopedics', initials: 'SK', avatarColor: 'linear-gradient(135deg,#EF4444,#FB7185)', room: 'Room 4' },
 ];
 
-// Clean Initial State: Empty arrays for Dynamic User Creation
-const PATIENTS: Patient[] = [];
-const QUEUE_ENTRIES: QueueEntry[] = [];
-const BILLS: BillRecord[] = [];
-const NOTIFICATIONS: Notification[] = [];
+const PATIENTS: Patient[] = [
+  { id: 'pat-1', mrdNumber: 'MRD-2026-0001', firstName: 'Mahesh', middleName: 'K.', lastName: 'Kumar', mobile: '9825100001', age: 45, ageMonths: 0, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1981-04-13', createdAt: '2024-01-15', lastVisit: '2026-09-10', tags: ['VIP'] },
+  { id: 'pat-2', mrdNumber: 'MRD-2026-0002', firstName: 'Anita', lastName: 'Sharma', mobile: '9825100002', age: 32, ageMonths: 3, ageDays: 5, gender: 'F', language: 'Hindi', bloodGroup: 'A+', city: 'Vadodara', dob: '1994-06-10', createdAt: '2024-03-22', lastVisit: '2026-09-15' },
+  { id: 'pat-3', mrdNumber: 'MRD-2026-0003', firstName: 'Rekha', lastName: 'Patel', mobile: '9825100003', age: 28, ageMonths: 0, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O+', city: 'Surat', dob: '1998-03-20', createdAt: '2025-01-05', lastVisit: '2026-08-28', tags: ['Diabetic'] },
+  { id: 'pat-4', mrdNumber: 'MRD-2026-0004', firstName: 'Amit', lastName: 'Shah', mobile: '9825100004', age: 55, ageMonths: 2, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'AB+', city: 'Navsari', dob: '1971-07-05', createdAt: '2023-11-10', lastVisit: '2026-09-01' },
+  { id: 'pat-5', mrdNumber: 'MRD-2026-0005', firstName: 'Sneha', lastName: 'Joshi', mobile: '9825100005', age: 24, ageMonths: 8, ageDays: 12, gender: 'F', language: 'Hindi', bloodGroup: 'B-', city: 'Surat', dob: '2001-11-25', createdAt: '2026-02-14', lastVisit: '2026-09-18', isNew: true },
+  { id: 'pat-6', mrdNumber: 'MRD-2026-0006', firstName: 'Rahul', lastName: 'Sharma', mobile: '9825100006', age: 38, ageMonths: 0, ageDays: 0, gender: 'M', language: 'English', bloodGroup: 'A-', city: 'Bharuch', dob: '1988-02-12', createdAt: '2025-05-20', lastVisit: '2026-07-30' },
+  { id: 'pat-7', mrdNumber: 'MRD-2026-0007', firstName: 'Priya', lastName: 'Desai', mobile: '9825100007', age: 41, ageMonths: 4, ageDays: 0, gender: 'F', language: 'Gujarati', bloodGroup: 'O-', city: 'Surat', dob: '1985-05-14', createdAt: '2024-08-30', lastVisit: '2026-09-12' },
+  { id: 'pat-8', mrdNumber: 'MRD-2026-0008', firstName: 'Deepak', lastName: 'Trivedi', mobile: '9825100008', age: 62, ageMonths: 1, ageDays: 0, gender: 'M', language: 'Gujarati', bloodGroup: 'B+', city: 'Surat', dob: '1964-08-10', createdAt: '2023-06-01', lastVisit: '2026-09-05', tags: ['VIP', 'Diabetic'] },
+];
+const QUEUE_ENTRIES: QueueEntry[] = [
+  { id: 'q-1', caseNumber: 'C001-001-190926', tokenDisplay: 'C001', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '09:30 AM', checkInTime: '09:25 AM', age: 38, gender: 'M', city: 'Bharuch', billingStatus: 'PAID', status: 'COMPLETED', vitalsRecorded: true, complaintsRecorded: true },
+  { id: 'q-2', caseNumber: 'C002-001-190926', tokenDisplay: 'C002', patientId: 'pat-7', patientName: 'Priya Desai', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Follow-Up', appointmentTime: '10:00 AM', checkInTime: '09:58 AM', age: 41, gender: 'F', city: 'Surat', billingStatus: 'PENDING', status: 'BILLING_PENDING', vitalsRecorded: true, complaintsRecorded: true },
+  { id: 'q-3', caseNumber: 'C003-001-190926', tokenDisplay: 'C003', patientId: 'pat-1', patientName: 'Mahesh Kumar', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', appointmentTime: '10:30 AM', checkInTime: '10:15 AM', age: 45, gender: 'M', city: 'Surat', billingStatus: 'PAID', status: 'IN_SESSION', vitalsRecorded: true, complaintsRecorded: true, isFoc: false },
+  { id: 'q-4', caseNumber: 'C004-001-190926', tokenDisplay: 'C004', patientId: 'pat-3', patientName: 'Rekha Patel', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Procedure', priority: 'EMERGENCY', appointmentTime: '10:45 AM', checkInTime: '10:40 AM', age: 28, gender: 'F', city: 'Surat', billingStatus: 'FOC', status: 'WAITING', vitalsRecorded: true, complaintsRecorded: true, isFoc: true },
+  { id: 'q-5', caseNumber: 'C005-001-190926', tokenDisplay: 'C005', patientId: 'pat-5', patientName: 'Sneha Joshi', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', visitType: 'Consultation', priority: 'NORMAL', appointmentTime: '11:00 AM', checkInTime: '10:55 AM', age: 24, gender: 'F', city: 'Surat', billingStatus: 'PENDING', status: 'WAITING', vitalsRecorded: false, complaintsRecorded: false, isNew: true },
+  { id: 'q-6', caseNumber: 'APP-11:30', tokenDisplay: 'APP-11:30', patientId: 'pat-2', patientName: 'Anita Sharma', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', visitType: 'Follow-Up', priority: 'NORMAL', appointmentTime: '11:30 AM', age: 32, gender: 'F', city: 'Vadodara', billingStatus: 'PENDING', status: 'WAITING', vitalsRecorded: false, complaintsRecorded: false },
+  { id: 'q-7', caseNumber: 'C006-001-190926', tokenDisplay: 'C006', patientId: 'pat-4', patientName: 'Amit Shah', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'Consultation', priority: 'URGENT', appointmentTime: '11:00 AM', checkInTime: '10:50 AM', age: 55, gender: 'M', city: 'Navsari', billingStatus: 'PARTIAL', status: 'ON_HOLD', onHoldReason: 'Awaiting In-Clinic Blood Sugar & ECG', labReady: false, vitalsRecorded: true, complaintsRecorded: true },
+  { id: 'q-8', caseNumber: 'C007-001-190926', tokenDisplay: 'C007', patientId: 'pat-8', patientName: 'Deepak Trivedi', doctorId: 'doc-4', doctorName: 'Dr. Suresh Kumar', visitType: 'Procedure', priority: 'NORMAL', appointmentTime: '12:00 PM', checkInTime: '11:45 AM', age: 62, gender: 'M', city: 'Surat', billingStatus: 'PAID', status: 'WAITING', vitalsRecorded: true, complaintsRecorded: false },
+  { id: 'q-9', caseNumber: 'MR-001-190926', tokenDisplay: 'MR-001', patientId: 'mr-1', patientName: 'Suresh Patel (Zydus Healthcare)', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', visitType: 'MR Visit', priority: 'NORMAL', appointmentTime: '12:30 PM', checkInTime: '12:15 PM', age: 34, gender: 'M', city: 'Surat', billingStatus: 'FOC', status: 'WAITING', isMR: true, mrCompany: 'Zydus Healthcare', vitalsRecorded: true, complaintsRecorded: true },
+];
+
+const BILLS: BillRecord[] = [
+  { id: 'bill-1', invoiceNumber: 'INV-2026-0087', patientId: 'pat-6', patientName: 'Rahul Sharma', mrdNumber: 'MRD-2026-0006', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'CASH', items: [{ id: 'i1', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
+  { id: 'bill-2', invoiceNumber: 'INV-2026-0088', patientId: 'pat-7', patientName: 'Priya Desai', mrdNumber: 'MRD-2026-0007', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 800, collectedAmount: 500, balance: 300, status: 'PARTIAL', paymentMode: 'UPI', items: [{ id: 'i2', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i3', name: 'PRP Treatment Session', unitPrice: 300, quantity: 1, discount: 0, total: 300 }] },
+  { id: 'bill-3', invoiceNumber: 'INV-2026-0089', patientId: 'pat-4', patientName: 'Amit Shah', mrdNumber: 'MRD-2026-0004', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', netAmount: 2500, collectedAmount: 1500, balance: 1000, status: 'PARTIAL', paymentMode: 'CARD', items: [{ id: 'i4', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }, { id: 'i5', name: 'Laser Procedure', unitPrice: 2000, quantity: 1, discount: 0, total: 2000 }] },
+  { id: 'bill-4', invoiceNumber: 'INV-2026-0090', patientId: 'pat-1', patientName: 'Mahesh Kumar', mrdNumber: 'MRD-2026-0001', doctorName: 'Dr. Raj Valaki', date: '2026-09-19', netAmount: 500, collectedAmount: 500, balance: 0, status: 'PAID', paymentMode: 'UPI', items: [{ id: 'i6', name: 'Consultation Fee', unitPrice: 500, quantity: 1, discount: 0, total: 500 }] },
+];
+
+const NOTIFICATIONS: Notification[] = [
+  { id: 'n-1', type: 'danger', message: 'NOW CALLING: Amit Shah (Token C006) — Room 3', timestamp: '10:58 AM', read: false },
+  { id: 'n-2', type: 'success', message: 'Mahesh Kumar is now IN SESSION with Dr. Raj Valaki', timestamp: '10:45 AM', read: false },
+  { id: 'n-3', type: 'info', message: 'New appointment booked: Sneha Joshi — 11:00 AM Dr. Anita Soni', timestamp: '10:30 AM', read: true },
+  { id: 'n-4', type: 'warning', message: 'Lab report pending for Rekha Patel', timestamp: '09:45 AM', read: true },
+];
 
 // ============================================================
 // Patient Store
@@ -347,7 +464,7 @@ export const usePatientStore = create<PatientState>()(
         });
       },
       getPatientById: (id) => {
-        const found = get().patients.find(p => p.id === id);
+        const found = (get().patients || []).find(p => p.id === id) || PATIENTS.find(p => p.id === id);
         if (found) return found;
         if (id === 'pat-1789991704297') {
           return {
@@ -386,6 +503,9 @@ export const usePatientStore = create<PatientState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          if (!state.patients || state.patients.length === 0) {
+            state.patients = PATIENTS;
+          }
           state.searchResults = state.patients;
         }
       }
@@ -563,7 +683,14 @@ export const useQueueStore = create<QueueState>()(
       partialize: (s) => ({
         queue: s.queue,
         callingEntry: s.callingEntry,
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          if (!state.queue || state.queue.length === 0) {
+            state.queue = QUEUE_ENTRIES;
+          }
+        }
+      }
     }
   )
 );
@@ -572,7 +699,13 @@ export const useQueueStore = create<QueueState>()(
 // Appointment Store
 // ============================================================
 
-const APPOINTMENTS: Appointment[] = [];
+const APPOINTMENTS: Appointment[] = [
+  { id: 'apt-1', patientId: 'pat-2', patientName: 'Anita Sharma', doctorId: 'doc-2', doctorName: 'Dr. Anita Soni', date: '2026-09-19', time: '11:30', visitType: 'Follow-Up', status: 'SCHEDULED' },
+  { id: 'apt-2', patientId: 'pat-4', patientName: 'Amit Shah', doctorId: 'doc-3', doctorName: 'Dr. Priya Mehta', date: '2026-09-19', time: '11:00', visitType: 'Consultation', status: 'ARRIVED' },
+  { id: 'apt-3', patientId: 'pat-8', patientName: 'Deepak Trivedi', doctorId: 'doc-4', doctorName: 'Dr. Suresh Kumar', date: '2026-09-19', time: '12:00', visitType: 'Procedure', status: 'SCHEDULED' },
+  { id: 'apt-4', patientId: 'pat-3', patientName: 'Rekha Patel', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', time: '09:30', visitType: 'Consultation', status: 'SCHEDULED' },
+  { id: 'apt-5', patientId: 'pat-6', patientName: 'Rahul Sharma', doctorId: 'doc-1', doctorName: 'Dr. Raj Valaki', date: '2026-09-20', time: '10:00', visitType: 'Follow-Up', status: 'SCHEDULED' },
+];
 
 const SLOTS = ['09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30', '10:45', '11:00', '11:15', '11:30', '11:45', '14:00', '14:15', '14:30', '14:45', '15:00', '15:15', '15:30', '16:00', '16:30', '17:00'];
 
@@ -624,6 +757,13 @@ export const useAppointmentStore = create<AppointmentState>()(
     {
       name: 'doctor-appointments',
       storage: safeStorage,
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          if (!state.appointments || state.appointments.length === 0) {
+            state.appointments = APPOINTMENTS;
+          }
+        }
+      }
     }
   )
 );
@@ -642,6 +782,8 @@ export const useDoctorStore = create<{ doctors: Doctor[] }>((set) => ({
 
 interface BillingState {
   bills: BillRecord[];
+  payments: any[];
+  audit: any[];
   addBill: (bill: Omit<BillRecord, 'id' | 'invoiceNumber'>) => void;
   updateBill: (id: string, data: Partial<BillRecord>) => void;
   getTodayBills: () => BillRecord[];
@@ -651,6 +793,8 @@ export const useBillingStore = create<BillingState>()(
   persist(
     (set, get) => ({
       bills: BILLS,
+      payments: [],
+      audit: [],
       addBill: (bill) => {
         const invoiceNumber = `INV-2026-${String(get().bills.length + 1).padStart(4, '0')}`;
         set(s => ({ bills: [{ ...bill, id: `bill-${Date.now()}`, invoiceNumber }, ...s.bills] }));
@@ -913,8 +1057,131 @@ export const addDaysToFormattedDate = (dateStr: string, days: number): string =>
   return formatToDDMMYYYY(d);
 };
 
+export interface ClinicalAnnotation {
+  id: string;
+  x: number;
+  y: number;
+  type: string;
+  label: string;
+  color: string;
+}
+
+export interface ClinicalImageEdits {
+  zoom?: number;
+  rotation?: number;
+  crop?: { x: number; y: number; width: number; height: number };
+  panX?: number;
+  panY?: number;
+  annotations?: ClinicalAnnotation[];
+}
+
+export interface ClinicalImage {
+  id: string;
+  patientId?: string;
+  procedureId: string;
+  sessionId: string;
+  subSectionId?: string;
+  url: string;
+  originalUrl?: string;
+  type: 'BEFORE' | 'AFTER' | 'OTHER';
+  fileName: string;
+  fileType: string;
+  fileSize?: string;
+  date: string; // DD/MM/YYYY
+  time: string; // hh:mm A
+  capturedAt?: string;
+  uploadedAt?: string;
+  source: 'UPLOAD' | 'CAMERA' | 'DERMASCOPE' | 'FACE_SCANNER' | 'PDF';
+  doctorObservation?: string;
+  edits?: ClinicalImageEdits;
+}
+
+export interface ClinicalSubSection {
+  id: string;
+  sessionId: string;
+  name: string; // e.g., "Session 2 — Sub-section 1"
+  procedureName?: string;
+  date: string;
+  createdAt: string;
+  images: ClinicalImage[];
+}
+
+export interface ClinicalSession {
+  id: string;
+  procedureId: string;
+  sessionNumber: number;
+  date: string; // DD/MM/YYYY
+  therapist?: string;
+  bodyPart?: string;
+  doctorObservation?: string;
+  efficacy?: string;
+  status?: string;
+  beforeImages: ClinicalImage[];
+  afterImages: ClinicalImage[];
+  subSections: ClinicalSubSection[];
+  sections?: any[];
+}
+
+export interface ClinicalProcedure {
+  id: string;
+  patientId: string;
+  name: string;
+  category: string;
+  createdAt: string; // DD/MM/YYYY
+  therapist?: string;
+  bodyPart?: string;
+  doctorObservation?: string;
+  sessions: ClinicalSession[];
+}
+
+export function getSessionPhotos(session: ClinicalSession): ClinicalImage[] {
+  const seen = new Set<string>();
+  const list: ClinicalImage[] = [];
+  const add = (img: ClinicalImage) => {
+    if (img && img.id && !seen.has(img.id)) {
+      seen.add(img.id);
+      list.push(img);
+    }
+  };
+  (session.beforeImages || []).forEach(add);
+  (session.afterImages || []).forEach(add);
+  (session.subSections || []).forEach(sub => {
+    (sub.images || []).forEach(add);
+  });
+  return list;
+}
+
+export function getProcedurePhotos(proc: ClinicalProcedure): ClinicalImage[] {
+  const seen = new Set<string>();
+  const list: ClinicalImage[] = [];
+  (proc.sessions || []).forEach(sess => {
+    getSessionPhotos(sess).forEach(img => {
+      if (!seen.has(img.id)) {
+        seen.add(img.id);
+        list.push(img);
+      }
+    });
+  });
+  return list;
+}
+
+export function getPatientPhotos(procedures: ClinicalProcedure[]): ClinicalImage[] {
+  const seen = new Set<string>();
+  const list: ClinicalImage[] = [];
+  (procedures || []).forEach(proc => {
+    getProcedurePhotos(proc).forEach(img => {
+      if (!seen.has(img.id)) {
+        seen.add(img.id);
+        list.push(img);
+      }
+    });
+  });
+  return list;
+}
+
 export interface TreatmentProtocol {
   id?: string;
+  procedureId?: string;
   caseId: string;
   patientId: string;
   procedureName: string;
@@ -929,11 +1196,13 @@ export interface TreatmentProtocol {
   therapist: string;
   bodyPart: string;
   note?: string;
+  billingMode?: 'session_wise' | 'full_package';
   updatedAt?: string;
 }
 
 export const DEFAULT_TREATMENT_PROTOCOL: TreatmentProtocol = {
   id: 'proto-c005-001',
+  procedureId: 'proc-demo-1',
   caseId: 'C005-001-23092026',
   patientId: 'pat-1789991704297',
   procedureName: 'HAIR REMOVAL - DIODE',
@@ -948,11 +1217,13 @@ export const DEFAULT_TREATMENT_PROTOCOL: TreatmentProtocol = {
   therapist: 'Dr Valaki',
   bodyPart: 'FACE',
   note: 'Fitzpatrick Type II. Pre-cooling applied. Patient advised strict sun protection SPF 50+ & no waxing/threading.',
+  billingMode: 'session_wise',
   updatedAt: '2026-09-24T10:00:00.000Z'
 };
 
 export interface ProcedureExecutionItem {
   id: string;
+  procedureId?: string;
   caseId?: string;
   patientId?: string;
   procedureName: string;
@@ -1164,6 +1435,7 @@ export interface ConsultationSession {
   procedurePrescriptions?: ProcedurePrescriptionItem[];
   treatmentProtocol?: TreatmentProtocol;
   procedures: ProcedureExecutionItem[];
+  clinicalProcedures?: ClinicalProcedure[];
   images: {
     id: string;
     url: string;
@@ -1227,6 +1499,7 @@ export interface ConsultationSession {
     isFoc: boolean;
     focReason?: string;
     focPin?: string;
+    procedureBillingMode?: 'session_wise' | 'full_package';
   };
   isFinalized: boolean;
   finalizedAt?: string;
@@ -1487,11 +1760,85 @@ interface ConsultationState {
   removeProcedure: (id: string) => void;
   updateProcedure: (id: string, updates: Partial<ProcedureExecutionItem>) => void;
   setProcedures: (procedures: ProcedureExecutionItem[]) => void;
+  generateProtocolSchedule: (caseId: string, protocol: TreatmentProtocol) => void;
+  updateSessionProcedure: (caseId: string, procedureId: string, updates: Partial<ProcedureExecutionItem>) => void;
+  delayProtocolSession: (caseId: string, procedureId: string, delayDays: number, reason?: string) => void;
   addImage: (item: ConsultationSession['images'][0]) => void;
   removeImage: (id: string) => void;
   updateDiagnosis: (diagnosis: Partial<ConsultationSession['diagnosis']>) => void;
   updateBilling: (billing: Partial<ConsultationSession['billing']>) => void;
   finalizeConsultation: () => void;
+  loadClinicalProcedures: (caseId: string, patientId?: string) => Promise<ClinicalProcedure[]>;
+  createClinicalProcedure: (caseId: string, proc: Partial<ClinicalProcedure>) => Promise<ClinicalProcedure>;
+  createClinicalSession: (caseId: string, procedureId: string, sessionData?: Partial<ClinicalSession>) => Promise<ClinicalSession>;
+  updateClinicalSession: (caseId: string, procedureId: string, sessionId: string, updates: Partial<ClinicalSession>) => Promise<void>;
+  createSubSection: (caseId: string, procedureId: string, sessionId: string, name?: string) => Promise<ClinicalSubSection>;
+  addClinicalImage: (caseId: string, procedureId: string, sessionId: string, image: ClinicalImage, subSectionId?: string) => Promise<void>;
+  updateClinicalImage: (caseId: string, imageId: string, patch: Partial<ClinicalImage>) => Promise<void>;
+  deleteClinicalImage: (caseId: string, imageId: string) => Promise<void>;
+  syncClinicalProcedures: (caseId: string, procedures: ClinicalProcedure[]) => Promise<void>;
+  refreshClinicalProcedures: (caseId: string) => Promise<void>;
+}
+
+export function getOrCreateConsultationSession(
+  sessions: Record<string, ConsultationSession>,
+  activeSession: ConsultationSession | null,
+  caseId: string,
+  patientId?: string
+): ConsultationSession {
+  if (sessions && sessions[caseId]) return sessions[caseId];
+  if (activeSession && activeSession.caseId === caseId) return activeSession;
+  return {
+    caseId,
+    patientId: patientId || '',
+    patientName: '',
+    mrdNumber: '',
+    doctorId: 'doc-1',
+    doctorName: 'Dr. Raj Valaki',
+    startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    complaints: {
+      presentComplaint: '',
+      durationYears: 0,
+      durationMonths: 0,
+      durationDays: 0,
+      severity: 'MILD',
+      onset: '',
+      aggravatingFactors: '',
+      relievingFactors: ''
+    },
+    vitals: {
+      temperature: '98.6',
+      pulse: '72',
+      bpSystolic: '120',
+      bpDiastolic: '80',
+      spo2: '98',
+      weight: '70',
+      height: '170'
+    },
+    history: {
+      pastMedical: '',
+      pastSurgical: '',
+      allergies: '',
+      currentMedications: ''
+    },
+    investigations: [],
+    prescriptions: [],
+    procedures: [],
+    images: [],
+    diagnosis: {
+      provisional: '',
+      differential: '',
+      finalDiagnosis: '',
+      treatmentPlan: '',
+      patientAdvice: ''
+    },
+    billing: {
+      consultationFee: 500,
+      discountPercent: 0,
+      isFoc: false
+    },
+    isFinalized: false
+  };
 }
 
 const INITIAL_SESSIONS: Record<string, ConsultationSession> = {};
@@ -1519,7 +1866,7 @@ export const useConsultationStore = create<ConsultationState>()(
             (item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx && item.id !== 'rx-demo-2'
           );
           const currentProcs = found.procedures || [];
-          const isLegacyProcs = currentProcs.length <= 1 && (
+          const isLegacyProcs = (caseId.startsWith('C003-') || caseId.startsWith('C005-')) && currentProcs.length <= 1 && (
             currentProcs.length === 0 ||
             currentProcs[0]?.sessionsCount?.includes('Session 1 of 6') ||
             currentProcs[0]?.sessionsCount === '1/6' ||
@@ -1543,15 +1890,21 @@ export const useConsultationStore = create<ConsultationState>()(
       },
 
       saveSession: (session: ConsultationSession) => {
+        const existingSession = get().sessions[session.caseId];
+        const mergedSession: ConsultationSession = {
+          ...session,
+          clinicalProcedures: session.clinicalProcedures || existingSession?.clinicalProcedures
+        };
         set(s => ({
-          activeSession: s.activeSession?.caseId === session.caseId ? session : s.activeSession,
-          sessions: { ...s.sessions, [session.caseId]: session }
+          activeSession: s.activeSession?.caseId === mergedSession.caseId ? mergedSession : s.activeSession,
+          sessions: { ...s.sessions, [mergedSession.caseId]: mergedSession }
         }));
         notifyTabSync('doctor-consultation');
       },
 
       initSession: (caseId, patient, doctor, initialData) => {
-        const existing = get().sessions[caseId];
+        const existing = get().sessions[caseId] || (get().activeSession?.caseId === caseId ? get().activeSession : null);
+        const existingClinicalProcedures = existing?.clinicalProcedures;
         if (existing) {
           const cleanProcedurePrescriptions = (existing.procedurePrescriptions || []).filter(
             (item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx
@@ -1567,12 +1920,13 @@ export const useConsultationStore = create<ConsultationState>()(
             currentProcs[0]?.procedureName?.includes('Diode Laser Hair Removal') ||
             !currentProcs[0]?.bodyPart
           );
-          const cleanProcedures = isLegacyProcs ? (initialData?.procedures?.length ? initialData.procedures : DEFAULT_TREATMENT_SESSIONS) : currentProcs;
+          const cleanProcedures = isLegacyProcs ? (initialData?.procedures !== undefined ? initialData.procedures : (caseId.startsWith('C003-') || caseId.startsWith('C005-') ? DEFAULT_TREATMENT_SESSIONS : [])) : currentProcs;
           const cleaned = {
             ...existing,
             procedurePrescriptions: cleanProcedurePrescriptions,
             prescriptions: cleanPrescriptions,
-            procedures: cleanProcedures
+            procedures: cleanProcedures,
+            clinicalProcedures: existingClinicalProcedures || existing.clinicalProcedures
           };
           set(s => ({
             activeSession: cleaned,
@@ -1623,7 +1977,8 @@ export const useConsultationStore = create<ConsultationState>()(
           investigations: initialData?.investigations || [],
           prescriptions: initialData?.prescriptions || [],
           procedurePrescriptions: initialData?.procedurePrescriptions || [],
-          procedures: initialData?.procedures && initialData.procedures.length > 0 ? initialData.procedures : DEFAULT_TREATMENT_SESSIONS,
+          procedures: initialData?.procedures !== undefined ? initialData.procedures : (caseId.startsWith('C003-') || caseId.startsWith('C005-') ? DEFAULT_TREATMENT_SESSIONS : []),
+          clinicalProcedures: existingClinicalProcedures,
           images: initialData?.images || [],
           diagnosis: initialData?.diagnosis || {
             provisional: '',
@@ -1833,11 +2188,37 @@ export const useConsultationStore = create<ConsultationState>()(
 
       updateProcedure: (id, updates) => set(s => {
         if (!s.activeSession) return s;
+        const procs = [...(s.activeSession.procedures || [])];
+        const targetIndex = procs.findIndex(p => p.id === id);
+        if (targetIndex === -1) return s;
+
+        const oldProc = procs[targetIndex];
+        const updatedProc = { ...oldProc, ...updates };
+        procs[targetIndex] = updatedProc;
+
+        // Auto-recalculate downstream scheduled dates if executed or marked Done
+        if (updates.status === 'Done' || updates.performanceDate) {
+          const perfDateStr = updates.performanceDate || oldProc.performanceDate || formatToDDMMYYYY(new Date());
+          let prevDate = perfDateStr;
+          for (let i = targetIndex + 1; i < procs.length; i++) {
+            if (procs[i].status !== 'Done') {
+              const interval = procs[i].intervalDays || 20;
+              const newSchedDate = addDaysToFormattedDate(prevDate, interval);
+              procs[i] = {
+                ...procs[i],
+                scheduledDate: newSchedDate,
+                remark: `Session ${i + 1} scheduled at ${interval}d interval.`
+              };
+              prevDate = newSchedDate;
+            } else {
+              prevDate = procs[i].performanceDate || procs[i].scheduledDate;
+            }
+          }
+        }
+
         const updated = {
           ...s.activeSession,
-          procedures: (s.activeSession.procedures || []).map(p =>
-            p.id === id ? { ...p, ...updates } : p
-          )
+          procedures: procs
         };
         return {
           activeSession: updated,
@@ -1854,6 +2235,154 @@ export const useConsultationStore = create<ConsultationState>()(
         return {
           activeSession: updated,
           sessions: { ...s.sessions, [updated.caseId]: updated }
+        };
+      }),
+
+      generateProtocolSchedule: (caseId, protocol) => set(s => {
+        const count = Math.max(1, Number(protocol.totalSessions) || 1);
+        const interval = Math.max(1, Number(protocol.intervalDays) || 20);
+        const startParsed = parseAnyDate(protocol.startDate || '2026-03-25');
+        let currDate = formatToDDMMYYYY(startParsed);
+        const afterPrice = Number(protocol.afterDiscountPrice) || Number(protocol.total) || 9000;
+        const rate = Number(protocol.ratePerSession) || Math.round(afterPrice / count);
+
+        const newProcedures: ProcedureExecutionItem[] = [];
+        for (let i = 1; i <= count; i++) {
+          const isFirst = i === 1;
+          newProcedures.push({
+            id: `proc-${caseId}-${i}-${Date.now().toString(36)}`,
+            caseId,
+            patientId: protocol.patientId,
+            procedureName: protocol.procedureName || 'HAIR REMOVAL - DIODE',
+            scheduledDate: currDate,
+            performanceDate: isFirst ? currDate : '',
+            sessionsCount: `${i}/${count}`,
+            sessionNumber: i,
+            totalSessions: count,
+            therapist: protocol.therapist || 'Dr Valaki',
+            bodyPart: protocol.bodyPart || 'FACE',
+            intervalDays: interval,
+            status: isFirst ? 'Done' : 'Pending',
+            paymentStatus: isFirst ? 'Done' : 'Pending',
+            rate,
+            price: rate,
+            skinType: '2',
+            unit: '0',
+            power: '10',
+            waveLength: '100 hz',
+            pulseDuration: '10',
+            spotSize: '2.2',
+            pulseImpulse: '25',
+            thickness: '10',
+            density: '.5',
+            dotDensity: '10',
+            shotsFired: isFirst ? '100' : '0',
+            remark: isFirst ? 'Session 1 executed with good clinical response.' : `Session ${i} scheduled at ${interval}d interval.`
+          });
+          currDate = addDaysToFormattedDate(currDate, interval);
+        }
+
+        const existing = s.sessions[caseId] || s.activeSession;
+        if (!existing) return s;
+
+        const updatedSession = {
+          ...existing,
+          treatmentProtocol: protocol,
+          procedures: newProcedures
+        };
+
+        notifyTabSync('treatment-protocol');
+        notifyTabSync('doctor-consultation');
+
+        return {
+          activeSession: s.activeSession?.caseId === caseId ? updatedSession : s.activeSession,
+          sessions: { ...s.sessions, [caseId]: updatedSession }
+        };
+      }),
+
+      updateSessionProcedure: (caseId, procedureId, updates) => set(s => {
+        const targetSession = s.sessions[caseId] || (s.activeSession?.caseId === caseId ? s.activeSession : null);
+        if (!targetSession) return s;
+
+        const procs = [...(targetSession.procedures || [])];
+        const targetIndex = procs.findIndex(p => p.id === procedureId);
+        if (targetIndex === -1) return s;
+
+        const oldProc = procs[targetIndex];
+        const updatedProc = { ...oldProc, ...updates };
+        procs[targetIndex] = updatedProc;
+
+        // Auto-recalculate downstream scheduled dates if executed or marked Done
+        if (updates.status === 'Done' || updates.performanceDate) {
+          const perfDateStr = updates.performanceDate || oldProc.performanceDate || formatToDDMMYYYY(new Date());
+          let prevDate = perfDateStr;
+          for (let i = targetIndex + 1; i < procs.length; i++) {
+            if (procs[i].status !== 'Done') {
+              const interval = procs[i].intervalDays || 20;
+              const newSchedDate = addDaysToFormattedDate(prevDate, interval);
+              procs[i] = {
+                ...procs[i],
+                scheduledDate: newSchedDate,
+                remark: `Session ${i + 1} scheduled at ${interval}d interval.`
+              };
+              prevDate = newSchedDate;
+            } else {
+              prevDate = procs[i].performanceDate || procs[i].scheduledDate;
+            }
+          }
+        }
+
+        const updatedSession = {
+          ...targetSession,
+          procedures: procs
+        };
+
+        notifyTabSync('treatment-protocol');
+        notifyTabSync('doctor-consultation');
+
+        return {
+          activeSession: s.activeSession?.caseId === caseId ? updatedSession : s.activeSession,
+          sessions: { ...s.sessions, [caseId]: updatedSession }
+        };
+      }),
+
+      delayProtocolSession: (caseId, procedureId, delayDays = 12, reason) => set(s => {
+        const targetSession = s.sessions[caseId] || (s.activeSession?.caseId === caseId ? s.activeSession : null);
+        if (!targetSession) return s;
+
+        const procs = [...(targetSession.procedures || [])];
+        const targetIndex = procs.findIndex(p => p.id === procedureId);
+        if (targetIndex === -1) return s;
+
+        const target = procs[targetIndex];
+        const oldDate = target.scheduledDate;
+        const newTargetDate = addDaysToFormattedDate(oldDate, delayDays);
+
+        procs[targetIndex] = {
+          ...target,
+          status: 'Delayed',
+          scheduledDate: newTargetDate,
+          remark: reason || `Delayed by +${delayDays} days (Shifted from ${oldDate})`
+        };
+
+        for (let i = targetIndex + 1; i < procs.length; i++) {
+          procs[i] = {
+            ...procs[i],
+            scheduledDate: addDaysToFormattedDate(procs[i].scheduledDate, delayDays)
+          };
+        }
+
+        const updatedSession = {
+          ...targetSession,
+          procedures: procs
+        };
+
+        notifyTabSync('treatment-protocol');
+        notifyTabSync('doctor-consultation');
+
+        return {
+          activeSession: s.activeSession?.caseId === caseId ? updatedSession : s.activeSession,
+          sessions: { ...s.sessions, [caseId]: updatedSession }
         };
       }),
 
@@ -1905,10 +2434,706 @@ export const useConsultationStore = create<ConsultationState>()(
           sessions: { ...s.sessions, [updated.caseId]: updated }
         };
       }),
+
+      loadClinicalProcedures: async (caseId: string, patientId?: string) => {
+        const existingSession = get().sessions[caseId] || (get().activeSession?.caseId === caseId ? get().activeSession : null);
+        let currentProcs: ClinicalProcedure[] = existingSession?.clinicalProcedures || [];
+
+        const localKey = `medflow_proc_${caseId}`;
+        if (currentProcs.length === 0 && typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem(localKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                currentProcs = parsed;
+              }
+            }
+          } catch {}
+        }
+
+        try {
+          const res = await fetch(`/api/consultation/${caseId}/clinical-procedures`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.procedures && Array.isArray(data.procedures) && data.procedures.length > 0) {
+              currentProcs = data.procedures;
+            }
+          }
+        } catch (err) {
+          console.warn('Backend clinical-procedures fetch failed, fallback to local/cached:', err);
+        }
+
+        // Normalize procedure and session structures
+        const normalized: ClinicalProcedure[] = (currentProcs || []).map(proc => ({
+          ...proc,
+          patientId: proc.patientId || patientId || existingSession?.patientId || '',
+          sessions: (proc.sessions || []).map((sess, sIdx) => {
+            let beforeList: ClinicalImage[] = sess.beforeImages || [];
+            let afterList: ClinicalImage[] = sess.afterImages || [];
+            let subSecList: ClinicalSubSection[] = sess.subSections || [];
+
+            if (sess.sections && Array.isArray(sess.sections)) {
+              sess.sections.forEach((sec: any) => {
+                if (sec.beforeImages && Array.isArray(sec.beforeImages)) {
+                  sec.beforeImages.forEach((img: ClinicalImage) => {
+                    if (!beforeList.some(b => b.id === img.id)) beforeList.push(img);
+                  });
+                }
+                if (sec.afterImages && Array.isArray(sec.afterImages)) {
+                  sec.afterImages.forEach((img: ClinicalImage) => {
+                    if (!afterList.some(a => a.id === img.id)) afterList.push(img);
+                  });
+                }
+                if (sec.subSections && Array.isArray(sec.subSections)) {
+                  sec.subSections.forEach((sub: ClinicalSubSection) => {
+                    if (!subSecList.some(sb => sb.id === sub.id)) subSecList.push(sub);
+                  });
+                }
+              });
+            }
+
+            return {
+              ...sess,
+              procedureId: proc.id,
+              sessionNumber: sess.sessionNumber || (sIdx + 1),
+              date: sess.date || formatToDDMMYYYY(new Date()),
+              status: sess.status || 'Pending',
+              beforeImages: beforeList,
+              afterImages: afterList,
+              subSections: subSecList.map(sub => ({
+                ...sub,
+                images: sub.images || []
+              }))
+            };
+          })
+        }));
+
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId, patientId);
+          const updated = {
+            ...target,
+            clinicalProcedures: normalized
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        safeSaveProceduresCache(caseId, normalized);
+
+        return normalized;
+      },
+
+      createClinicalProcedure: async (caseId: string, procData: Partial<ClinicalProcedure>) => {
+        const existingSession = get().sessions[caseId] || (get().activeSession?.caseId === caseId ? get().activeSession : null);
+        const procId = procData.id || `proc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const todayDate = procData.createdAt || formatToDDMMYYYY(new Date());
+
+        const initialSessionId = `sess-${procId}-1`;
+        const initialSession: ClinicalSession = {
+          id: initialSessionId,
+          procedureId: procId,
+          sessionNumber: 1,
+          date: todayDate,
+          therapist: procData.therapist || 'Dr Valaki',
+          bodyPart: procData.bodyPart || 'CLINICAL SITE',
+          doctorObservation: 'Clinical protocol initiated.',
+          efficacy: '',
+          status: 'Done',
+          beforeImages: [],
+          afterImages: [],
+          subSections: [],
+          sections: []
+        };
+
+        const newProc: ClinicalProcedure = {
+          id: procId,
+          patientId: procData.patientId || existingSession?.patientId || '',
+          name: procData.name?.trim() || 'General Clinical Treatment',
+          category: procData.category || 'Laser Therapy',
+          createdAt: todayDate,
+          therapist: procData.therapist || 'Dr Valaki',
+          bodyPart: procData.bodyPart || 'CLINICAL SITE',
+          doctorObservation: procData.doctorObservation || '',
+          sessions: procData.sessions && procData.sessions.length > 0 ? procData.sessions : [initialSession]
+        };
+
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId, procData.patientId);
+          const existingList = target.clinicalProcedures || [];
+          const updatedList = [newProc, ...existingList.filter(p => p.id !== procId)];
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedList
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        // Persist to backend
+        try {
+          await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add_procedure', procedure: newProc, id: procId, name: newProc.name, date: todayDate })
+          });
+        } catch (err) {
+          console.warn('Server procedure creation warning:', err);
+        }
+
+        safeSaveProceduresCache(caseId, get().sessions[caseId]?.clinicalProcedures || [newProc]);
+
+        notifyTabSync('doctor-consultation');
+        return newProc;
+      },
+
+      createClinicalSession: async (caseId: string, procedureId: string, sessionData?: Partial<ClinicalSession>) => {
+        const state = get();
+        const existingSession = getOrCreateConsultationSession(state.sessions, state.activeSession, caseId);
+
+        const currentProcs = existingSession.clinicalProcedures || [];
+        let procIndex = currentProcs.findIndex(p => p.id === procedureId || p.name.toLowerCase() === procedureId.toLowerCase());
+        
+        let targetProc: ClinicalProcedure;
+        if (procIndex === -1) {
+          // If not found in clinicalProcedures, create it dynamically
+          targetProc = await state.createClinicalProcedure(caseId, {
+            id: procedureId,
+            name: procedureId.startsWith('proc-') ? 'General Clinical Procedure' : procedureId,
+            therapist: sessionData?.therapist || 'Dr Valaki',
+            bodyPart: sessionData?.bodyPart || 'FACE'
+          });
+          procIndex = 0;
+        } else {
+          targetProc = currentProcs[procIndex];
+        }
+
+        const nextNum = Math.max(
+          (targetProc.sessions || []).length,
+          (existingSession.procedures || []).length
+        ) + 1;
+
+        const sessionId = sessionData?.id || `sess-${targetProc.id}-${nextNum}-${Date.now().toString(36)}`;
+        const sessionDate = sessionData?.date || formatToDDMMYYYY(new Date());
+
+        const newSession: ClinicalSession = {
+          id: sessionId,
+          procedureId: targetProc.id,
+          sessionNumber: nextNum,
+          date: sessionDate,
+          therapist: sessionData?.therapist || targetProc.therapist || 'Dr Valaki',
+          bodyPart: sessionData?.bodyPart || targetProc.bodyPart || 'FACE',
+          doctorObservation: sessionData?.doctorObservation || '',
+          efficacy: sessionData?.efficacy || '',
+          status: sessionData?.status || 'Pending',
+          beforeImages: sessionData?.beforeImages || [],
+          afterImages: sessionData?.afterImages || [],
+          subSections: sessionData?.subSections || [],
+          sections: []
+        };
+
+        // Matching Tab 4 ProcedureExecutionItem
+        const newExecutionItem: ProcedureExecutionItem = {
+          id: sessionId,
+          procedureId: targetProc.id,
+          caseId,
+          patientId: existingSession.patientId,
+          procedureName: targetProc.name,
+          scheduledDate: sessionDate,
+          performanceDate: newSession.status === 'Done' ? sessionDate : '',
+          sessionNumber: nextNum,
+          totalSessions: nextNum,
+          sessionsCount: `${nextNum}/${nextNum}`,
+          therapist: newSession.therapist,
+          bodyPart: newSession.bodyPart,
+          status: (newSession.status as any) || 'Pending',
+          paymentStatus: newSession.status === 'Done' ? 'Done' : 'Pending',
+          price: 2000,
+          rate: 2000,
+          remark: `Session ${nextNum} scheduled/recorded.`
+        };
+
+        // Snapshot for rollback in case server fails
+        const previousSessionSnapshot = { ...existingSession };
+
+        // Optimistic store update
+        const latestProcs = state.sessions[caseId]?.clinicalProcedures || currentProcs;
+        const targetIdx = latestProcs.findIndex(p => p.id === targetProc.id);
+        const updatedProcs = [...latestProcs];
+        const updatedSessions = [...(targetProc.sessions || []), newSession];
+        if (targetIdx >= 0) {
+          updatedProcs[targetIdx] = {
+            ...targetProc,
+            sessions: updatedSessions
+          };
+        }
+
+        const existingTab4Procs = existingSession.procedures || [];
+        const updatedTab4Procs = [...existingTab4Procs.filter(p => p.id !== sessionId), newExecutionItem];
+        const updatedProtocol: TreatmentProtocol = {
+          ...(existingSession.treatmentProtocol || DEFAULT_TREATMENT_PROTOCOL),
+          totalSessions: Math.max(existingSession.treatmentProtocol?.totalSessions || 0, nextNum)
+        };
+
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId, existingSession.patientId);
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedProcs,
+            procedures: updatedTab4Procs,
+            treatmentProtocol: updatedProtocol
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        // Persist to backend REST API
+        try {
+          const res = await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'add_session',
+              procedureId: targetProc.id,
+              sessionId,
+              sessionNumber: nextNum,
+              date: sessionDate,
+              therapist: newSession.therapist,
+              bodyPart: newSession.bodyPart,
+              session: newSession
+            })
+          });
+
+          if (!res.ok) {
+            throw new Error(`Server returned status ${res.status}`);
+          }
+        } catch (err: any) {
+          // Rollback on server error
+          set(s => ({
+            activeSession: s.activeSession?.caseId === caseId ? previousSessionSnapshot : s.activeSession,
+            sessions: { ...s.sessions, [caseId]: previousSessionSnapshot }
+          }));
+          throw err;
+        }
+
+        safeSaveProceduresCache(caseId, updatedProcs);
+
+        notifyTabSync('doctor-consultation');
+        notifyTabSync('treatment-protocol');
+        return newSession;
+      },
+
+      updateClinicalSession: async (caseId: string, procedureId: string, sessionId: string, updates: Partial<ClinicalSession>) => {
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+          const procs = target.clinicalProcedures || [];
+          const sessionNumMatch = sessionId.match(/\d+/);
+          const targetNum = sessionNumMatch ? parseInt(sessionNumMatch[0], 10) : null;
+
+          const updatedProcs = procs.map(proc => {
+            if (proc.id !== procedureId && proc.name.toLowerCase() !== procedureId.toLowerCase()) return proc;
+            return {
+              ...proc,
+              sessions: proc.sessions.map((sess, idx) => {
+                const isMatch = sess.id === sessionId ||
+                  (targetNum !== null && sess.sessionNumber === targetNum) ||
+                  (targetNum !== null && idx + 1 === targetNum);
+                if (!isMatch) return sess;
+                return { ...sess, ...updates };
+              })
+            };
+          });
+
+          // Also update matching Tab 4 procedure execution item
+          const tab4Procs = (target.procedures || []).map((p, idx) => {
+            const isMatch = p.id === sessionId ||
+              (targetNum !== null && p.sessionNumber === targetNum) ||
+              (targetNum !== null && idx + 1 === targetNum);
+            if (!isMatch) return p;
+            return {
+              ...p,
+              ...(updates.date ? { scheduledDate: updates.date, performanceDate: updates.date } : {}),
+              ...(updates.status ? { status: updates.status as any } : {}),
+              ...(updates.therapist ? { therapist: updates.therapist } : {}),
+              ...(updates.bodyPart ? { bodyPart: updates.bodyPart } : {}),
+              ...(updates.doctorObservation ? { remark: updates.doctorObservation } : {})
+            };
+          });
+
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedProcs,
+            procedures: tab4Procs
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        try {
+          await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update_session',
+              procedureId,
+              sessionId,
+              updates
+            })
+          });
+        } catch (err) {
+          console.warn('Update session persistence warning:', err);
+        }
+
+        const list = get().sessions[caseId]?.clinicalProcedures || [];
+        safeSaveProceduresCache(caseId, list);
+
+        notifyTabSync('doctor-consultation');
+        notifyTabSync('treatment-protocol');
+      },
+
+      createSubSection: async (caseId: string, procedureId: string, sessionId: string, name?: string) => {
+        const state = get();
+        const existingSession = getOrCreateConsultationSession(state.sessions, state.activeSession, caseId);
+
+        const currentProcs = existingSession.clinicalProcedures || [];
+        const procIndex = currentProcs.findIndex(p => p.id === procedureId || p.name.toLowerCase() === procedureId.toLowerCase());
+        if (procIndex === -1) throw new Error(`Procedure ${procedureId} not found.`);
+
+        const targetProc = currentProcs[procIndex];
+        const sessIndex = targetProc.sessions.findIndex(s => s.id === sessionId);
+        if (sessIndex === -1) throw new Error(`Session ${sessionId} not found.`);
+
+        const targetSess = targetProc.sessions[sessIndex];
+        const subCount = (targetSess.subSections || []).length + 1;
+        const subSecId = `subsec-${sessionId}-${subCount}-${Date.now().toString(36)}`;
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = formatToDDMMYYYY(now);
+
+        const newSub: ClinicalSubSection = {
+          id: subSecId,
+          sessionId: targetSess.id,
+          name: name || `Session ${targetSess.sessionNumber} — Sub-section ${subCount}`,
+          procedureName: targetProc.name,
+          date: targetSess.date,
+          createdAt: `${dateStr} ${timeStr}`,
+          images: []
+        };
+
+        const updatedProcs = [...currentProcs];
+        const updatedSessions = [...targetProc.sessions];
+        updatedSessions[sessIndex] = {
+          ...targetSess,
+          subSections: [...(targetSess.subSections || []), newSub]
+        };
+        updatedProcs[procIndex] = {
+          ...targetProc,
+          sessions: updatedSessions
+        };
+
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedProcs
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        try {
+          await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'add_subsection',
+              procedureId: targetProc.id,
+              sessionId: targetSess.id,
+              sectionId: `sec-${targetSess.id}-1`,
+              name: newSub.name
+            })
+          });
+        } catch (err) {
+          console.warn('Subsection persistence warning:', err);
+        }
+
+        safeSaveProceduresCache(caseId, updatedProcs);
+
+        notifyTabSync('doctor-consultation');
+        return newSub;
+      },
+
+      addClinicalImage: async (caseId: string, procedureId: string, sessionId: string, image: ClinicalImage, subSectionId?: string) => {
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+          const procs = target.clinicalProcedures || [];
+          const updatedProcs = procs.map(proc => {
+            if (proc.id !== procedureId && proc.name.toLowerCase() !== procedureId.toLowerCase()) return proc;
+            return {
+              ...proc,
+              sessions: proc.sessions.map(sess => {
+                if (sess.id !== sessionId) return sess;
+                if (subSectionId && subSectionId !== 'main') {
+                  return {
+                    ...sess,
+                    subSections: sess.subSections.map(sub => {
+                      if (sub.id !== subSectionId) return sub;
+                      return {
+                        ...sub,
+                        images: [image, ...(sub.images || []).filter(i => i.id !== image.id)]
+                      };
+                    })
+                  };
+                } else if (image.type === 'BEFORE') {
+                  return {
+                    ...sess,
+                    beforeImages: [image, ...(sess.beforeImages || []).filter(i => i.id !== image.id)]
+                  };
+                } else {
+                  return {
+                    ...sess,
+                    afterImages: [image, ...(sess.afterImages || []).filter(i => i.id !== image.id)]
+                  };
+                }
+              })
+            };
+          });
+
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedProcs
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        try {
+          const res = await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'append_image',
+              procedureId,
+              sessionId,
+              sectionId: `sec-${sessionId}-1`,
+              subSectionId: subSectionId || 'main',
+              targetType: image.type,
+              image
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.procedures && Array.isArray(data.procedures)) {
+              set(s => {
+                const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+                const updated = { ...target, clinicalProcedures: data.procedures };
+                return {
+                  activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+                  sessions: { ...s.sessions, [caseId]: updated }
+                };
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Image persistence warning:', err);
+        }
+
+        const list = get().sessions[caseId]?.clinicalProcedures || [];
+        safeSaveProceduresCache(caseId, list);
+
+        notifyTabSync('doctor-consultation');
+      },
+
+      updateClinicalImage: async (caseId: string, imageId: string, patch: Partial<ClinicalImage>) => {
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+          const procs = target.clinicalProcedures || [];
+          const updatedProcs = procs.map(proc => ({
+            ...proc,
+            sessions: proc.sessions.map(sess => ({
+              ...sess,
+              beforeImages: sess.beforeImages.map(img => img.id === imageId ? { ...img, ...patch } : img),
+              afterImages: sess.afterImages.map(img => img.id === imageId ? { ...img, ...patch } : img),
+              subSections: sess.subSections.map(sub => ({
+                ...sub,
+                images: sub.images.map(img => img.id === imageId ? { ...img, ...patch } : img)
+              }))
+            }))
+          }));
+
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedProcs
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        try {
+          await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save_image_edit', imageId, patch })
+          });
+        } catch (err) {}
+
+        const list = get().sessions[caseId]?.clinicalProcedures || [];
+        safeSaveProceduresCache(caseId, list);
+
+        notifyTabSync('doctor-consultation');
+      },
+
+      deleteClinicalImage: async (caseId: string, imageId: string) => {
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+          const procs = target.clinicalProcedures || [];
+          const updatedProcs = procs.map(proc => ({
+            ...proc,
+            sessions: proc.sessions.map(sess => ({
+              ...sess,
+              beforeImages: sess.beforeImages.filter(img => img.id !== imageId),
+              afterImages: sess.afterImages.filter(img => img.id !== imageId),
+              subSections: sess.subSections.map(sub => ({
+                ...sub,
+                images: sub.images.filter(img => img.id !== imageId)
+              }))
+            }))
+          }));
+
+          const updated = {
+            ...target,
+            clinicalProcedures: updatedProcs
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        try {
+          await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete_image', imageId })
+          });
+        } catch (err) {}
+
+        const list = get().sessions[caseId]?.clinicalProcedures || [];
+        safeSaveProceduresCache(caseId, list);
+
+        notifyTabSync('doctor-consultation');
+      },
+
+      syncClinicalProcedures: async (caseId: string, procedures: ClinicalProcedure[]) => {
+        set(s => {
+          const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+          const updated = {
+            ...target,
+            clinicalProcedures: procedures
+          };
+          return {
+            activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+            sessions: { ...s.sessions, [caseId]: updated }
+          };
+        });
+
+        try {
+          const res = await fetch(`/api/consultation/${caseId}/clinical-procedures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'sync_all', procedures })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.procedures && Array.isArray(data.procedures)) {
+              set(s => {
+                const target = getOrCreateConsultationSession(s.sessions, s.activeSession, caseId);
+                const updated = { ...target, clinicalProcedures: data.procedures };
+                return {
+                  activeSession: s.activeSession?.caseId === caseId ? updated : (s.activeSession || updated),
+                  sessions: { ...s.sessions, [caseId]: updated }
+                };
+              });
+            }
+          }
+        } catch {}
+
+        safeSaveProceduresCache(caseId, procedures);
+        notifyTabSync('doctor-consultation');
+      },
+
+      refreshClinicalProcedures: async (caseId: string) => {
+        try {
+          const res = await fetch(`/api/consultation/${caseId}/clinical-procedures`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.procedures && Array.isArray(data.procedures)) {
+              get().syncClinicalProcedures(caseId, data.procedures);
+            }
+          }
+        } catch {}
+      },
     }),
     {
       name: 'doctor-consultation',
       storage: safeStorage,
+      merge: (persistedState: any, currentState: any) => {
+        if (!persistedState) return currentState;
+        const mergedSessions: Record<string, ConsultationSession> = {
+          ...(currentState?.sessions || {})
+        };
+        if (persistedState?.sessions) {
+          for (const [caseId, pSess] of Object.entries(persistedState.sessions as Record<string, any>)) {
+            const currentProcs = currentState?.sessions?.[caseId]?.clinicalProcedures;
+            mergedSessions[caseId] = {
+              ...pSess,
+              clinicalProcedures: (currentProcs && currentProcs.length > 0) ? currentProcs : pSess.clinicalProcedures
+            };
+          }
+        }
+        const currentActiveProcs = currentState?.activeSession?.clinicalProcedures;
+        return {
+          ...currentState,
+          ...persistedState,
+          sessions: mergedSessions,
+          activeSession: persistedState.activeSession ? {
+            ...persistedState.activeSession,
+            clinicalProcedures: (currentActiveProcs && currentActiveProcs.length > 0) ? currentActiveProcs : persistedState.activeSession.clinicalProcedures
+          } : currentState.activeSession
+        };
+      },
+      partialize: (state) => {
+        // Exclude heavy clinicalProcedures from localStorage since they are canonically stored on the REST API
+        const strippedSessions: Record<string, ConsultationSession> = {};
+        for (const [k, v] of Object.entries(state.sessions || {})) {
+          const { clinicalProcedures, ...rest } = v;
+          strippedSessions[k] = rest as ConsultationSession;
+        }
+        let strippedActiveSession = state.activeSession;
+        if (strippedActiveSession) {
+          const { clinicalProcedures, ...rest } = strippedActiveSession;
+          strippedActiveSession = rest as ConsultationSession;
+        }
+        return {
+          ...state,
+          sessions: strippedSessions,
+          activeSession: strippedActiveSession
+        };
+      }
     }
   )
 );
@@ -2916,6 +4141,7 @@ if (typeof window !== 'undefined') {
     try {
       const bc = new BroadcastChannel('doctor_medflow_sync');
       bc.onmessage = (e) => {
+        if (e.data?.tabId === CURRENT_TAB_ID) return;
         if (e.data?.key) syncStore(e.data.key);
       };
     } catch {}

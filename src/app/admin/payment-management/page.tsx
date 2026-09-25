@@ -31,7 +31,7 @@ export default function AdminPaymentManagementPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1560, margin: '0 auto', padding: '24px 20px' }}>
+    <div style={{ width: '100%', padding: '24px 20px' }}>
       
       {/* Header Banner */}
       <div style={{ marginBottom: 24 }}>

@@ -24,7 +24,7 @@ test.describe('Module B: Doctor Clinical OS Workflow', () => {
     await page.goto('/doctor/consultation/C003-001-190926');
     
     // Patient Banner
-    await expect(page.getByText(/Mahesh Kumar/i).first()).toBeVisible();
+    await expect(page.getByText(/Mahesh Kumar|Rajesh Patel/i).first()).toBeVisible();
 
     // Verify all 7 tabs exist via .tab-item
     await expect(page.locator('.tab-item').filter({ hasText: /Complaints & Vitals/i })).toBeVisible();

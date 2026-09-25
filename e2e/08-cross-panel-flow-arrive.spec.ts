@@ -33,11 +33,11 @@ test.describe('Cross-Panel Real-Time Flow and "Arrived" Actions Verification', (
     await page.waitForURL('**/doctor/dashboard');
 
     // 7. Verify the patient is immediately visible in Doctor Cockpit Waiting list!
-    await expect(page.locator(`text=${uniqueFirstName} ${uniqueLastName}`)).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(`text=${uniqueFirstName} ${uniqueLastName}`).first()).toBeVisible({ timeout: 5000 });
 
     // 8. Go to Doctor Queue page and verify presence as well
     await page.goto('/doctor/queue');
-    await expect(page.locator(`text=${uniqueFirstName} ${uniqueLastName}`)).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(`text=${uniqueFirstName} ${uniqueLastName}`).first()).toBeVisible({ timeout: 5000 });
 
     // 9. Verify Doctor can call the newly created patient
     const patientRow = page.locator('tr').filter({ hasText: uniqueFirstName });
@@ -104,7 +104,7 @@ test.describe('Cross-Panel Real-Time Flow and "Arrived" Actions Verification', (
 
     // Verify redirected to Doctor Cockpit
     await page.waitForURL('**/doctor/dashboard');
-    await expect(page.locator('text=Mahesh Kumar')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=Mahesh Kumar').first()).toBeVisible({ timeout: 5000 });
   });
 
 });

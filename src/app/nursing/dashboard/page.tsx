@@ -99,7 +99,7 @@ export default function NursingDashboardPage() {
   const emergencyPatient = queue.find(q => q.priority === 'EMERGENCY' && q.status !== 'COMPLETED');
 
   return (
-    <div className="page-container" style={{ maxWidth: 1560, margin: '0 auto', padding: '24px 20px' }}>
+    <div className="page-container" style={{ width: '100%', padding: '24px 20px' }}>
       {/* Critical Emergency Triage Alert Bar */}
       {emergencyPatient && (
         <div style={{

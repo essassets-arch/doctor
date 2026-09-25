@@ -1,0 +1,440 @@
+[
+  {
+    "id": "proc-demo-1",
+    "name": "Hair Removal",
+    "category": "Laser Therapy",
+    "createdAt": "24/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "doctorObservation": "Fitzpatrick Type II. Good response to Diode 808nm laser. Marked reduction in chin and cheek coarse terminal hairs. Mild transient erythema resolved within 2 hours. Strict SPF 50+ prescribed.",
+    "sessions": [
+      {
+        "id": "sess-1",
+        "sessionNumber": 1,
+        "date": "10/04/2026",
+        "activeSectionId": "sec-1",
+        "isExpanded": true,
+        "sections": [
+          {
+            "id": "sec-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-1-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "10/04/2026",
+                "time": "03:42 PM",
+                "fileName": "Chin_Lateral_Before.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "CAMERA",
+                "notes": "Baseline follicular prominence prior to laser pulse",
+                "createdAt": "2026-04-10T15:42:00.000Z",
+                "displayCapturedAt": "10/04/2026 03:42 PM"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-1-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "10/04/2026",
+                "time": "04:15 PM",
+                "fileName": "Chin_Lateral_After_S1.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "CAMERA",
+                "notes": "Immediate post-treatment perifollicular response and 85% clearance",
+                "createdAt": "2026-04-10T16:15:00.000Z",
+                "displayCapturedAt": "10/04/2026 04:15 PM"
+              }
+            ],
+            "subSections": [
+              {
+                "id": "subsec-1",
+                "name": "Sub-Section 1 (Perioral Angle)",
+                "createdAt": "10/04/2026 03:54 PM",
+                "images": [
+                  {
+                    "id": "img-1-sub-1",
+                    "url": "/samples/lesion-before.jpg",
+                    "type": "OTHER",
+                    "date": "10/04/2026",
+                    "time": "03:54 PM",
+                    "fileName": "Perioral_HighMag.jpg",
+                    "fileType": "image/jpeg",
+                    "fileSize": "672 KB",
+                    "source": "DERMASCOPE",
+                    "notes": "Micro-evaluation of upper lip follicle density",
+                    "createdAt": "2026-04-10T15:54:00.000Z",
+                    "displayCapturedAt": "10/04/2026 03:54 PM"
+                  }
+                ]
+              }
+            ],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-2",
+            "name": "Section 2",
+            "beforeImages": [
+              {
+                "id": "img-2-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "10/04/2026",
+                "time": "03:48 PM",
+                "fileName": "Left_Cheek_Before.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "UPLOAD",
+                "notes": "Left malar zone pre-procedure",
+                "createdAt": "2026-04-10T15:48:00.000Z",
+                "displayCapturedAt": "10/04/2026 03:48 PM"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-2-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "10/04/2026",
+                "time": "04:20 PM",
+                "fileName": "Left_Cheek_After.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "UPLOAD",
+                "notes": "Smooth skin texture post cooling",
+                "createdAt": "2026-04-10T16:20:00.000Z",
+                "displayCapturedAt": "10/04/2026 04:20 PM"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-2",
+        "sessionNumber": 2,
+        "date": "25/04/2026",
+        "activeSectionId": "sec-2-1",
+        "isExpanded": false,
+        "sections": [
+          {
+            "id": "sec-2-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-sess2-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "25/04/2026",
+                "time": "11:00 AM",
+                "fileName": "Session2_PreTreatment.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "CAMERA",
+                "notes": "Maintenance session baseline"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-sess2-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "25/04/2026",
+                "time": "11:35 AM",
+                "fileName": "Session2_PostTreatment.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "CAMERA",
+                "notes": "Excellent follicular reduction"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-2-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-2-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-2-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-2-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      },
+      {
+        "id": "sess-3",
+        "sessionNumber": 3,
+        "date": "10/05/2026",
+        "activeSectionId": "sec-3-1",
+        "isExpanded": false,
+        "sections": [
+          {
+            "id": "sec-3-1",
+            "name": "Section 1",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-3-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-3-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-3-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-3-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proc-demo-2",
+    "name": "PRP (Platelet-Rich Plasma) Therapy",
+    "category": "Aesthetic / Regenerative",
+    "createdAt": "18/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "SCALP",
+    "doctorObservation": "Targeting vertex & crown miniaturized follicles. GFC autologous activation. 3 sessions planned at 3-week intervals.",
+    "sessions": [
+      {
+        "id": "sess-prp-1",
+        "sessionNumber": 1,
+        "date": "18/09/2026",
+        "activeSectionId": "sec-prp-1",
+        "isExpanded": true,
+        "sections": [
+          {
+            "id": "sec-prp-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-prp-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "18/09/2026",
+                "time": "10:15 AM",
+                "fileName": "Scalp_Vertex_PrePRP.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "CAMERA",
+                "notes": "Trichoscopy shows 35% telogen hair shift in mid-scalp"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-prp-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "18/09/2026",
+                "time": "10:55 AM",
+                "fileName": "Scalp_Vertex_PostPRP.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "CAMERA",
+                "notes": "Immediate post micro-needling activation"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-prp-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-prp-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-prp-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-prp-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proc-demo-3",
+    "name": "Chemical Peeling & Resurfacing",
+    "category": "Cosmetology",
+    "createdAt": "12/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "doctorObservation": "Salicylic-Mandelic combination peel 20%. Target active comedones and post-inflammatory hyperpigmentation.",
+    "sessions": [
+      {
+        "id": "sess-peel-1",
+        "sessionNumber": 1,
+        "date": "12/09/2026",
+        "activeSectionId": "sec-peel-1",
+        "isExpanded": false,
+        "sections": [
+          {
+            "id": "sec-peel-1",
+            "name": "Section 1",
+            "beforeImages": [
+              {
+                "id": "img-peel-1",
+                "url": "/samples/lesion-before.jpg",
+                "type": "BEFORE",
+                "date": "12/09/2026",
+                "time": "02:30 PM",
+                "fileName": "Peeling_Baseline.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "672 KB",
+                "source": "UPLOAD",
+                "notes": "Malar pigmentary patches"
+              }
+            ],
+            "afterImages": [
+              {
+                "id": "img-peel-2",
+                "url": "/samples/lesion-after.jpg",
+                "type": "AFTER",
+                "date": "12/09/2026",
+                "time": "03:10 PM",
+                "fileName": "Peeling_Post_Frosting.jpg",
+                "fileType": "image/jpeg",
+                "fileSize": "750 KB",
+                "source": "UPLOAD",
+                "notes": "Uniform endpoint mild erythema achieved"
+              }
+            ],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-2",
+            "name": "Section 2",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-3",
+            "name": "Section 3",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-4",
+            "name": "Section 4",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          },
+          {
+            "id": "sec-peel-5",
+            "name": "Section 5",
+            "beforeImages": [],
+            "afterImages": [],
+            "subSections": [],
+            "activeSubSectionId": "main"
+          }
+        ]
+      }
+    ]
+  }
+]

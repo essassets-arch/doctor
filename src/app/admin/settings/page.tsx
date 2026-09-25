@@ -53,11 +53,11 @@ export default function AdminSettingsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1560, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       <section className="card" style={{ padding: 20, marginBottom: 20 }}>
         <h2>OPD fees</h2>
-        <label>Consultation fee (?)<input className="form-input" type="number" min="0" step="0.01" value={formData.consultationFee ?? ''} onChange={e => setFormData({ ...formData, consultationFee: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-        <label>Follow-up fee (?)<input className="form-input" type="number" min="0" step="0.01" value={formData.followUpFee ?? ''} onChange={e => setFormData({ ...formData, followUpFee: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+        <label>Consultation fee (₹)<input aria-label="Consultation fee (₹)" className="form-input" type="number" min="0" step="0.01" value={formData.consultationFee ?? ''} onChange={e => setFormData({ ...formData, consultationFee: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+        <label>Follow-up fee (₹)<input aria-label="Follow-up fee (₹)" className="form-input" type="number" min="0" step="0.01" value={formData.followUpFee ?? ''} onChange={e => setFormData({ ...formData, followUpFee: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
       </section>
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>

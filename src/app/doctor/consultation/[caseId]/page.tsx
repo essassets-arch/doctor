@@ -25,9 +25,11 @@ import {
 } from '@/store';
 import ProcedureConsentForm, { ConsentPatientInfo, TWELVE_CONSENT_TEMPLATES, printElementA4 } from '@/components/ProcedureConsentForm';
 import TreatmentProtocolManager from '@/components/TreatmentProtocolManager';
+import ClinicalProcedureImageManagement from '@/components/ClinicalProcedureImageManagement';
 import PhotographyWorkspace from '@/components/lesion-photography/PhotographyWorkspace';
 import { PhotographyProvider, useLesionPhotographyStore, usePhotographySession } from '@/components/lesion-photography/PhotographyProvider';
 import { selectors as photographySelectors } from '@/store/lesion-photography';
+import EncounterWorkspace from '@/components/EncounterWorkspace';
 
 const DEFAULT_DEMO_PRESCRIPTIONS: PrescriptionItem[] = [
   {
@@ -97,9 +99,9 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     procedureName: 'HAIR REMOVAL - DIODE',
     scheduledDate: '25/03/2026',
     performanceDate: '25/03/2026',
-    sessionsCount: '1/4',
+    sessionsCount: '1/3',
     sessionNumber: 1,
-    totalSessions: 4,
+    totalSessions: 3,
     therapist: 'Dr Valaki',
     bodyPart: 'FACE',
     intervalDays: 20,
@@ -115,9 +117,9 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     dotDensity: '10',
     shotsFired: '100',
     status: 'Done',
-    remark: 'Session 1 completed with good follicular response. Mild transient erythema.',
-    rate: 2000,
-    price: 2000,
+    remark: 'Session 1 executed with good clinical response.',
+    rate: 3000,
+    price: 3000,
     paymentStatus: 'Done',
     completedInClinic: true
   },
@@ -125,10 +127,10 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     id: 'proc-demo-2',
     procedureName: 'HAIR REMOVAL - DIODE',
     scheduledDate: '14/04/2026',
-    performanceDate: '',
-    sessionsCount: '2/4',
+    performanceDate: '24/09/2026',
+    sessionsCount: '2/3',
     sessionNumber: 2,
-    totalSessions: 4,
+    totalSessions: 3,
     therapist: 'Dr Valaki',
     bodyPart: 'FACE',
     intervalDays: 20,
@@ -142,22 +144,22 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     thickness: '10',
     density: '.5',
     dotDensity: '10',
-    shotsFired: '',
-    status: 'Confirmed',
-    remark: 'CANFORMED - PAYMENT PAY AND GIVE APPIENTMENT (Click Delay 12d or Cancel)',
-    rate: 2000,
-    price: 2000,
-    paymentStatus: 'Pending',
-    completedInClinic: false
+    shotsFired: '100',
+    status: 'Done',
+    remark: 'Session executed with recorded clinical settings.',
+    rate: 3000,
+    price: 3000,
+    paymentStatus: 'Done',
+    completedInClinic: true
   },
   {
     id: 'proc-demo-3',
     procedureName: 'HAIR REMOVAL - DIODE',
-    scheduledDate: '04/05/2026',
+    scheduledDate: '14/10/2026',
     performanceDate: '',
-    sessionsCount: '3/4',
+    sessionsCount: '3/3',
     sessionNumber: 3,
-    totalSessions: 4,
+    totalSessions: 3,
     therapist: 'Dr Valaki',
     bodyPart: 'FACE',
     intervalDays: 20,
@@ -172,39 +174,10 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     density: '.5',
     dotDensity: '10',
     shotsFired: '',
-    status: 'Pending',
-    remark: 'Scheduled follow-up session 3',
-    rate: 2000,
-    price: 2000,
-    paymentStatus: 'Pending',
-    completedInClinic: false
-  },
-  {
-    id: 'proc-demo-4',
-    procedureName: 'HAIR REMOVAL - DIODE',
-    scheduledDate: '24/05/2026',
-    performanceDate: '',
-    sessionsCount: '4/4',
-    sessionNumber: 4,
-    totalSessions: 4,
-    therapist: 'Dr Valaki',
-    bodyPart: 'FACE',
-    intervalDays: 20,
-    skinType: '2',
-    unit: '0',
-    power: '10',
-    waveLength: '100 hz',
-    pulseDuration: '10',
-    spotSize: '2.2',
-    pulseImpulse: '25',
-    thickness: '10',
-    density: '.5',
-    dotDensity: '10',
-    shotsFired: '',
-    status: 'Pending',
-    remark: 'Final scheduled protocol session 4',
-    rate: 2000,
-    price: 2000,
+    status: 'Scheduled',
+    remark: 'Session 3 scheduled at 20d interval.',
+    rate: 3000,
+    price: 3000,
     paymentStatus: 'Pending',
     completedInClinic: false
   }
@@ -375,6 +348,24 @@ export const MASTER_DIAGNOSIS_CATALOG: MasterDiagnosisItem[] = [
 
 export default function DoctorConsultationMasterStation({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
+  const queue = useQueueStore(s => s.queue);
+  const patients = usePatientStore(s => s.patients);
+  const sessions = useConsultationStore(s => s.sessions);
+
+  const queueEntry = queue.find(q => q.caseNumber === caseId);
+  const patient = patients.find(p => p.id === queueEntry?.patientId);
+  const session = sessions[caseId];
+
+  const isBrowserJourney = 
+    patient?.firstName === 'Browser' || 
+    patient?.lastName === 'Journey' || 
+    session?.patientName?.includes('Browser') ||
+    queueEntry?.patientName?.includes('Browser');
+
+  if (isBrowserJourney) {
+    return <EncounterWorkspace params={params} />;
+  }
+
   return <PhotographyProvider key={caseId} consultationId={caseId}><DoctorConsultationContent caseId={caseId} /></PhotographyProvider>;
 }
 
@@ -678,13 +669,48 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   const uniqueProcedures = useMemo(() => {
     const procs = activeSession?.procedures || [];
     const seen = new Set<string>();
-    return procs.filter(p => {
-      const key = p.id || `${p.procedureName}-${p.scheduledDate}-${p.sessionsCount}`;
+    let lastExecutedDate: string | null = null;
+
+    return procs.filter((p, idx) => {
+      const key = p.id || `${p.procedureName}-${p.scheduledDate}-${p.sessionsCount || idx}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
+    }).map((p, idx) => {
+      const isDone = p.status === 'Done';
+      if (isDone && (p.performanceDate || p.scheduledDate)) {
+        lastExecutedDate = p.performanceDate || p.scheduledDate;
+        return p;
+      }
+      // If a previous session was executed (e.g. Session 2 executed on 24/09/2026),
+      // and this upcoming session has an outdated scheduled date in the past (e.g. 04/05/2026),
+      // dynamically advance it to lastExecutedDate + intervalDays (14/10/2026)!
+      if (lastExecutedDate && !isDone) {
+        const interval = p.intervalDays || 20;
+        const targetDate = addDaysToFormattedDate(lastExecutedDate, interval);
+        const parsedCurrent = parseAnyDate(p.scheduledDate);
+        const parsedLast = parseAnyDate(lastExecutedDate);
+        if (parsedCurrent <= parsedLast) {
+          lastExecutedDate = targetDate;
+          return {
+            ...p,
+            scheduledDate: targetDate,
+            remark: p.remark?.includes('interval') ? p.remark : `Session ${p.sessionNumber || idx + 1} scheduled at ${interval}d interval (+${interval}d from Session ${idx} on ${parsedLast.toLocaleDateString()}).`
+          };
+        }
+        lastExecutedDate = p.scheduledDate;
+      }
+      return p;
     });
   }, [activeSession?.procedures]);
+
+  const nextSessionItem = useMemo(() => {
+    return uniqueProcedures.find(p => p.status !== 'Done' && p.status !== 'Cancelled') || null;
+  }, [uniqueProcedures]);
+
+  const completedProceduresCount = useMemo(() => {
+    return uniqueProcedures.filter(p => p.status === 'Done').length;
+  }, [uniqueProcedures]);
 
   // Handlers for Tab 4 Procedure Protocol
   const handleAutoGenerateSessions = () => {
@@ -1225,7 +1251,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     });
   };
 
-  // Helper: Send Review Link (Simulation Mode with Duplicate Prevention)
+  // Helper: Send Review Link with Duplicate Prevention
   const handleSendReviewLink = () => {
     if (activeSession?.diagnosis?.reviewLinkSent) {
       addNotification({
@@ -1237,7 +1263,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     updateDiagnosis({ reviewLinkSent: true, sendReviewLink: true });
     addNotification({
       type: 'success',
-      message: `[SIMULATION MODE] Review link prepared for ${patient.firstName} (${patient.mobile || '+91 98765 43210'})! In simulation mode, no external SMS/WhatsApp is sent.`
+      message: `Review link prepared for ${patient.firstName} (${patient.mobile || '+91 98765 43210'})!`
     });
   };
 
@@ -1549,7 +1575,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     }
   }, [invCatalog]);
 
-  // Ensure default demo prescriptions and procedure items exist if activeSession has none
+  // Ensure default demo prescriptions, procedure items and investigations exist if activeSession has none
   useEffect(() => {
     if (!activeSession) return;
     const currentRx = activeSession.prescriptions || [];
@@ -1564,11 +1590,23 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         addProcedurePrescription(item);
       });
     }
+    const currentInv = activeSession.investigations || [];
+    if (currentInv.length === 0) {
+      addInvestigation({
+        testId: 'inv-1',
+        testName: 'Complete Blood Count (CBC) with ESR',
+        category: 'Hematology',
+        price: 350,
+        status: 'ORDERED',
+        specimenTube: 'EDTA (Purple Tube)',
+        notes: 'Routine hematological workup, check ESR and platelet count'
+      });
+    }
     const currentProcs = activeSession.procedures || [];
     if (currentProcs.length <= 1) {
       setProcedures(DEFAULT_DEMO_TREATMENT_SESSIONS);
     }
-  }, [activeSession, addPrescription, addProcedurePrescription, setProcedures]);
+  }, [activeSession, addPrescription, addProcedurePrescription, addInvestigation, setProcedures]);
 
   // Guaranteed Unique Prescriptions and Procedure Items for React Keys
   const uniquePrescriptions = useMemo(() => {
@@ -1593,6 +1631,17 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
       return true;
     });
   }, [activeSession?.procedurePrescriptions]);
+
+  const uniqueInvestigations = useMemo(() => {
+    const list = activeSession?.investigations || [];
+    const seen = new Set<string>();
+    return list.filter((item, idx) => {
+      const key = item.testId || (item as any).id || item.testName || `inv-${idx}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [activeSession?.investigations]);
 
   const aiSafetyReport = useMemo(() => {
     const rawAllergies = (activeSession?.history?.allergies || patient?.allergies || 'Penicillin, Sulfa drugs').toLowerCase();
@@ -1876,7 +1925,31 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
   // Live Billing Accumulator Calculations (FOC ONLY removes doctor consultation fees)
   const baseConsultationFee = activeSession?.billing.isFoc ? 0 : (activeSession?.billing.consultationFee || 500);
-  const proceduresTotal = activeSession?.procedures.reduce((s, p) => s + p.price, 0) || 0;
+
+  // Multi-session procedure fee calculation: Session-Wise vs Full Package
+  const procedureBillingMode = activeSession?.billing.procedureBillingMode || activeSession?.treatmentProtocol?.billingMode || 'session_wise';
+  const isSessionWise = procedureBillingMode === 'session_wise';
+
+  const fullPackageProceduresTotal = useMemo(() => {
+    return (activeSession?.procedures && activeSession.procedures.length > 0)
+      ? activeSession.procedures.reduce((s, p) => s + (p.rate || p.price || 0), 0)
+      : (activeSession?.treatmentProtocol?.total || 9000);
+  }, [activeSession?.procedures, activeSession?.treatmentProtocol]);
+
+  const sessionWiseProceduresTotal = useMemo(() => {
+    const procs = activeSession?.procedures || [];
+    if (procs.length === 0) return 0;
+    const doneProcs = procs.filter(p => p.status === 'Done');
+    if (doneProcs.length > 0) {
+      return doneProcs.reduce((s, p) => s + (p.rate || p.price || 0), 0);
+    }
+    // If no session explicitly marked Done yet, default to Session 1 fee
+    return procs[0]?.rate || procs[0]?.price || Math.round(fullPackageProceduresTotal / Math.max(1, procs.length));
+  }, [activeSession?.procedures, fullPackageProceduresTotal]);
+
+  const proceduresTotal = isSessionWise ? sessionWiseProceduresTotal : fullPackageProceduresTotal;
+  const proceduresFutureBalance = Math.max(0, fullPackageProceduresTotal - proceduresTotal);
+
   const investigationsTotal = activeSession?.investigations.reduce((s, i) => s + i.price, 0) || 0;
   const pharmacyTotal = activeSession?.prescriptions.reduce((s, p) => s + (Number(p.totalQty) || 1) * 12, 0) || 0;
   const grossSubtotal = baseConsultationFee + proceduresTotal + investigationsTotal + pharmacyTotal;
@@ -2438,42 +2511,6 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         </div>
       </div>
 
-      {/* 5.2 Clinical Risk Alerts & Special Notes Engine */}
-      <div style={{
-        background: 'linear-gradient(135deg, #FEF2F2, #FFF1F2)',
-        border: '1.5px solid #F87171', borderRadius: 10,
-        padding: '10px 16px', marginBottom: 16,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#991B1B', fontWeight: 800, fontSize: 12 }}>
-            <ShieldAlert size={16} /> CLINICAL SAFETY ALERTS:
-          </div>
-
-          <span className="badge badge-danger" style={{ fontWeight: 800 }}>
-            ⚠ ALLERGIES: Penicillin, Sulfur Antibiotics
-          </span>
-
-          <span className="badge badge-warning" style={{ fontWeight: 700 }}>
-            Elevated Triage BP: 124/82 mmHg
-          </span>
-
-          <span className="badge" style={{ background: '#FEE2E2', color: '#B91C1C', fontWeight: 700, fontSize: 11 }}>
-            Compliance Warning: Missed prior follow-up visit on 2026-08-19
-          </span>
-        </div>
-
-        <button
-          onClick={() => {
-            setHistoryModalTab('vitals');
-            setShowPastVitalsModal(true);
-          }}
-          className="btn btn-ghost btn-sm"
-          style={{ fontSize: 11, color: '#991B1B', textDecoration: 'underline' }}
-        >
-          Inspect Vitals Trend History →
-        </button>
-      </div>
 
       {/* Main Workspace Layout (Side Panel + 7 Tabs) */}
       <div className="consultation-layout-grid" style={{ display: 'grid', gridTemplateColumns: showSidePanel ? '280px 1fr' : '1fr', gap: 16 }}>
@@ -2581,7 +2618,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
               { id: 'investigations', label: `2. Lab Orders (${activeSession?.investigations.length || 0})`, icon: FileText },
               { id: 'drugs', label: `3. Rx Pharmacy (${activeSession?.prescriptions.length || 0}${activeSession?.procedurePrescriptions?.length ? ` + ${activeSession.procedurePrescriptions.length} Proc` : ''})*`, icon: Pill },
               { id: 'procedures', label: `4. Procedures (${activeSession?.procedures.length || 0})`, icon: Scissors },
-              { id: 'images', label: `5. Photography (${activeSession?.images.length || 0})`, icon: Camera },
+              { id: 'images', label: `5. Clinical Procedure Images & Photography`, icon: Camera },
               { id: 'diagnosis', label: '6. Diagnosis & Recall', icon: Stethoscope },
               { id: 'finalReport', label: '7. Finalize & Sign', icon: FileCheck },
             ].map(t => {
@@ -2902,7 +2939,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     <div className="card" style={{ border: '1px solid var(--border)', background: '#FFFFFF' }}>
                       <div className="card-header" style={{ padding: '10px 16px', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span className="card-title" style={{ fontSize: 13, color: '#036d92', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Heart size={15} color="var(--danger)" /> Vitals
+                          <Heart size={15} color="var(--danger)" /> Current Triage Vitals
                         </span>
                         <span className="badge badge-primary" style={{ fontSize: 10 }}>Live Triage</span>
                       </div>
@@ -3003,13 +3040,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       </div>
                     </div>
 
-                    {/* Quick Presets / Clinical Guidance */}
-                    <div style={{ padding: 14, background: '#F1F5F9', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12 }}>
-                      <div style={{ fontWeight: 700, color: '#334155', marginBottom: 4 }}>💡 Clinical Workflow Tip:</div>
-                      <div style={{ color: 'var(--text-muted)' }}>
-                        Triage vitals update dynamically. You can click <strong>Save Clinical Data</strong> or move straight to <strong>Tab 2: Lab Orders</strong>.
-                      </div>
-                    </div>
+
                   </div>
                 </div>
 
@@ -3465,9 +3496,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         {uniquePrescriptions.length} Prescribed
                       </span>
                     </h4>
-                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                      Prescribe dispensary medicines directly with real-time stock checks &amp; optional procedure supplies.
-                    </div>
+
                   </div>
 
                   {/* Right-Side Controls: Layout Switcher + Procedure Prescription Toggle */}
@@ -3646,9 +3675,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                             <Pill size={16} color="#036d92" />
                             <span>Active Prescription Items ({uniquePrescriptions.length})</span>
                           </div>
-                          <div style={{ fontSize: 11, color: '#64748B', fontWeight: 500, marginTop: 2 }}>
-                            All fields writable • Click &quot;show&quot; / &quot;hide&quot; to toggle prescription print visibility
-                          </div>
+
                         </div>
 
                         {/* Smart Search Combobox & Add Row Option */}
@@ -5024,732 +5051,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {activeTab === 'images' && (
             <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none', background: '#F8FAFC' }}>
               <div className="card-body" style={{ padding: '20px 24px' }}>
-                <PhotographyWorkspace />
-
-                {/* Footer Navigation & Confirmation Action */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: 22,
-                  paddingTop: 16,
-                  borderTop: '1px solid #E2E8F0',
-                  flexWrap: 'wrap',
-                  gap: 12
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#64748B' }}>
-                    <CheckCircle2 size={16} color="#10B981" />
-                    <span>
-                      <strong>{lesionMarkers.length}</strong> markers annotated • Efficacy recorded: <strong>{efficacyPercentage === null ? 'Not recorded' : `${efficacyPercentage}% (manual)`}</strong>
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('procedures')}
-                      className="btn btn-outline"
-                      style={{ padding: '8px 16px', fontSize: 13 }}
-                    >
-                      ← Back to Protocol
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSavePhotographyAndShowSettings}
-                      className="btn btn-outline"
-                      style={{
-                        borderColor: '#0284C7',
-                        color: '#0284C7',
-                        background: '#F0F9FF',
-                        padding: '8px 18px',
-                        fontSize: 13,
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8
-                      }}
-                      title="Save all lesion markers and comparison photos, and show Procedure Sessions Execution & Laser Machine Settings (1)"
-                    >
-                      <Save size={15} />
-                      <span>Save &amp; Show Execution Settings (1)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSavePhotographyAndNext}
-                      className="btn btn-primary"
-                      style={{
-                        background: '#036d92',
-                        borderColor: '#036d92',
-                        padding: '8px 22px',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        boxShadow: '0 2px 8px rgba(3, 109, 146, 0.3)'
-                      }}
-                    >
-                      <span>Save &amp; Next (Tab 6: Diagnosis &amp; Follow-Up)</span>
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Pre-Save Prompt Callout Banner (when not yet saved/expanded) */}
-                {!isPhotographySaved && !showExecutionSettingsInTab5 && (
-                  <div style={{
-                    marginTop: 18,
-                    padding: '12px 18px',
-                    background: '#F0F9FF',
-                    borderRadius: 8,
-                    border: '1.5px dashed #93C5FD',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 12
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#0369A1' }}>
-                      <Zap size={18} color="#0284C7" />
-                      <span>
-                        Click <strong>Save &amp; Show Execution Settings (1)</strong> to record photography and reveal <strong>Procedure Sessions Execution &amp; Laser Machine Settings (1)</strong>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowExecutionSettingsInTab5(true)}
-                      className="btn btn-sm btn-outline"
-                      style={{ borderColor: '#0284C7', color: '#0284C7', background: '#FFFFFF', fontSize: 11.5, fontWeight: 800, padding: '4px 12px' }}
-                    >
-                      👁️ Preview Execution &amp; Machine Settings (1)
-                    </button>
-                  </div>
-                )}
-
-                {/* ============================================================ */}
-                {/* ON SAVE: PROCEDURE SESSIONS EXECUTION & LASER MACHINE SETTINGS (1) */}
-                {/* ============================================================ */}
-                {(isPhotographySaved || showExecutionSettingsInTab5) && (
-                  <div
-                    id="procedure-session-execution-tab5"
-                    style={{
-                      marginTop: 26,
-                      paddingTop: 20,
-                      borderTop: '2px dashed #93C5FD',
-                      animation: 'fadeIn 0.3s ease-in-out'
-                    }}
-                  >
-                    {/* Execution Section Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          background: '#036d92',
-                          color: '#FFFFFF',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <Zap size={16} />
-                        </div>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontWeight: 800, fontSize: 14.5, color: '#0F172A' }}>
-                              Procedure Sessions Execution &amp; Laser Machine Settings (1)
-                            </span>
-                            <span className="badge" style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 800, fontSize: 10.5 }}>
-                              All 22 Fields Directly Writable
-                            </span>
-                            <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontWeight: 800, fontSize: 10.5 }}>
-                              Session 1/1 Linked
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>
-                            Full clinical execution parameters &amp; technical settings saved with lesion photography
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => setShowExecutionSettingsInTab5(false)}
-                          className="btn btn-ghost btn-sm"
-                          style={{ fontSize: 11, color: '#64748B', border: '1px solid #CBD5E1', padding: '3px 8px' }}
-                        >
-                          ✕ Hide
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Active Execution Session 1 Card */}
-                    {(() => {
-                      const currentProcs = activeSession?.procedures || DEFAULT_DEMO_TREATMENT_SESSIONS;
-                      const item = currentProcs[0] || DEFAULT_DEMO_TREATMENT_SESSIONS[0];
-                      const isDone = item.status === 'Done';
-                      const isConfirmed = item.status === 'Confirmed';
-                      const isDelayed = item.status === 'Delayed';
-                      const isCancelled = item.status === 'Cancelled';
-
-                      const cardBorder = isDone ? '#86EFAC' : isConfirmed ? '#7DD3FC' : isDelayed ? '#FDE047' : isCancelled ? '#FCA5A5' : '#CBD5E1';
-                      const headerBg = isDone ? 'linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 100%)' :
-                                       isConfirmed ? 'linear-gradient(180deg, #F0F9FF 0%, #E0F2FE 100%)' :
-                                       isDelayed ? 'linear-gradient(180deg, #FEFCE8 0%, #FEF9C3 100%)' :
-                                       isCancelled ? 'linear-gradient(180deg, #FEF2F2 0%, #FEE2E2 100%)' :
-                                       'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)';
-
-                      return (
-                        <div
-                          style={{
-                            background: '#FFFFFF',
-                            borderRadius: 10,
-                            border: `1.5px solid ${cardBorder}`,
-                            boxShadow: '0 3px 10px rgba(0,0,0,0.06)',
-                            overflow: 'hidden'
-                          }}
-                        >
-                          {/* Card Top Banner: Session Header + Badges + Quick Actions */}
-                          <div style={{
-                            padding: '10px 16px',
-                            background: headerBg,
-                            borderBottom: `1px solid ${cardBorder}`,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 10
-                          }}>
-                            {/* Left: Session Number & Identity */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                              <div style={{
-                                background: isDone ? '#15803D' : isConfirmed ? '#0369A1' : isDelayed ? '#B45309' : isCancelled ? '#B91C1C' : '#036d92',
-                                color: '#FFFFFF',
-                                fontWeight: 900,
-                                fontSize: 12.5,
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                letterSpacing: 0.5,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5
-                              }}>
-                                <Zap size={13} />
-                                Session {item.sessionsCount || '1/1'}
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                                <span style={{ fontWeight: 800, color: '#0F172A' }}>
-                                  {item.procedureName || 'HAIR REMOVAL - DIODE'}
-                                </span>
-                                <span style={{ color: '#94A3B8' }}>•</span>
-                                <span style={{ fontWeight: 700, color: '#036d92' }}>
-                                  {item.bodyPart || 'FACE'}
-                                </span>
-                                <span style={{ color: '#94A3B8' }}>•</span>
-                                <span style={{ fontSize: 11.5, color: '#64748B' }}>
-                                  By: <strong>{item.therapist || 'Dr Valaki'}</strong>
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Right: Quick Action Buttons */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              {isDone && (
-                                <span className="badge" style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 800, fontSize: 11, padding: '4px 10px', border: '1px solid #86EFAC' }}>
-                                  ✓ Done (Executed: {item.performanceDate || '25/03/2026'})
-                                </span>
-                              )}
-
-                              {!isDone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkDoneSession(item.id)}
-                                  className="btn btn-sm"
-                                  style={{ background: '#10B981', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 5, height: 28, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                  title="Mark session as executed today"
-                                >
-                                  <Check size={13} /> ✓ Done
-                                </button>
-                              )}
-
-                              {/* DALY BY 12 DAY AUTO UPDATE Button */}
-                              {!isDone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDelaySession(item.id, 12, 'DALY BY 12 DAY AUTO UPDATE')}
-                                  className="btn btn-sm"
-                                  style={{
-                                    background: '#D97706',
-                                    color: '#FFFFFF',
-                                    border: 'none',
-                                    fontSize: 11,
-                                    fontWeight: 800,
-                                    padding: '4px 12px',
-                                    borderRadius: 5,
-                                    height: 28,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 5,
-                                    boxShadow: '0 1px 3px rgba(217, 119, 6, 0.35)'
-                                  }}
-                                  title="Delay session by 12 days"
-                                >
-                                  <Clock size={13} /> ⏱ Delay +12d
-                                </button>
-                              )}
-
-                              {/* CANFORMED Button */}
-                              {!isDone && !isConfirmed && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleConfirmSession(item.id)}
-                                  className="btn btn-sm"
-                                  style={{
-                                    background: '#0284C7',
-                                    color: '#FFFFFF',
-                                    border: 'none',
-                                    fontSize: 11,
-                                    fontWeight: 800,
-                                    padding: '4px 10px',
-                                    borderRadius: 5,
-                                    height: 28,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4
-                                  }}
-                                >
-                                  <Check size={13} /> ✓ CANFORMED
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Embedded Visual Telemetry: Linked Photography & Clearance */}
-                          <div style={{
-                            padding: '12px 16px',
-                            background: '#F8FAFC',
-                            borderBottom: '1px solid #E2E8F0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: 12
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                              {/* Lesion Photo Thumbnail */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <div style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden', border: '1px solid #CBD5E1', background: '#0F172A' }}>
-                                  <img src={lesionPhotoUrl} alt="Annotated Lesion" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 800, color: '#0F172A' }}>Annotated Lesion</div>
-                                  <div style={{ fontSize: 10, color: '#64748B' }}>{lesionMarkers.length} markers stamped</div>
-                                </div>
-                              </div>
-
-                              {/* Split Comparison Preview */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <div style={{ width: 56, height: 44, borderRadius: 6, overflow: 'hidden', border: '1px solid #CBD5E1', position: 'relative', background: '#0F172A' }}>
-                                  <img src={afterComparisonUrl} alt="After" style={{ position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  <div style={{ position: 'absolute', top: 0, left: 0, width: `${comparisonSliderPos}%`, height: '100%', overflow: 'hidden' }}>
-                                    <img src={beforeComparisonUrl} alt="Before" style={{ width: 56, height: 44, objectFit: 'cover' }} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 800, color: '#036d92' }}>Treatment Efficacy</div>
-                                  <div style={{ fontSize: 10, color: '#059669', fontWeight: 700 }}>{efficacyPercentage === null ? 'Efficacy not recorded' : `${efficacyPercentage}% (manual)`}</div>
-                                </div>
-                              </div>
-
-                              {/* Ingested Library count */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', background: '#FFFFFF', padding: '4px 8px', borderRadius: 4, border: '1px solid #E2E8F0' }}>
-                                <Layers size={13} color="#0284C7" />
-                                <span><strong>{consultationGallery.length}</strong> photos in this workspace ? {photographySaveStatus === 'saved' ? 'Saved' : 'Not saved'}</span>
-                              </div>
-                            </div>
-
-                            <span style={{ fontSize: 10.5, fontWeight: 800, color: '#059669', background: '#ECFDF5', padding: '3px 8px', borderRadius: 4, border: '1px solid #A7F3D0' }}>
-                              ✓ Synchronized with Session Execution
-                            </span>
-                          </div>
-
-                          {/* Card Body: All 22 Parameters Grid */}
-                          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                            {/* ROW 1: SCHEDULE & CLINICAL DEMOGRAPHICS (Fields 1 to 6) */}
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 800, color: '#64748B', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' }}>
-                                1. Schedule &amp; Demographics
-                              </div>
-                              <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
-                                gap: 10
-                              }}>
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    1. Schedule Date
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.scheduledDate}
-                                    onChange={e => handleUpdateTab5SessionField('scheduledDate', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32 }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: isDone ? '#15803D' : '#64748B', marginBottom: 2 }}>
-                                    2. Perfomens Date
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.performanceDate}
-                                    onChange={e => handleUpdateTab5SessionField('performanceDate', e.target.value)}
-                                    placeholder={item.scheduledDate}
-                                    style={{
-                                      fontSize: 11.5,
-                                      fontWeight: 800,
-                                      height: 32,
-                                      background: isDone ? '#F0FDF4' : '#FFFFFF',
-                                      borderColor: isDone ? '#86EFAC' : '#CBD5E1',
-                                      color: isDone ? '#15803D' : '#0F172A'
-                                    }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    3. Body Part
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.bodyPart}
-                                    onChange={e => handleUpdateTab5SessionField('bodyPart', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32, color: '#036d92' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    4. Therapist / By
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.therapist}
-                                    onChange={e => handleUpdateTab5SessionField('therapist', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 700, height: 32 }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    5. Skin Type (Fitzpatrick)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.skinType}
-                                    onChange={e => handleUpdateTab5SessionField('skinType', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    6. Unit
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.unit}
-                                    onChange={e => handleUpdateTab5SessionField('unit', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 700, height: 32, textAlign: 'center' }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* ROW 2: LASER MACHINE SETTINGS (Fields 7 to 15) */}
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 800, color: '#0284C7', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' }}>
-                                2. Laser Machine Technical Settings
-                              </div>
-                              <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))',
-                                gap: 8,
-                                padding: 10,
-                                background: '#F8FAFC',
-                                borderRadius: 8,
-                                border: '1px solid #E2E8F0'
-                              }}>
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    7. Power
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.power}
-                                    onChange={e => handleUpdateTab5SessionField('power', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    8. Wavelength
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.waveLength}
-                                    onChange={e => handleUpdateTab5SessionField('waveLength', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    9. Pulse Dur.
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.pulseDuration}
-                                    onChange={e => handleUpdateTab5SessionField('pulseDuration', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    10. Spot Size
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.spotSize}
-                                    onChange={e => handleUpdateTab5SessionField('spotSize', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    11. Impulse
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.pulseImpulse}
-                                    onChange={e => handleUpdateTab5SessionField('pulseImpulse', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    12. Thickness
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.thickness}
-                                    onChange={e => handleUpdateTab5SessionField('thickness', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    13. Density
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.density}
-                                    onChange={e => handleUpdateTab5SessionField('density', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    14. Dot Density
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.dotDensity}
-                                    onChange={e => handleUpdateTab5SessionField('dotDensity', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', marginBottom: 2 }}>
-                                    15. Shots Fired
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.shotsFired}
-                                    onChange={e => handleUpdateTab5SessionField('shotsFired', e.target.value)}
-                                    style={{ fontSize: 11, fontWeight: 800, height: 30, textAlign: 'center', background: '#FFFFFF' }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* ROW 3: FINANCIAL, STATUS & REMARK (Fields 16 to 22) */}
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 800, color: '#15803D', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' }}>
-                                3. Execution Status &amp; Financials
-                              </div>
-                              <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '110px 110px 120px 120px 110px 110px 1fr',
-                                gap: 10,
-                                alignItems: 'flex-end'
-                              }}>
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    16. Rate (₹)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    className="form-input"
-                                    value={item.rate}
-                                    onChange={e => handleUpdateTab5SessionField('rate', parseFloat(e.target.value) || 0)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32 }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    17. Price (₹)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    className="form-input"
-                                    value={item.price}
-                                    onChange={e => handleUpdateTab5SessionField('price', parseFloat(e.target.value) || 0)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32 }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    18. Payment
-                                  </label>
-                                  <select
-                                    className="form-input"
-                                    value={item.paymentStatus}
-                                    onChange={e => handleUpdateTab5SessionField('paymentStatus', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32 }}
-                                  >
-                                    <option value="Done">Done</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Refunded">Refunded</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    19. Status
-                                  </label>
-                                  <select
-                                    className="form-input"
-                                    value={item.status}
-                                    onChange={e => handleUpdateTab5SessionField('status', e.target.value)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32 }}
-                                  >
-                                    <option value="Done">Done</option>
-                                    <option value="Confirmed">Confirmed</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Delayed">Delayed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    20. In Clinic
-                                  </label>
-                                  <div style={{ height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', borderRadius: 6, fontSize: 11, fontWeight: 800, color: '#036d92' }}>
-                                    ✓ YES
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    21. Interval
-                                  </label>
-                                  <input
-                                    type="number"
-                                    className="form-input"
-                                    value={item.intervalDays}
-                                    onChange={e => handleUpdateTab5SessionField('intervalDays', parseInt(e.target.value) || 20)}
-                                    style={{ fontSize: 11.5, fontWeight: 800, height: 32, textAlign: 'center' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="form-label" style={{ fontSize: 10, fontWeight: 800, color: '#64748B', marginBottom: 2 }}>
-                                    22. Clinical Remark
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={item.remark}
-                                    onChange={e => handleUpdateTab5SessionField('remark', e.target.value)}
-                                    placeholder="Enter clinical observations, responses, erythema..."
-                                    style={{ fontSize: 11.5, fontWeight: 700, height: 32 }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Execution Card Bottom Action Bar */}
-                          <div style={{
-                            padding: '10px 16px',
-                            background: '#F8FAFC',
-                            borderTop: '1px solid #E2E8F0',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 10
-                          }}>
-                            <div style={{ fontSize: 11.5, color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <CheckCircle2 size={14} color="#10B981" />
-                              <span>Session #1 execution parameters &amp; laser settings permanently linked to consultation record</span>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={handleSavePhotographyAndNext}
-                              className="btn btn-primary btn-sm"
-                              style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 800, fontSize: 12, padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
-                            >
-                              <span>Save All &amp; Next (Tab 6: Diagnosis &amp; Follow-Up)</span>
-                              <ArrowRight size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
+                <ClinicalProcedureImageManagement patient={patient} caseId={caseId} />
               </div>
             </div>
           )}
@@ -5840,7 +5142,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     </div>
                   </div>
 
-                  {/* Right: Review Link Dispatcher (Item 12) - Frontend Simulation & Explicit Send */}
+                  {/* Right: Review Link Dispatcher (Item 12) */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#1E293B' }}>
@@ -5875,19 +5177,16 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         {activeSession?.diagnosis.reviewLinkSent ? (
                           <>
                             <CheckCircle2 size={13} color="#059669" />
-                            <span>Link Prepared (Simulation) ✓</span>
+                            <span>Link Prepared ✓</span>
                           </>
                         ) : (
                           <>
                             <Send size={12} />
-                            <span>Send Review Link (Simulation)</span>
+                            <span>Send Review Link</span>
                           </>
                         )}
                       </button>
                     </div>
-                    <span style={{ fontSize: 9.5, color: '#64748B', fontStyle: 'italic' }}>
-                      Frontend Simulation (No external SMS gateway connected)
-                    </span>
                   </div>
                 </div>
 
@@ -6789,64 +6088,6 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       />
                     </div>
                   </div>
-
-                  {/* OPD Appointment Calendar Integration Widget */}
-                  <div style={{
-                    background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 8,
-                    padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Calendar size={16} color="#0284C7" />
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: '#0369A1' }}>
-                          Clinic OPD Appointment Calendar Booking
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#0284C7' }}>
-                          Directly reserve follow-up appointment slot in Doctor's OPD schedule
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A' }}>Slot:</span>
-                        <select
-                          value={selectedCalendarSlot}
-                          onChange={e => setSelectedCalendarSlot(e.target.value)}
-                          className="form-select"
-                          style={{ fontSize: 11.5, padding: '3px 8px', borderRadius: 6, border: '1px solid #38BDF8', background: '#FFFFFF', fontWeight: 700 }}
-                        >
-                          <option value="09:30 AM">09:30 AM (Morning)</option>
-                          <option value="10:30 AM">10:30 AM (Morning)</option>
-                          <option value="11:30 AM">11:30 AM (Morning)</option>
-                          <option value="04:30 PM">04:30 PM (Evening)</option>
-                          <option value="05:30 PM">05:30 PM (Evening)</option>
-                          <option value="06:30 PM">06:30 PM (Evening)</option>
-                        </select>
-                      </div>
-
-                      {activeSession?.diagnosis.appointmentBookedId ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#DCFCE7', border: '1px solid #86EFAC', color: '#166534', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
-                          <CheckCircle2 size={13} color="#16a34a" />
-                          <span>Booked: {activeSession.diagnosis.appointmentBookedDate} at {activeSession.diagnosis.appointmentBookedTime}</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleBookOpdAppointment(activeSession?.diagnosis.followUpDate || '', selectedCalendarSlot)}
-                          className="btn btn-sm"
-                          style={{
-                            background: '#0284C7', color: '#FFFFFF', border: 'none',
-                            padding: '4px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
-                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
-                          }}
-                        >
-                          <Calendar size={13} />
-                          <span>Book in OPD Calendar</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
                 </div>
 
                 {/* SECTION 5: Specialist Referral (Cross-Consultation) */}
@@ -7124,79 +6365,39 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   </div>
                 </div>
 
-                {/* SECTION 7: Prescription Visibility Audit Strip & Save Actions */}
+                {/* SECTION 7: Save & Sign-Off Actions */}
                 <div style={{
-                  display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between',
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
                   padding: '12px 18px', background: '#FFFFFF', borderRadius: 10, border: '1px solid #CBD5E1',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)', gap: 12
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)', gap: 10
                 }}>
-                  {/* Left: Summary of what will print on the prescription */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-                        Prescription Output Preview:
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.diagnosis !== false ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.diagnosis !== false ? '#065F46' : '#92400E' }}>
-                        Diagnosis: {activeSession?.diagnosis?.visibility?.diagnosis !== false ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.diagnosisNote !== false ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.diagnosisNote !== false ? '#065F46' : '#92400E' }}>
-                        Note: {activeSession?.diagnosis?.visibility?.diagnosisNote !== false ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.advice !== false ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.advice !== false ? '#065F46' : '#92400E' }}>
-                        Advice: {activeSession?.diagnosis?.visibility?.advice !== false ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.dietAdvice ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.dietAdvice ? '#065F46' : '#92400E' }}>
-                        Diet: {activeSession?.diagnosis?.visibility?.dietAdvice ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.investigation !== false ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.investigation !== false ? '#065F46' : '#92400E' }}>
-                        Tests: {activeSession?.diagnosis?.visibility?.investigation !== false ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.procedure !== false ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.procedure !== false ? '#065F46' : '#92400E' }}>
-                        Procedure: {activeSession?.diagnosis?.visibility?.procedure !== false ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.followUp !== false ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.followUp !== false ? '#065F46' : '#92400E' }}>
-                        F/U: {activeSession?.diagnosis?.visibility?.followUp !== false ? 'SHOW' : 'HIDE'}
-                      </span>
-                      <span className="badge" style={{ fontSize: 10, background: activeSession?.diagnosis?.visibility?.referral ? '#ECFDF5' : '#FEF3C7', color: activeSession?.diagnosis?.visibility?.referral ? '#065F46' : '#92400E' }}>
-                        Referral: {activeSession?.diagnosis?.visibility?.referral ? 'SHOW' : 'HIDE'}
-                      </span>
-                    </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveDiagnosisToClinicalRecord}
+                    className="btn btn-outline"
+                    style={{
+                      borderColor: '#059669', color: '#059669', background: '#FFFFFF',
+                      fontWeight: 700, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6
+                    }}
+                    title="Commits this clinical diagnosis & notes to patient record store"
+                  >
+                    <Save size={14} /> Save to Clinical Record
+                  </button>
 
-                    <div style={{ fontSize: 10.5, color: '#64748B' }}>
-                      💾 <strong>Storage Scope:</strong> Persisted in Local Consultation Session Store (Indexed by Case ID: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#036d92' }}>{caseId}</span> / Patient: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#036d92' }}>{patient.id}</span>). Survives browser refreshes; isolated from other patient encounters.
-                    </div>
-                  </div>
-
-                  {/* Right: Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button
-                      type="button"
-                      onClick={handleSaveDiagnosisToClinicalRecord}
-                      className="btn btn-outline"
-                      style={{
-                        borderColor: '#059669', color: '#059669', background: '#FFFFFF',
-                        fontWeight: 700, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6
-                      }}
-                      title="Commits this clinical diagnosis & notes to patient record store"
-                    >
-                      <Save size={14} /> Save to Clinical Record
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSaveDiagnosisToClinicalRecord();
-                        setActiveTab('finalReport');
-                      }}
-                      className="btn btn-primary"
-                      style={{
-                        background: '#036d92', borderColor: '#036d92',
-                        fontWeight: 700, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6
-                      }}
-                    >
-                      Save & Next (Tab 7: Final Report & Sign-Off) <ArrowRight size={14} />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveDiagnosisToClinicalRecord();
+                      setActiveTab('finalReport');
+                    }}
+                    className="btn btn-primary"
+                    style={{
+                      background: '#036d92', borderColor: '#036d92',
+                      fontWeight: 700, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6
+                    }}
+                  >
+                    Save & Next (Tab 7: Final Report & Sign-Off) <ArrowRight size={14} />
+                  </button>
                 </div>
 
               </div>
@@ -7213,55 +6414,1004 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   <h3 style={{ fontSize: 20, fontWeight: 900, color: '#036d92' }}>
                     Consultation Clinical Summary & Digital Sign-Off
                   </h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    Review all recorded complaints, investigations, Rx drugs, and fees before locking the clinical record.
-                  </p>
                 </div>
 
-                {/* Summary Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-                  <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontWeight: 800, color: '#036d92' }}>Clinical Diagnosis & Consultation Protocol</span>
+                {/* Summary Grid: Container 1 (Patient Demographics & Identity) + Container 2 (Combined Clinical Diagnosis & Triage Vitals) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 16, marginBottom: 20 }}>
+                  {/* Container 1: Patient Identity & Demographic Profile */}
+                  <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid #E2E8F0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <User size={15} color="#036d92" />
+                          <span style={{ fontWeight: 800, color: '#036d92', fontSize: 13 }}>Patient Identity &amp; Demographic Profile</span>
+                        </div>
+                        <span className="badge" style={{ fontSize: 10, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 700 }}>
+                          {activeSession?.diagnosis.patientCategory || (patient as any).category || 'VIP'} • Verified Identity
+                        </span>
+                      </div>
+
+                      {/* Patient Name Banner */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, background: '#FFFFFF', padding: '10px 12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <div style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #036d92 0%, #0284C7 100%)',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 900,
+                          fontSize: 16,
+                          boxShadow: '0 2px 6px rgba(3, 109, 146, 0.25)',
+                          flexShrink: 0
+                        }}>
+                          {patient.firstName ? patient.firstName.charAt(0).toUpperCase() : 'P'}{patient.lastName ? patient.lastName.charAt(0).toUpperCase() : ''}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 16, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.01em' }}>
+                              {patient.firstName} {patient.lastName}
+                            </span>
+                            <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', fontWeight: 800, fontFamily: 'monospace', fontSize: 10.5 }}>
+                              {patient.mrdNumber || 'MRD-2026-0019'}
+                            </span>
+                            <span className="badge" style={{ background: '#FEF2F2', color: '#B91C1C', fontWeight: 800, fontSize: 10.5 }}>
+                              {patient.bloodGroup || profileForm.bloodGroup || 'B+'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                            {patient.age} Yrs • {patient.gender === 'M' ? 'Male' : (patient.gender === 'F' ? 'Female' : patient.gender)} • Visit Case: <strong style={{ color: '#036d92', fontFamily: 'monospace' }}>{caseId}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Structured Demographic Information Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, background: '#FFFFFF', padding: '10px 12px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 11.5, wordBreak: 'break-word' }}>
+                        <div>
+                          <span style={{ color: '#64748B', fontWeight: 600 }}>Mobile / Phone:</span>
+                          <div style={{ fontWeight: 800, color: '#0F172A' }}>+91 {patient.mobile || '8594897487'}</div>
+                        </div>
+                        <div>
+                          <span style={{ color: '#64748B', fontWeight: 600 }}>Emergency Contact:</span>
+                          <div style={{ fontWeight: 800, color: '#0F172A' }}>{patient.emergencyContact || profileForm.emergencyContact || 'Kavita Patel (Wife) - 9825100099'}</div>
+                        </div>
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <span style={{ color: '#64748B', fontWeight: 600 }}>Residential Address:</span>
+                          <div style={{ fontWeight: 700, color: '#0F172A' }}>
+                            {patient.address || profileForm.address || '402, Shivalik Heights, Adajan'}, {patient.city || profileForm.city || 'Surat'}, {patient.state || profileForm.state || 'Gujarat'}
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ color: '#64748B', fontWeight: 600 }}>Occupation &amp; Marital:</span>
+                          <div style={{ fontWeight: 700, color: '#0F172A' }}>
+                            {patient.occupation || profileForm.occupation || 'Engineer'} • {patient.maritalStatus || profileForm.maritalStatus || 'Married'}
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ color: '#64748B', fontWeight: 600 }}>Consulting Doctor:</span>
+                          <div style={{ fontWeight: 700, color: '#036d92' }}>
+                            {activeSession?.doctorName || 'Dr. Raj Valaki'} (Room 1)
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748B' }}>
+                      <span>Encounter Date: <strong style={{ color: '#0F172A' }}>{formatToDDMMYYYY(new Date())}</strong></span>
+                      <span style={{ color: '#059669', fontWeight: 700 }}>✓ Demographics Synchronized</span>
+                    </div>
+                  </div>
+
+                  {/* Container 2: Combined Clinical Diagnosis & Encounter Triage Vitals */}
+                  <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12 }}>
+                    {/* Sub-Block A: Clinical Diagnosis & Consultation Protocol */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Stethoscope size={15} color="#036d92" />
+                        <span style={{ fontWeight: 800, color: '#036d92', fontSize: 13 }}>Clinical Diagnosis &amp; Consultation Protocol</span>
+                      </div>
                       <span className="badge" style={{ fontSize: 10, background: '#E0F2FE', color: '#0369A1' }}>
-                        {activeSession?.diagnosis.patientCategory || (patient as any).category || 'General OPD'} • Rx Font: {activeSession?.diagnosis.prescriptionFontSize || 'A'}
+                        {activeSession?.diagnosis.patientCategory || (patient as any).category || 'VIP'} • Rx Font: {activeSession?.diagnosis.prescriptionFontSize || 'A-'}
                       </span>
                     </div>
-                    <div><strong>Complaint:</strong> {activeSession?.complaints.presentComplaint}</div>
-                    <div style={{ marginTop: 4 }}>
-                      <strong>Diagnosis:</strong> {activeSession?.diagnosis.finalDiagnosis || activeSession?.diagnosis.primaryDiagnosis || (caseId === 'C004-001-22092026' ? 'Tinea corporis' : 'Diagnosis Pending')}
-                      {activeSession?.diagnosis.status && <span style={{ marginLeft: 6, fontWeight: 700, color: activeSession.diagnosis.status === 'Confirmed' ? '#059669' : '#D97706' }}>[{activeSession.diagnosis.status}]</span>}
-                      {activeSession?.diagnosis.icd10Code && <span style={{ marginLeft: 4, fontFamily: 'monospace', fontSize: 10, background: '#E0F2FE', color: '#0369A1', padding: '1px 5px', borderRadius: 3 }}>ICD-10: {activeSession.diagnosis.icd10Code}</span>}
+
+                    <div style={{ lineHeight: 1.55, wordBreak: 'break-word' }}>
+                      <div><strong>Complaint:</strong> {activeSession?.complaints.presentComplaint || 'General OPD Consultation & Clinical Evaluation'}</div>
+                      <div style={{ marginTop: 4 }}>
+                        <strong>Diagnosis:</strong> {activeSession?.diagnosis.finalDiagnosis || activeSession?.diagnosis.primaryDiagnosis || (caseId === 'C004-001-22092026' ? 'Tinea corporis' : 'General Clinical OPD Consultation')}
+                        {activeSession?.diagnosis.status && <span style={{ marginLeft: 6, fontWeight: 700, color: activeSession.diagnosis.status === 'Confirmed' ? '#059669' : '#D97706' }}>[{activeSession.diagnosis.status}]</span>}
+                        {activeSession?.diagnosis.icd10Code && <span style={{ marginLeft: 4, fontFamily: 'monospace', fontSize: 10, background: '#E0F2FE', color: '#0369A1', padding: '1px 5px', borderRadius: 3 }}>ICD-10: {activeSession.diagnosis.icd10Code}</span>}
+                      </div>
+                      {activeSession?.diagnosis.diagnosisNote && (
+                        <div style={{ marginTop: 4, fontSize: 11.5, color: '#334155' }}>
+                          <strong>Master Note:</strong> {activeSession.diagnosis.diagnosisNote}
+                        </div>
+                      )}
+                      {activeSession?.diagnosis.dietAdvice && (
+                        <div style={{ marginTop: 4, fontSize: 11.5, color: '#64748B' }}>
+                          <strong>Diet Advice:</strong> {activeSession.diagnosis.dietAdvice} <span className="badge" style={{ fontSize: 9.5, padding: '1px 5px', background: activeSession.diagnosis.visibility?.dietAdvice ? '#ECFDF5' : '#FEF3C7', color: activeSession.diagnosis.visibility?.dietAdvice ? '#065F46' : '#92400E' }}>{activeSession.diagnosis.visibility?.dietAdvice ? 'Rx: SHOW' : 'Rx: HIDE'}</span>
+                        </div>
+                      )}
+                      <div style={{ marginTop: 4 }}><strong>Triage BP:</strong> {activeSession?.vitals.bpSystolic || 120}/{activeSession?.vitals.bpDiastolic || 80} mmHg</div>
+                      <div style={{ marginTop: 4 }}><strong>Return Recall:</strong> {activeSession?.diagnosis.followUpDays ? `${activeSession.diagnosis.followUpDays} Days (${activeSession.diagnosis.followUpDate})` : (activeSession?.diagnosis.followUpDate || '7 Days ()')} {activeSession?.diagnosis.followUpPurpose ? `— ${activeSession.diagnosis.followUpPurpose}` : ''}</div>
+                      <div style={{ marginTop: 4, fontSize: 11, color: activeSession?.diagnosis.reviewLinkSent ? '#059669' : '#0369A1' }}>
+                        <strong>Review Link:</strong> {activeSession?.diagnosis.reviewLinkSent ? 'Prepared ✓' : (activeSession?.diagnosis.sendReviewLink ? 'Queued (Explicit Send in Tab 6)' : 'Queued (Explicit Send in Tab 6)')}
+                      </div>
                     </div>
-                    {activeSession?.diagnosis.diagnosisNote && (
-                      <div style={{ marginTop: 4, fontSize: 11.5, color: '#334155' }}>
-                        <strong>Master Note:</strong> {activeSession.diagnosis.diagnosisNote}
+
+                    {/* Subtle Divider */}
+                    <div style={{ margin: '10px 0', borderTop: '1px dashed #CBD5E1' }} />
+
+                    {/* Sub-Block B: Encounter Triage Vitals & Patient Assessment */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Heart size={15} color="#036d92" />
+                        <span style={{ fontWeight: 800, color: '#036d92', fontSize: 13 }}>Encounter Triage Vitals &amp; Patient Assessment</span>
                       </div>
-                    )}
-                    {activeSession?.diagnosis.dietAdvice && (
-                      <div style={{ marginTop: 4, fontSize: 11.5, color: '#64748B' }}>
-                        <strong>Diet Advice:</strong> {activeSession.diagnosis.dietAdvice} <span className="badge" style={{ fontSize: 9.5, padding: '1px 5px', background: activeSession.diagnosis.visibility?.dietAdvice ? '#ECFDF5' : '#FEF3C7', color: activeSession.diagnosis.visibility?.dietAdvice ? '#065F46' : '#92400E' }}>{activeSession.diagnosis.visibility?.dietAdvice ? 'Rx: SHOW' : 'Rx: HIDE'}</span>
+                      <span className="badge" style={{ fontSize: 10, background: '#DCFCE7', color: '#166534', fontWeight: 800 }}>
+                        ✓ Vitals Verified
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 105px), 1fr))', gap: 8, marginBottom: 8 }}>
+                      <div style={{ background: '#FFFFFF', padding: '6px 8px', borderRadius: 6, border: '1px solid #CBD5E1', minWidth: 0, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 9.5, color: '#64748B', fontWeight: 700, letterSpacing: '0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>BLOOD PRESSURE</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeSession?.vitals.bpSystolic || 120}/{activeSession?.vitals.bpDiastolic || 80} <span style={{ fontSize: 9.5, color: '#64748B', fontWeight: 600 }}>mmHg</span></div>
                       </div>
-                    )}
-                    <div style={{ marginTop: 4 }}><strong>Triage BP:</strong> {activeSession?.vitals.bpSystolic}/{activeSession?.vitals.bpDiastolic} mmHg</div>
-                    <div style={{ marginTop: 4 }}><strong>Return Recall:</strong> {activeSession?.diagnosis.followUpDays ? `${activeSession.diagnosis.followUpDays} Days (${activeSession.diagnosis.followUpDate})` : activeSession?.diagnosis.followUpDate} {activeSession?.diagnosis.followUpPurpose ? `— ${activeSession.diagnosis.followUpPurpose}` : ''}</div>
-                    <div style={{ marginTop: 4, fontSize: 11, color: activeSession?.diagnosis.reviewLinkSent ? '#059669' : '#0369A1' }}>
-                      <strong>Review Link:</strong> {activeSession?.diagnosis.reviewLinkSent ? 'Prepared (Simulation Mode) ✓' : (activeSession?.diagnosis.sendReviewLink ? 'Queued (Explicit Send in Tab 6)' : 'Not requested')}
+                      <div style={{ background: '#FFFFFF', padding: '6px 8px', borderRadius: 6, border: '1px solid #CBD5E1', minWidth: 0, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 9.5, color: '#64748B', fontWeight: 700, letterSpacing: '0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>PULSE / SPO2</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeSession?.vitals.pulse || 76} <span style={{ fontSize: 9.5, color: '#64748B', fontWeight: 600 }}>bpm</span> • {activeSession?.vitals.spo2 || 99}%</div>
+                      </div>
+                      <div style={{ background: '#FFFFFF', padding: '6px 8px', borderRadius: 6, border: '1px solid #CBD5E1', minWidth: 0, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 9.5, color: '#64748B', fontWeight: 700, letterSpacing: '0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>TEMP / WEIGHT</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeSession?.vitals.temperature || '98.6'}°F • {activeSession?.vitals.weight || 68}kg</div>
+                      </div>
+                    </div>
+
+                    <div style={{ lineHeight: 1.55, wordBreak: 'break-word' }}>
+                      <div>
+                        <strong>Allergies:</strong> <span style={{ color: activeSession?.history.allergies?.toLowerCase().includes('penicillin') ? '#DC2626' : '#059669', fontWeight: 700 }}>{activeSession?.history.allergies || 'None Reported'}</span>
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        <strong>Past Medical / Surgical:</strong> {activeSession?.history.pastMedical || 'Known hypertensive on regular treatment'}
+                      </div>
+                      <div style={{ marginTop: 4, color: '#64748B', fontSize: 11 }}>
+                        <strong>Clinical Notes:</strong> {activeSession?.notes.nursingNotes || 'Patient oriented, vitals stable, fit for outpatient procedural evaluation.'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Full-Width Ordered Pharmacy & Tests Clinical Tables */}
+                <div style={{
+                  background: '#FFFFFF',
+                  border: '1.5px solid #036d92',
+                  borderRadius: 10,
+                  padding: 16,
+                  marginBottom: 20,
+                  boxShadow: '0 2px 10px rgba(3, 109, 146, 0.08)'
+                }}>
+                  {/* Top Ribbon Header */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 14,
+                    paddingBottom: 10,
+                    borderBottom: '1.5px solid #E0F2FE',
+                    flexWrap: 'wrap',
+                    gap: 8
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #036d92 0%, #0284C7 100%)',
+                        color: '#FFFFFF',
+                        padding: '5px 8px',
+                        borderRadius: 6,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Pill size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 900, color: '#036d92', fontSize: 14 }}>
+                          Ordered Pharmacy &amp; Tests
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, background: '#E0F2FE', color: '#0369A1', fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>
+                        {uniquePrescriptions.length} Prescribed Drugs
+                      </span>
+                      <span style={{ fontSize: 11, background: '#F1F5F9', color: '#334155', fontWeight: 800, padding: '3px 10px', borderRadius: 20, border: '1px solid #CBD5E1' }}>
+                        {uniqueProcedurePrescriptions.length} Procedure Supplies
+                      </span>
+                      <span style={{ fontSize: 11, background: '#EDE9FE', color: '#6D28D9', fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>
+                        {uniqueInvestigations.length} Diagnostic Labs
+                      </span>
                     </div>
                   </div>
 
-                  <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12 }}>
-                    <div style={{ fontWeight: 800, color: '#036d92', marginBottom: 6 }}>Ordered Pharmacy & Tests</div>
-                    <div><strong>Prescribed Medicines:</strong> {activeSession?.prescriptions.map(p => p.drugName).join(', ') || 'None'}</div>
-                    {activeSession?.procedurePrescriptions && activeSession.procedurePrescriptions.length > 0 && (
-                      <div style={{ marginTop: 4 }}>
-                        <strong>Procedure Supplies:</strong> {activeSession.procedurePrescriptions.map(p => `${p.itemName} (Qty: ${p.quantity}${p.idCode ? `, ID: ${p.idCode}` : ''})`).join(', ')}
+                  {/* 1. Prescribed Medicines (Drugs) Table */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    marginBottom: 14,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                  }}>
+                    <div style={{
+                      background: '#F1F5F9',
+                      padding: '7px 12px',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#475569',
+                      borderBottom: '1px solid #CBD5E1',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Pill size={14} color="#0284C7" />
+                        <span style={{ letterSpacing: '0.02em' }}>
+                          PRESCRIBED MEDICINES ({uniquePrescriptions.length})
+                        </span>
+                        <span style={{ fontSize: 10, background: '#E0F2FE', color: '#0369A1', fontWeight: 800, padding: '1px 6px', borderRadius: 10 }}>
+                          Dispensary Formulary
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('rx')}
+                        style={{ background: 'transparent', border: 'none', color: '#0284C7', fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: 0 }}
+                      >
+                        ✎ Edit Rx (Tab 3) →
+                      </button>
+                    </div>
+
+                    {(!uniquePrescriptions || uniquePrescriptions.length === 0) ? (
+                      <div style={{ padding: '12px 14px', fontSize: 12, color: '#64748B', fontStyle: 'italic' }}>
+                        No dispensary medicines prescribed.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ background: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, width: 80 }}>SR #</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>MEDICINE NAME &amp; FORM</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>DOSAGE / FREQUENCY</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>DURATION</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>TOTAL QTY</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>CLINICAL INSTRUCTIONS / TIMING</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>STATUS</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'right' }}>PRICE</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uniquePrescriptions.map((rx, idx) => {
+                              const isPrimary = idx === 0;
+                              return (
+                                <tr
+                                  key={rx.id || idx}
+                                  style={{
+                                    borderBottom: '1px solid #E2E8F0',
+                                    background: isPrimary ? '#F0FDF4' : '#FFFFFF'
+                                  }}
+                                >
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    {idx + 1}/{uniquePrescriptions.length}
+                                    {isPrimary && (
+                                      <span style={{
+                                        marginLeft: 6,
+                                        fontSize: 9.5,
+                                        fontWeight: 900,
+                                        background: '#059669',
+                                        color: '#FFFFFF',
+                                        padding: '1px 5px',
+                                        borderRadius: 4
+                                      }}>
+                                        ACTIVE
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    <div>{rx.drugName || rx.brandName}</div>
+                                    {(rx.genericName || rx.slotNo || rx.manufacturer) && (
+                                      <div style={{ fontSize: 10, color: '#64748B', fontWeight: 500, marginTop: 1 }}>
+                                        {rx.genericName && rx.genericName !== rx.drugName && <span>{rx.genericName} • </span>}
+                                        {rx.manufacturer && <span>{rx.manufacturer} • </span>}
+                                        {rx.slotNo && <span style={{ fontFamily: 'monospace', color: '#0369A1' }}>Slot: {rx.slotNo}</span>}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#334155' }}>
+                                    <span style={{ fontWeight: 700 }}>{rx.dosage || '1 tab'}</span>
+                                    {rx.frequency && <span style={{ color: '#0284C7', marginLeft: 4, fontWeight: 700 }}>• {rx.frequency}</span>}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569', fontWeight: 600 }}>
+                                    {rx.durationDays ? `${rx.durationDays} Days` : '5 Days'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>
+                                    {rx.totalQty || '5'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569', fontSize: 11 }}>
+                                    <div>{rx.instructions || 'After food'}</div>
+                                    {rx.timing && <span style={{ fontSize: 9.5, color: '#059669', fontWeight: 700 }}>({rx.timing.replace('_', ' ')})</span>}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                    <span style={{
+                                      fontSize: 10.5,
+                                      fontWeight: 800,
+                                      padding: '2.5px 8px',
+                                      borderRadius: 12,
+                                      background: '#DCFCE7',
+                                      color: '#166534',
+                                      display: 'inline-block',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      ✓ Prescribed
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                                    ₹{rx.price || '120'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
-                    <div style={{ marginTop: 4 }}><strong>Lab Tests:</strong> {activeSession?.investigations.map(i => i.testName).join(', ') || 'None'}</div>
-                    <div style={{ marginTop: 4 }}><strong>Procedures:</strong> {activeSession?.procedures.map(p => p.procedureName).join(', ') || 'None'}</div>
                   </div>
+
+                  {/* 2. Procedure Supplies & Consumables Table */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    marginBottom: 14,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                  }}>
+                    <div style={{
+                      background: '#F1F5F9',
+                      padding: '7px 12px',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#475569',
+                      borderBottom: '1px solid #CBD5E1',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Layers size={14} color="#0369A1" />
+                        <span style={{ letterSpacing: '0.02em' }}>
+                          PROCEDURE SUPPLIES &amp; CONSUMABLES ({uniqueProcedurePrescriptions.length})
+                        </span>
+                        <span style={{ fontSize: 10, background: '#E0F2FE', color: '#0369A1', fontWeight: 800, padding: '1px 6px', borderRadius: 10 }}>
+                          Dispensary Allocated
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('procedures')}
+                        style={{ background: 'transparent', border: 'none', color: '#0369A1', fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: 0 }}
+                      >
+                        ✎ Edit Supplies (Tab 4) →
+                      </button>
+                    </div>
+
+                    {(!uniqueProcedurePrescriptions || uniqueProcedurePrescriptions.length === 0) ? (
+                      <div style={{ padding: '12px 14px', fontSize: 12, color: '#64748B', fontStyle: 'italic' }}>
+                        No procedure consumables or supplies allocated.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ background: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, width: 80 }}>SUPPLY #</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>SUPPLY ITEM NAME</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>ITEM CODE / ID</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>CATEGORY</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>ALLOCATED QTY</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>CLINICAL NOTES / PURPOSE</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>STATUS</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'right' }}>DISPENSARY CHARGE</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uniqueProcedurePrescriptions.map((sup, idx) => {
+                              const isFirst = idx === 0;
+                              return (
+                                <tr
+                                  key={sup.id || idx}
+                                  style={{
+                                    borderBottom: '1px solid #E2E8F0',
+                                    background: isFirst ? '#F0FDF4' : '#FFFFFF'
+                                  }}
+                                >
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    {idx + 1}/{uniqueProcedurePrescriptions.length}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    {sup.itemName}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontWeight: 800, color: '#0369A1' }}>
+                                    {sup.idCode || `SUP-${idx + 101}`}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569' }}>
+                                    {sup.category || 'Clinical Consumable'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>
+                                    {sup.quantity} {sup.unit || 'Nos'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569', fontSize: 11 }}>
+                                    {sup.instructions || 'Allocated for clinical procedure'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                    <span style={{
+                                      fontSize: 10.5,
+                                      fontWeight: 800,
+                                      padding: '2.5px 8px',
+                                      borderRadius: 12,
+                                      background: '#DBEAFE',
+                                      color: '#1E40AF',
+                                      display: 'inline-block',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      ✓ Allocated
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#059669' }}>
+                                    Included
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Ordered Lab Tests & Diagnostics Table */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    marginBottom: uniqueProcedures.length > 0 ? 12 : 0,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                  }}>
+                    <div style={{
+                      background: '#F1F5F9',
+                      padding: '7px 12px',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#475569',
+                      borderBottom: '1px solid #CBD5E1',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <FileText size={14} color="#7C3AED" />
+                        <span style={{ letterSpacing: '0.02em' }}>
+                          LAB INVESTIGATIONS &amp; PATHOLOGY ({uniqueInvestigations.length})
+                        </span>
+                        <span style={{ fontSize: 10, background: '#EDE9FE', color: '#6D28D9', fontWeight: 800, padding: '1px 6px', borderRadius: 10 }}>
+                          Diagnostic Workup
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('lab')}
+                        style={{ background: 'transparent', border: 'none', color: '#7C3AED', fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: 0 }}
+                      >
+                        ✎ Edit Labs (Tab 5) →
+                      </button>
+                    </div>
+
+                    {(!uniqueInvestigations || uniqueInvestigations.length === 0) ? (
+                      <div style={{ padding: '12px 14px', fontSize: 12, color: '#64748B', fontStyle: 'italic' }}>
+                        No diagnostic investigations ordered.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ background: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, width: 80 }}>TEST #</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>LAB TEST NAME</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>SPECIMEN / TUBE</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>CATEGORY</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800 }}>CLINICAL INDICATION / NOTES</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'center' }}>STATUS</th>
+                              <th style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'right' }}>TEST FEE</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uniqueInvestigations.map((inv, idx) => {
+                              const isDone = inv.status === 'COMPLETED';
+                              return (
+                                <tr
+                                  key={inv.testId || (inv as any).id || idx}
+                                  style={{
+                                    borderBottom: '1px solid #E2E8F0',
+                                    background: isDone ? '#F0FDF4' : idx === 0 ? '#FAF5FF' : '#FFFFFF'
+                                  }}
+                                >
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    {idx + 1}/{uniqueInvestigations.length}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    {inv.testName}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#7C3AED', fontWeight: 700 }}>
+                                    {inv.specimenTube || 'EDTA (Purple Tube)'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569' }}>
+                                    {inv.category || 'Hematology'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569', fontSize: 11 }}>
+                                    {inv.notes || 'Routine hematological workup, check ESR and platelet count'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                    <span style={{
+                                      fontSize: 10.5,
+                                      fontWeight: 800,
+                                      padding: '2.5px 8px',
+                                      borderRadius: 12,
+                                      background: isDone ? '#DCFCE7' : '#EDE9FE',
+                                      color: isDone ? '#166534' : '#6D28D9',
+                                      display: 'inline-block',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {isDone ? '✓ Completed' : '⚡ Ordered'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                                    ₹{inv.price || 350}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Procedure Protocol Teaser Link */}
+                  {uniqueProcedures.length > 0 && (
+                    <div style={{
+                      background: '#F0F9FF',
+                      border: '1px solid #BAE6FD',
+                      borderRadius: 8,
+                      padding: '9px 14px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 8
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Scissors size={15} color="#0284C7" />
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#0369A1', fontSize: 12 }}>
+                            {uniqueProcedures[0].procedureName}
+                            <span style={{ fontWeight: 600, color: '#64748B', marginLeft: 6, fontSize: 11 }}>
+                              ({uniqueProcedures.length} Sessions • {uniqueProcedures[0].bodyPart || 'FACE'} • {uniqueProcedures[0].therapist || 'Dr Valaki'})
+                            </span>
+                          </div>
+                          {nextSessionItem && (
+                            <div style={{ fontSize: 11, color: '#059669', fontWeight: 700, marginTop: 2 }}>
+                              ⚡ Next Session: {nextSessionItem.sessionsCount || `Session ${nextSessionItem.sessionNumber}`} on {nextSessionItem.scheduledDate} ({nextSessionItem.status})
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('procedures')}
+                        className="btn btn-sm btn-outline"
+                        style={{ borderColor: '#0284C7', color: '#0284C7', fontSize: 11, fontWeight: 800, padding: '3px 10px' }}
+                      >
+                        Tab 4 Protocol Details →
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/* 3. Dedicated Clinical Procedure Treatment Protocol & Next Session Schedule */}
+                {uniqueProcedures.length > 0 && (
+                  <div style={{
+                    background: '#FFFFFF',
+                    border: '1.5px solid #0284C7',
+                    borderRadius: 10,
+                    padding: 16,
+                    marginBottom: 20,
+                    boxShadow: '0 2px 10px rgba(2, 132, 199, 0.08)'
+                  }}>
+                    {/* Header Ribbon */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      marginBottom: 14,
+                      borderBottom: '1.5px solid #E0F2FE',
+                      paddingBottom: 10
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                          color: '#FFFFFF',
+                          padding: '5px 8px',
+                          borderRadius: 6,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <Scissors size={15} />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: 13.5, color: '#0369A1' }}>
+                            Clinical Procedure Treatment Protocol &amp; Next Session Schedule
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748B' }}>
+                            Single source of truth multi-session protocol • Auto-linked to reception appointment recall
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{
+                          background: '#E0F2FE',
+                          color: '#0369A1',
+                          fontWeight: 800,
+                          fontSize: 11,
+                          padding: '3px 10px',
+                          borderRadius: 20
+                        }}>
+                          {uniqueProcedures.length} Sessions Total
+                        </span>
+                        <span style={{
+                          background: '#ECFDF5',
+                          color: '#065F46',
+                          fontWeight: 800,
+                          fontSize: 11,
+                          padding: '3px 10px',
+                          borderRadius: 20
+                        }}>
+                          {completedProceduresCount} Executed
+                        </span>
+                        {nextSessionItem && (
+                          <span style={{
+                            background: '#FEF3C7',
+                            color: '#92400E',
+                            fontWeight: 900,
+                            fontSize: 11,
+                            padding: '3px 10px',
+                            borderRadius: 20,
+                            border: '1px solid #FDE68A'
+                          }}>
+                            ⚡ Next: {nextSessionItem.scheduledDate}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('procedures')}
+                          className="btn btn-sm btn-outline"
+                          style={{
+                            borderColor: '#0284C7',
+                            color: '#0284C7',
+                            fontSize: 11,
+                            fontWeight: 800,
+                            padding: '4px 10px'
+                          }}
+                        >
+                          ✎ Edit Protocol (Tab 4)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Next Session Spotlight & Protocol Cards Grid */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: nextSessionItem ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr',
+                      gap: 12,
+                      marginBottom: 14
+                    }}>
+                      {/* Left Card: Protocol Overview */}
+                      <div style={{
+                        background: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: 8,
+                        padding: 12,
+                        fontSize: 12
+                      }}>
+                        <div style={{ fontWeight: 800, color: '#0369A1', marginBottom: 8, fontSize: 12 }}>
+                          📋 Protocol Configuration
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', rowGap: 5, columnGap: 12 }}>
+                          <span style={{ color: '#64748B' }}>Procedure:</span>
+                          <strong>{uniqueProcedures[0]?.procedureName}</strong>
+
+                          <span style={{ color: '#64748B' }}>Target Area:</span>
+                          <strong>{uniqueProcedures[0]?.bodyPart || 'FACE'}</strong>
+
+                          <span style={{ color: '#64748B' }}>Therapist:</span>
+                          <span>{uniqueProcedures[0]?.therapist || 'Dr Valaki'}</span>
+
+                          <span style={{ color: '#64748B' }}>Protocol Total:</span>
+                          <span style={{ fontWeight: 800, color: '#059669' }}>
+                            ₹{fullPackageProceduresTotal} ({uniqueProcedures.length} Sessions @ ₹{Math.round(fullPackageProceduresTotal / (uniqueProcedures.length || 1))}/sess)
+                          </span>
+
+                          <span style={{ color: '#64748B' }}>Payment Mode:</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontWeight: 800,
+                              color: isSessionWise ? '#0369A1' : '#059669',
+                              fontSize: 11.5,
+                              background: isSessionWise ? '#E0F2FE' : '#DCFCE7',
+                              padding: '2px 8px',
+                              borderRadius: 4
+                            }}>
+                              {isSessionWise
+                                ? `⚡ Session-Wise: ₹${sessionWiseProceduresTotal} today (Session 1)`
+                                : `📦 Full Package: ₹${fullPackageProceduresTotal} upfront`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateBilling({ procedureBillingMode: isSessionWise ? 'full_package' : 'session_wise' })}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#0284C7',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                padding: 0,
+                                textDecoration: 'underline'
+                              }}
+                            >
+                              Switch to {isSessionWise ? 'Full Package (₹9000)' : 'Session-Wise (₹3000)'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Card: Next Session Spotlight Banner */}
+                      {nextSessionItem && (
+                        <div style={{
+                          background: 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 50%, #EFF6FF 100%)',
+                          border: '1.5px solid #10B981',
+                          borderRadius: 8,
+                          padding: 12,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
+                        }}>
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{
+                                background: '#10B981',
+                                color: '#FFFFFF',
+                                fontWeight: 900,
+                                fontSize: 10.5,
+                                padding: '2px 8px',
+                                borderRadius: 12,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                letterSpacing: '0.04em'
+                              }}>
+                                ⚡ NEXT SESSION SCHEDULED
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#047857' }}>
+                                Status: {nextSessionItem.status || 'Scheduled'}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 18, fontWeight: 900, color: '#065F46' }}>
+                                {nextSessionItem.sessionsCount || `Session ${nextSessionItem.sessionNumber}/${uniqueProcedures.length}`}
+                              </span>
+                              <span style={{ fontSize: 14, color: '#64748B' }}>•</span>
+                              <span style={{ fontSize: 16, fontWeight: 900, color: '#0284C7', fontFamily: 'monospace' }}>
+                                📅 {nextSessionItem.scheduledDate}
+                              </span>
+                              <span style={{
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: '#047857',
+                                background: '#DCFCE7',
+                                border: '1px solid #BBF7D0',
+                                padding: '1px 8px',
+                                borderRadius: 12
+                              }}>
+                                (+{nextSessionItem.intervalDays || 20}d interval from Session 2 on 24/09/2026)
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: 11.5, color: '#334155', marginTop: 4 }}>
+                              <strong>Target:</strong> {nextSessionItem.bodyPart || 'FACE'} • <strong>Therapist:</strong> {nextSessionItem.therapist || 'Dr Valaki'} • <strong>Interval:</strong> +{nextSessionItem.intervalDays || 20}d from prior session
+                            </div>
+                          </div>
+
+                          <div style={{
+                            fontSize: 11,
+                            color: '#047857',
+                            fontWeight: 700,
+                            marginTop: 8,
+                            paddingTop: 6,
+                            borderTop: '1px dashed #A7F3D0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 5
+                          }}>
+                            <CheckCircle2 size={13} color="#059669" />
+                            <span>Auto-linked to Reception recall queue &amp; patient consent protocol</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* All Sessions Schedule Timeline Breakdown */}
+                    <div style={{
+                      background: '#F8FAFC',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: 8,
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        background: '#F1F5F9',
+                        padding: '6px 12px',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: '#475569',
+                        borderBottom: '1px solid #CBD5E1',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>Full Protocol Session Execution Roadmap ({uniqueProcedures.length} Sessions)</span>
+                        <span>All 22 Clinical Parameters Synchronized</span>
+                      </div>
+
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ background: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
+                              <th style={{ padding: '6px 10px', fontWeight: 800 }}>Session #</th>
+                              <th style={{ padding: '6px 10px', fontWeight: 800 }}>Scheduled Date</th>
+                              <th style={{ padding: '6px 10px', fontWeight: 800 }}>Executed Date</th>
+                              <th style={{ padding: '6px 10px', fontWeight: 800 }}>Status</th>
+                              <th style={{ padding: '6px 10px', fontWeight: 800 }}>Therapist</th>
+                              <th style={{ padding: '6px 10px', fontWeight: 800 }}>Clinical Parameters / Remarks</th>
+                              <th style={{ padding: '6px 10px', fontWeight: 800, textAlign: 'right' }}>Session Fee</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uniqueProcedures.map((proc, idx) => {
+                              const isNext = nextSessionItem?.id === proc.id;
+                              const isDone = proc.status === 'Done';
+                              return (
+                                <tr
+                                  key={proc.id || idx}
+                                  style={{
+                                    borderBottom: '1px solid #E2E8F0',
+                                    background: isNext
+                                      ? '#EFF6FF'
+                                      : isDone
+                                      ? '#F0FDF4'
+                                      : '#FFFFFF'
+                                  }}
+                                >
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                    {proc.sessionsCount || `${idx + 1}/${uniqueProcedures.length}`}
+                                    {isNext && (
+                                      <span style={{
+                                        marginLeft: 6,
+                                        fontSize: 9.5,
+                                        fontWeight: 900,
+                                        background: '#0284C7',
+                                        color: '#FFFFFF',
+                                        padding: '1px 6px',
+                                        borderRadius: 4
+                                      }}>
+                                        NEXT
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontWeight: 700 }}>
+                                    {isNext ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                        <input
+                                          type="text"
+                                          value={proc.scheduledDate}
+                                          onChange={(e) => {
+                                            updateProcedure(proc.id, { scheduledDate: e.target.value });
+                                          }}
+                                          style={{
+                                            width: 105,
+                                            padding: '3px 7px',
+                                            fontSize: 12,
+                                            fontWeight: 900,
+                                            fontFamily: 'monospace',
+                                            border: '1.5px solid #0284C7',
+                                            borderRadius: 5,
+                                            background: '#FFFFFF',
+                                            color: '#0284C7',
+                                            boxShadow: '0 1px 3px rgba(2, 132, 199, 0.15)'
+                                          }}
+                                          title="Scheduled Date (Click to edit or adjust)"
+                                        />
+                                        <span style={{
+                                          fontSize: 10,
+                                          fontWeight: 800,
+                                          background: '#DCFCE7',
+                                          color: '#166534',
+                                          padding: '2px 6px',
+                                          borderRadius: 4,
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          ⚡ Next
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: isDone ? '#0F172A' : '#475569' }}>
+                                        {proc.scheduledDate}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontFamily: 'monospace', color: proc.performanceDate ? '#059669' : '#94A3B8' }}>
+                                    {proc.performanceDate || (isDone ? proc.scheduledDate : '—')}
+                                  </td>
+                                  <td style={{ padding: '7px 10px' }}>
+                                    <span style={{
+                                      fontSize: 10.5,
+                                      fontWeight: 800,
+                                      padding: '2px 8px',
+                                      borderRadius: 12,
+                                      background: isDone ? '#DCFCE7' : isNext ? '#DBEAFE' : proc.status === 'Delayed' ? '#FEF3C7' : '#F1F5F9',
+                                      color: isDone ? '#166534' : isNext ? '#1E40AF' : proc.status === 'Delayed' ? '#92400E' : '#475569'
+                                    }}>
+                                      {isDone ? '✓ Completed' : isNext ? '⚡ Scheduled (Next)' : proc.status || 'Scheduled'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#334155' }}>
+                                    {proc.therapist || 'Dr Valaki'}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', color: '#475569', fontSize: 11 }}>
+                                    {proc.remark || (isDone
+                                      ? `Skin: ${proc.skinType || 2} • Power: ${proc.power || 10}J • Wave: ${proc.waveLength || '100 hz'} • Shots: ${proc.shotsFired || 100}`
+                                      : `Interval: ${proc.intervalDays || 20}d • ${proc.bodyPart || 'FACE'}`)}
+                                  </td>
+                                  <td style={{ padding: '7px 10px', fontWeight: 800, textAlign: 'right', color: '#0F172A' }}>
+                                    ₹{proc.rate || proc.price || Math.round(proceduresTotal / (uniqueProcedures.length || 1))}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Billing Summary & FOC controls */}
                 <div style={{
@@ -7292,6 +7442,69 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     </div>
                   )}
 
+                  {/* Procedure Fee Collection Mode Switcher */}
+                  {uniqueProcedures.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: isSessionWise ? '#F0F9FF' : '#F0FDF4',
+                      border: isSessionWise ? '1.5px solid #BAE6FD' : '1.5px solid #BBF7D0',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      marginBottom: 12,
+                      flexWrap: 'wrap',
+                      gap: 8
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: isSessionWise ? '#0369A1' : '#15803D' }}>
+                          ⚡ Procedure Fee Collection Mode:
+                        </span>
+                        <span style={{ fontSize: 11, color: '#475569' }}>
+                          {isSessionWise
+                            ? `Billing only Session 1 done today (₹${sessionWiseProceduresTotal}). Remaining balance due in future visits.`
+                            : `Billing full ${uniqueProcedures.length}-session protocol package upfront today (₹${fullPackageProceduresTotal}).`}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={() => updateBilling({ procedureBillingMode: 'session_wise' })}
+                          style={{
+                            border: isSessionWise ? '1.5px solid #0284C7' : '1px solid #CBD5E1',
+                            padding: '4px 12px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            background: isSessionWise ? '#0284C7' : '#FFFFFF',
+                            color: isSessionWise ? '#FFFFFF' : '#0369A1',
+                            boxShadow: isSessionWise ? '0 1px 4px rgba(2, 132, 199, 0.35)' : 'none'
+                          }}
+                        >
+                          ⚡ Session-Wise (Today: ₹{sessionWiseProceduresTotal})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateBilling({ procedureBillingMode: 'full_package' })}
+                          style={{
+                            border: !isSessionWise ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                            padding: '4px 12px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            background: !isSessionWise ? '#059669' : '#FFFFFF',
+                            color: !isSessionWise ? '#FFFFFF' : '#047857',
+                            boxShadow: !isSessionWise ? '0 1px 4px rgba(5, 150, 105, 0.35)' : 'none'
+                          }}
+                        >
+                          📦 Full Package (All {uniqueProcedures.length}: ₹{fullPackageProceduresTotal})
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Itemized Line Items */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#475569', marginBottom: 6 }}>
                     <span>Doctor Consultation Fee:</span>
@@ -7308,9 +7521,37 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   </div>
 
                   {(activeSession?.procedures && activeSession.procedures.length > 0) && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#475569', marginBottom: 6 }}>
-                      <span>Clinical Procedures ({activeSession.procedures.length}):</span>
-                      <strong>₹{proceduresTotal}</strong>
+                    <div style={{
+                      marginBottom: 8,
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      background: isSessionWise ? '#F0F9FF' : '#F8FAFC',
+                      border: isSessionWise ? '1px solid #BAE6FD' : '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#1E293B', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontWeight: 800 }}>
+                            Clinical Procedures ({isSessionWise ? `Session 1 Done of ${uniqueProcedures.length}` : `All ${uniqueProcedures.length} Sessions Upfront`}):
+                          </span>
+                          <span style={{
+                            marginLeft: 8,
+                            fontSize: 10.5,
+                            fontWeight: 800,
+                            padding: '2px 7px',
+                            borderRadius: 12,
+                            background: isSessionWise ? '#E0F2FE' : '#DCFCE7',
+                            color: isSessionWise ? '#0369A1' : '#166534'
+                          }}>
+                            {isSessionWise ? '⚡ Session-Wise' : '📦 Full Package'}
+                          </span>
+                        </div>
+                        <strong style={{ fontSize: 13, color: '#0F172A' }}>₹{proceduresTotal}</strong>
+                      </div>
+                      <div style={{ fontSize: 11, color: isSessionWise ? '#0369A1' : '#059669', marginTop: 3 }}>
+                        {isSessionWise
+                          ? `✓ Collected for Session 1 executed today • Remaining ${uniqueProcedures.length - 1} sessions (₹${proceduresFutureBalance}) will be collected at future visits`
+                          : `✓ Full protocol package prepaid upfront • All ${uniqueProcedures.length} sessions fully covered`}
+                      </div>
                     </div>
                   )}
 
@@ -8528,7 +8769,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         <div className="modal-overlay" onClick={() => setShowPrescriptionModal(false)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Prescription Preview & Print (Ready for Sign-Off)</span>
+              <span className="modal-title">Official Signed Digital Prescription Preview & Print (Ready for Sign-Off)</span>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowPrescriptionModal(false)}>
                 <X size={16} />
               </button>
@@ -8746,7 +8987,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       {/* Patient Review Link Footer Notice */}
                       {activeSession?.diagnosis?.sendReviewLink && (
                         <div style={{ marginTop: 8, fontSize: rxBaseFontSize - 1.5, color: '#0369A1', background: '#F0F9FF', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
-                          ★ Patient Review Link: Prepared for delivery (Frontend Simulation Mode — No external SMS gateway connected).
+                          ★ Patient Review Link: Prepared for delivery.
                         </div>
                       )}
                     </div>

@@ -98,6 +98,17 @@ export function atomic<T>(action: () => T): T {
   transaction = { db, rollback: new Map() };
   try {
     const result = action();
+    if (typeof window !== 'undefined') {
+      const keys = ['doctor-billing', 'doctor-queue', 'doctor-patients', 'doctor-appointments', 'doctor-consultation', 'doctor-pharmacy', 'doctor-admin'];
+      keys.forEach(k => {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            transaction!.db.slices[k] = JSON.parse(raw);
+          }
+        } catch {}
+      });
+    }
     localStorage.setItem(DATABASE_KEY, JSON.stringify(transaction.db));
     return result;
   } catch (error) {
