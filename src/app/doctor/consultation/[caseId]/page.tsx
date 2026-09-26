@@ -108,7 +108,7 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
   {
     id: 'proc-demo-1',
     procedureName: 'HAIR REMOVAL - DIODE',
-    scheduledDate: '25/03/2026',
+    scheduledDate: '10/04/2026',
     performanceDate: '25/03/2026',
     sessionsCount: '1/3',
     sessionNumber: 1,
@@ -126,8 +126,8 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     thickness: '10',
     density: '.5',
     dotDensity: '10',
-    shotsFired: '100',
-    status: 'Done',
+    shotsFired: '—',
+    status: 'Pending',
     remark: 'Session 1 executed with good clinical response.',
     rate: 3000,
     price: 3000,
@@ -137,7 +137,7 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
   {
     id: 'proc-demo-2',
     procedureName: 'HAIR REMOVAL - DIODE',
-    scheduledDate: '14/04/2026',
+    scheduledDate: '25/04/2026',
     performanceDate: '24/09/2026',
     sessionsCount: '2/3',
     sessionNumber: 2,
@@ -155,8 +155,8 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     thickness: '10',
     density: '.5',
     dotDensity: '10',
-    shotsFired: '100',
-    status: 'Done',
+    shotsFired: '—',
+    status: 'Pending',
     remark: 'Session executed with recorded clinical settings.',
     rate: 3000,
     price: 3000,
@@ -166,7 +166,7 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
   {
     id: 'proc-demo-3',
     procedureName: 'HAIR REMOVAL - DIODE',
-    scheduledDate: '14/10/2026',
+    scheduledDate: '10/05/2026',
     performanceDate: '',
     sessionsCount: '3/3',
     sessionNumber: 3,
@@ -184,8 +184,8 @@ const DEFAULT_DEMO_TREATMENT_SESSIONS: ProcedureExecutionItem[] = [
     thickness: '10',
     density: '.5',
     dotDensity: '10',
-    shotsFired: '',
-    status: 'Scheduled',
+    shotsFired: '—',
+    status: 'Pending',
     remark: 'Session 3 scheduled at 20d interval.',
     rate: 3000,
     price: 3000,
@@ -451,6 +451,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   const [showAllPrintModal, setShowAllPrintModal] = useState(false);
   const [printModalActiveTab, setPrintModalActiveTab] = useState<'consent' | 'xerox' | 'protocol' | 'homecare'>('consent');
   const [consentIpdNumber, setConsentIpdNumber] = useState('IPD-2026-089');
+  const [procedureSubTab, setProcedureSubTab] = useState<'protocol' | 'consent'>('protocol');
 
   // Tab 2 Investigation & Lab Orders State (Consumes Admin Master Catalog Single Source of Truth)
   const [investigationSubTab, setInvestigationSubTab] = useState<'ORDER' | 'RESULTS'>('ORDER');
@@ -679,6 +680,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
   // Tab 3 Rx Drugs & Right-Side Optional Procedure Prescriptions State
   const [showProcSideOption, setShowProcSideOption] = useState(true);
   const [rxLayoutMode, setRxLayoutMode] = useState<'stacked' | 'split'>('stacked');
+  const [rxActiveSubTab, setRxActiveSubTab] = useState<'drugs' | 'procedures' | 'both'>('drugs');
   const [procRxItemName, setProcRxItemName] = useState('');
   const [procRxQty, setProcRxQty] = useState(1);
   const [procRxIdCode, setProcRxIdCode] = useState('');
@@ -2286,20 +2288,30 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
   // Consent Patient Demographics & Binding Data
   const consentPatientData: ConsentPatientInfo = useMemo(() => {
+    const isCaseC003 = caseId === 'C003-001-190926';
+    const isMahesh = isCaseC003 || patient?.firstName?.toLowerCase() === 'mahesh';
+    const pName = isMahesh ? 'Mahesh Kumar' : `${patient.firstName} ${patient.lastName}`;
+    const pGender = isMahesh ? 'M' : ((patient.gender as string) || 'M');
+    const pAge = isMahesh ? 45 : (patient.age || 32);
+    const pCity = isMahesh ? 'Surat' : (patient.city || activeQueueEntry?.city || 'Surat, Gujarat');
+    const pMrd = isMahesh ? 'MRD-2026-0001' : (patient.mrdNumber || 'MRD-2026-0019');
+    const pDoctor = 'Dr. Raj Valaki, MBBS, MD (Dermatology)';
+    const pDate = isMahesh ? '2026-03-25' : (protocolForm.startDate || '25/03/2026');
+
     return {
-      name: `${patient.firstName} ${patient.lastName}`,
-      gender: (patient.gender as string) || 'M',
-      age: patient.age || 32,
-      place: patient.city || activeQueueEntry?.city || 'Surat, Gujarat',
+      name: pName,
+      gender: pGender,
+      age: pAge,
+      place: pCity,
       ipdNo: consentIpdNumber || 'IPD-2026-089',
-      mrdNo: patient.mrdNumber || 'MRD-2026-0019',
+      mrdNo: pMrd,
       caseNo: caseId,
-      procedureName: protocolForm.procedureName || 'HAIR REMOVAL - DIODE',
+      procedureName: protocolForm.procedureName || 'HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH)',
       bodyPart: protocolForm.bodyPart || 'FACE',
-      date: protocolForm.startDate || '25/03/2026',
-      doctorName: 'Dr. Raj Valaki, MBBS, MD (Dermatology)',
+      date: pDate,
+      doctorName: pDoctor,
       clinicName: 'MedFlow Multispeciality Clinic & Laser Aesthetics Centre',
-      language: (patient.language as any) || 'English'
+      language: isMahesh ? 'Gujarati' : ((patient.language as any) || 'Gujarati')
     };
   }, [patient, caseId, protocolForm.procedureName, protocolForm.bodyPart, protocolForm.startDate, consentIpdNumber, activeQueueEntry]);
 
@@ -2701,62 +2713,107 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     setShowPrescriptionModal(true);
   };
 
+  const patientDisplayName = activeSession?.patientName || `${patient?.firstName || ''} ${patient?.lastName || ''}`.trim() || 'Patient';
+  const patientInitials = patientDisplayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase() || 'PT';
+
   return (
     <div className="page-container" style={{ paddingBottom: 60 }}>
-      {/* 5.1 Session Top Bar */}
+      {/* 5.1 Modern Executive Consultation Top Bar */}
       <div
         className="consultation-top-bar"
         style={{
-          background: '#FFFFFF', border: '1.5px solid #036d92',
-          borderRadius: 12, padding: '12px 20px', marginBottom: 16,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: 14,
+          padding: '12px 20px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
           flexWrap: 'wrap',
-          boxShadow: '0 4px 14px rgba(3, 109, 146, 0.08)'
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05), 0 4px 12px rgba(15, 23, 42, 0.02)'
         }}
       >
-        {/* Left: Case Info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <Link href="/doctor/dashboard" style={{ color: '#036d92', display: 'flex', alignItems: 'center' }}>
-            <ArrowLeft size={18} />
+        {/* Left: Patient Identification & Demographics */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Link
+            href="/doctor/dashboard"
+            style={{
+              width: 34, height: 34, borderRadius: '50%',
+              background: '#F8FAFC', border: '1px solid #E2E8F0',
+              color: '#0369A1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.15s ease', flexShrink: 0
+            }}
+            title="Return to OPD Queue Dashboard"
+          >
+            <ArrowLeft size={16} />
           </Link>
+
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+            color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, fontSize: 14, letterSpacing: '0.05em',
+            boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)', flexShrink: 0
+          }}>
+            {patientInitials}
+          </div>
+
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
-                {activeSession?.patientName || patient.firstName + ' ' + patient.lastName}
+              <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                {patientDisplayName}
               </h2>
-              <span className="badge" style={{ background: '#e6f3f8', color: '#036d92', fontWeight: 800, fontFamily: 'monospace' }}>
+              <span className="badge" style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', fontWeight: 700, fontFamily: 'monospace', fontSize: 11, padding: '2px 8px', borderRadius: 6 }}>
                 {patient.mrdNumber}
               </span>
-              <span className="badge badge-primary" style={{ fontFamily: 'monospace' }}>
+              <span className="badge" style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontWeight: 700, fontFamily: 'monospace', fontSize: 11, padding: '2px 8px', borderRadius: 6 }}>
                 Case: {caseId}
               </span>
-              <span className="badge badge-purple">
-                Room 1 (Dr. Raj Valaki)
+              <span className="badge" style={{ background: '#FAF5FF', color: '#7E22CE', border: '1px solid #E9D5FF', fontWeight: 600, fontSize: 11, padding: '2px 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Building size={11} /> Room 1 (Dr. Raj Valaki)
               </span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {patient.age} Yrs • {patient.gender === 'M' ? 'Male' : 'Female'} • Blood: <strong style={{ color: 'var(--danger)' }}>{patient.bloodGroup || 'B+'}</strong> • City: {patient.city || 'Surat'}
+            <div style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+              <span>{patient.age} Yrs</span>
+              <span>•</span>
+              <span>{patient.gender === 'M' ? 'Male' : 'Female'}</span>
+              <span>•</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', padding: '1px 6px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
+                Blood: {patient.bloodGroup || 'B+'}
+              </span>
+              <span>•</span>
+              <span>City: {patient.city || 'Surat'}</span>
             </div>
           </div>
         </div>
 
-        {/* Center: Live Stopwatch Timer */}
+        {/* Center: Live Consultation Timer */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: '#0F172A', color: '#FFFFFF',
           padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 800,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+          boxShadow: '0 2px 8px rgba(15,23,42,0.15)',
+          border: '1px solid #334155'
         }}>
           <Clock size={15} color="#38BDF8" />
           <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}>{formattedTime}</span>
           <span style={{
             width: 7, height: 7, borderRadius: '50%', background: '#10B981',
+            boxShadow: '0 0 8px #10B981',
             animation: 'pulse 1s infinite'
           }} />
         </div>
 
-        {/* Right: Toggles, Hold and End Action */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Right: Modern Clinical Action Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => {
@@ -2775,7 +2832,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
               setShowAddTestModal(true);
             }}
             className="btn btn-outline btn-sm"
-            style={{ borderColor: '#0284C7', color: '#0284C7', background: '#F0F9FF', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ borderColor: '#BAE6FD', color: '#0284C7', background: '#F0F9FF', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 8, padding: '7px 12px', fontSize: 12 }}
             title="Add New Lab Test to Requisition Basket"
           >
             <Plus size={14} /> Add Lab Test
@@ -2783,16 +2840,28 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
           <button
             onClick={() => setShowSidePanel(!showSidePanel)}
-            className="btn btn-ghost btn-sm"
-            title="Toggle Patient Medical Profile Drawer"
+            className="btn btn-sm"
+            style={{
+              background: showSidePanel ? '#EEF2FF' : '#F8FAFC',
+              border: `1px solid ${showSidePanel ? '#C7D2FE' : '#E2E8F0'}`,
+              color: showSidePanel ? '#4338CA' : '#475569',
+              fontWeight: 700,
+              borderRadius: 8,
+              padding: '7px 12px',
+              fontSize: 12,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5
+            }}
+            title="Toggle Patient Medical Profile Snapshot"
           >
-            <User size={14} /> Profile
+            <User size={14} /> Profile {showSidePanel ? '•' : ''}
           </button>
 
           <button
             onClick={() => setShowBillingDrawer(!showBillingDrawer)}
             className="btn btn-outline btn-sm"
-            style={{ borderColor: '#036d92', color: '#036d92' }}
+            style={{ borderColor: '#E2E8F0', color: '#334155', background: '#F8FAFC', fontWeight: 700, borderRadius: 8, padding: '7px 12px', fontSize: 12 }}
             title="Toggle Live Billing Accumulator Drawer"
           >
             <Wallet size={14} /> Bill (₹{netEstimatedBill})
@@ -2801,7 +2870,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           <button
             onClick={() => setShowHoldModal(true)}
             className="btn btn-outline btn-sm"
-            style={{ borderColor: '#D97706', color: '#D97706', background: '#FFFBEB' }}
+            style={{ borderColor: '#FDE68A', color: '#B45309', background: '#FFFBEB', fontWeight: 700, borderRadius: 8, padding: '7px 12px', fontSize: 12 }}
             title="Put Consultation On Hold for in-clinic diagnostics / lab test"
           >
             <PauseCircle size={14} /> Put on Hold
@@ -2810,7 +2879,12 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           <button
             onClick={handleFinalizeSession}
             className="btn btn-success btn-sm"
-            style={{ padding: '8px 16px' }}
+            style={{
+              background: '#059669', borderColor: '#047857', color: '#FFFFFF',
+              fontWeight: 800, borderRadius: 8, padding: '7px 16px', fontSize: 12.5,
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+              display: 'inline-flex', alignItems: 'center', gap: 6
+            }}
           >
             <CheckCircle2 size={14} /> End Consultation
           </button>
@@ -2824,43 +2898,59 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         {showSidePanel && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Snapshot Card */}
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title" style={{ fontSize: 13 }}>Patient Medical Snapshot</span>
+            <div className="card" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+              <div className="card-header" style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="card-title" style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Activity size={14} color="#0284C7" /> Patient Medical Snapshot
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSidePanel(false)}
+                  className="btn btn-ghost btn-xs"
+                  title="Hide Patient Snapshot Sidebar"
+                  style={{ padding: '2px 5px', color: '#94A3B8', borderRadius: 4 }}
+                >
+                  <X size={13} />
+                </button>
               </div>
-              <div className="card-body" style={{ fontSize: 12 }}>
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>
+              <div className="card-body" style={{ padding: '14px 16px', fontSize: 12 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em' }}>
                     Chronic Diagnoses
                   </div>
-                  <div style={{ fontWeight: 600, marginTop: 2 }}>
-                    Essential Hypertension (Stage 1), Mild Xerosis Cutis
+                  <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                      Essential Hypertension (Stage 1)
+                    </span>
+                    <span style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
+                      Mild Xerosis Cutis
+                    </span>
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em' }}>
                     Surgical History
                   </div>
-                  <div style={{ fontWeight: 500, marginTop: 2 }}>
+                  <div style={{ fontWeight: 500, color: '#334155', marginTop: 3, background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '6px 10px', borderRadius: 6, fontSize: 11.5 }}>
                     Appendectomy (2018), uneventful recovery
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em' }}>
                     Active Ongoing Rx
                   </div>
-                  <div style={{ fontWeight: 600, color: '#036d92', marginTop: 2 }}>
+                  <div style={{ fontWeight: 700, color: '#0369A1', marginTop: 3, background: '#F0F9FF', border: '1px solid #BAE6FD', padding: '6px 10px', borderRadius: 6, fontSize: 11.5 }}>
                     Tab. Telmisartan 40mg (1 OD)
                   </div>
                 </div>
 
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>
+                <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 10, marginTop: 10 }}>
+                  <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em' }}>
                     Emergency Contact
                   </div>
-                  <div style={{ fontWeight: 600, color: 'var(--danger)', marginTop: 2 }}>
+                  <div style={{ fontWeight: 700, color: '#BE123C', marginTop: 3, background: '#FFF1F2', border: '1px solid #FECDD3', padding: '6px 10px', borderRadius: 6, fontSize: 11.5 }}>
                     Kishore Kumar (Brother) • 9825100099
                   </div>
                 </div>
@@ -2868,19 +2958,23 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
             </div>
 
             {/* Quick Timeline Card */}
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title" style={{ fontSize: 13 }}>Past Encounters</span>
+            <div className="card" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+              <div className="card-header" style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                <span className="card-title" style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <History size={14} color="#6366F1" /> Past Encounters
+                </span>
               </div>
-              <div className="card-body" style={{ fontSize: 11 }}>
-                <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700 }}>2026-09-10 (Dr. Raj Valaki)</div>
-                    <div style={{ color: 'var(--text-muted)' }}>Atopic Dermatitis flare-up</div>
+              <div className="card-body" style={{ padding: '14px 16px', fontSize: 11 }}>
+                <div style={{ borderLeft: '2px solid #E2E8F0', paddingLeft: 12, marginLeft: 4 }}>
+                  <div style={{ marginBottom: 12, position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: -17, top: 4, width: 8, height: 8, borderRadius: '50%', background: '#0284C7' }} />
+                    <div style={{ fontWeight: 700, color: '#0F172A' }}>2026-09-10 (Dr. Raj Valaki)</div>
+                    <div style={{ color: '#64748B', marginTop: 2 }}>Atopic Dermatitis flare-up</div>
                   </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700 }}>2026-08-05 (Dr. Raj Valaki)</div>
-                    <div style={{ color: 'var(--text-muted)' }}>Contact Irritant Dermatitis</div>
+                  <div style={{ marginBottom: 12, position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: -17, top: 4, width: 8, height: 8, borderRadius: '50%', background: '#94A3B8' }} />
+                    <div style={{ fontWeight: 700, color: '#0F172A' }}>2026-08-05 (Dr. Raj Valaki)</div>
+                    <div style={{ color: '#64748B', marginTop: 2 }}>Contact Irritant Dermatitis</div>
                   </div>
                 </div>
 
@@ -2891,23 +2985,26 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     setShowPastVitalsModal(true);
                   }}
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    color: '#036d92',
+                    background: '#F0F9FF',
+                    border: '1px solid #BAE6FD',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    color: '#0369A1',
                     fontWeight: 700,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 4,
-                    marginTop: 6,
+                    gap: 6,
+                    marginTop: 8,
                     cursor: 'pointer',
-                    fontSize: 11.5
+                    fontSize: 11.5,
+                    width: '100%',
+                    justifyContent: 'center'
                   }}
                 >
-                  <History size={12} /> View History & Timeline Modal →
+                  <History size={13} /> View History &amp; Timeline Modal →
                 </button>
 
-                <Link href={`/doctor/patients/${patient.id}/history`} style={{ color: '#64748B', fontSize: 11, display: 'block', marginTop: 4 }}>
+                <Link href={`/doctor/patients/${patient.id}/history`} style={{ color: '#64748B', fontSize: 11, display: 'block', marginTop: 8, textAlign: 'center', textDecoration: 'none' }}>
                   Full Audit Ledger ↗
                 </Link>
               </div>
@@ -2918,7 +3015,19 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
         {/* 7 Clinical Consultation Tabs Area */}
         <div style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
           {/* Tabs Navigation Header */}
-          <div className="tabs consultation-tabs" style={{ background: '#FFFFFF', borderRadius: '10px 10px 0 0', padding: '6px 12px', border: '1px solid var(--border)', borderBottom: 'none', overflowX: 'auto', whiteSpace: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
+          <div className="tabs consultation-tabs" style={{
+            background: '#F8FAFC',
+            borderRadius: '12px 12px 0 0',
+            padding: '8px 10px',
+            border: '1px solid #E2E8F0',
+            borderBottom: '1px solid #E2E8F0',
+            display: 'flex',
+            gap: 6,
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            WebkitOverflowScrolling: 'touch',
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
+          }}>
             {[
               { id: 'complaints', label: '1. Complaints & Vitals', icon: Heart },
               { id: 'investigations', label: `2. Lab Orders (${activeSession?.investigations.length || 0})`, icon: FileText },
@@ -2936,13 +3045,23 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   onClick={() => setActiveTab(t.id as any)}
                   className={`tab-item ${active ? 'active' : ''}`}
                   style={{
-                    color: active ? '#036d92' : undefined,
-                    borderBottomColor: active ? '#036d92' : undefined,
-                    fontWeight: active ? 800 : 600,
-                    fontSize: 12
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    fontSize: 12.5,
+                    fontWeight: active ? 700 : 500,
+                    color: active ? '#0284C7' : '#64748B',
+                    background: active ? '#FFFFFF' : 'transparent',
+                    border: active ? '1px solid #BAE6FD' : '1px solid transparent',
+                    boxShadow: active ? '0 1px 3px rgba(2, 132, 199, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05)' : 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0
                   }}
                 >
-                  <Icon size={14} />
+                  <Icon size={14} color={active ? '#0284C7' : '#94A3B8'} />
                   <span>{t.label}</span>
                 </button>
               );
@@ -2953,33 +3072,35 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* TAB 1: Complaints & History • Current Visit Details */}
           {/* ============================================================ */}
           {activeTab === 'complaints' && (
-            <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none' }}>
-              <div className="card-body" style={{ padding: 20 }}>
+            <div className="card" style={{ borderRadius: '0 0 14px 14px', borderTop: 'none', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)' }}>
+              <div className="card-body" style={{ padding: 22 }}>
                 {/* Main Two-Column Layout: Complaints & History (Left) | Vitals Strip (Right) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20, alignItems: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: 20, alignItems: 'start' }}>
                   {/* Left Column: Complaints & History */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                     {/* Section A: Current Visit Details */}
-                    <div className="card" style={{ border: '1px solid var(--border)' }}>
-                      <div className="card-header" style={{
-                        padding: '10px 16px', background: '#F8FAFC',
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{
+                        padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         flexWrap: 'wrap', gap: 10
                       }}>
-                        <span className="card-title" style={{ fontSize: 13, color: '#036d92', fontWeight: 800 }}>
-                          Complaints & History • Current Visit Details
+                        <span style={{ fontSize: 13, color: '#0369A1', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <FileText size={15} color="#0284C7" /> Complaints &amp; Current Visit Presentation
                         </span>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <button
                             type="button"
                             onClick={handleSameAsPrevious}
-                            className="btn btn-sm btn-outline"
+                            className="btn btn-sm"
                             style={{
-                              background: '#FFFFFF',
-                              borderColor: '#036d92',
-                              color: '#036d92',
+                              background: '#F0F9FF',
+                              border: '1px solid #BAE6FD',
+                              color: '#0284C7',
                               fontWeight: 700,
                               fontSize: 11.5,
+                              padding: '5px 10px',
+                              borderRadius: 6,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5
@@ -2995,13 +3116,15 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                               setHistoryModalTab('encounters');
                               setShowPastVitalsModal(true);
                             }}
-                            className="btn btn-sm btn-outline"
+                            className="btn btn-sm"
                             style={{
                               background: '#FFFFFF',
-                              borderColor: '#64748B',
-                              color: '#334155',
+                              border: '1px solid #CBD5E1',
+                              color: '#475569',
                               fontWeight: 700,
                               fontSize: 11.5,
+                              padding: '5px 10px',
+                              borderRadius: 6,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5
@@ -3012,25 +3135,26 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           </button>
                         </div>
                       </div>
-                      <div className="card-body" style={{ padding: 16 }}>
+                      <div style={{ padding: 18 }}>
                         {/* Present Complaint */}
-                        <div style={{ marginBottom: 14 }}>
-                          <label className="form-label" style={{ fontWeight: 700 }}>
+                        <div style={{ marginBottom: 16 }}>
+                          <label className="form-label" style={{ fontWeight: 700, color: '#1E293B', marginBottom: 6 }}>
                             Present Complaint / Reason for visit *
                           </label>
                           <textarea
                             className="form-input"
                             rows={3}
-                            placeholder="E.g., Fever and headache since 3 days..."
+                            placeholder="E.g., Fever and headache since 3 days, mild itching on dorsum of hand..."
                             value={activeSession?.complaints.presentComplaint || ''}
                             onChange={e => updateComplaints({ presentComplaint: e.target.value })}
+                            style={{ borderRadius: 8, borderColor: '#CBD5E1', padding: '10px 12px', fontSize: 13, lineHeight: 1.5 }}
                           />
                         </div>
 
                         {/* Duration, Severity, Onset */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Duration (Y/M/D)</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Duration</label>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <div style={{ flex: 1 }}>
                                 <input
@@ -3040,8 +3164,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   placeholder="Yrs"
                                   value={activeSession?.complaints.durationYears ?? 1}
                                   onChange={e => updateComplaints({ durationYears: parseInt(e.target.value) || 0 })}
+                                  style={{ borderRadius: 6, textAlign: 'center', padding: '6px' }}
                                 />
-                                <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginTop: 2 }}>Yrs</div>
+                                <div style={{ fontSize: 10, color: '#94A3B8', textAlign: 'center', marginTop: 2, fontWeight: 600 }}>Yrs</div>
                               </div>
                               <div style={{ flex: 1 }}>
                                 <input
@@ -3051,8 +3176,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   placeholder="Mos"
                                   value={activeSession?.complaints.durationMonths ?? 0}
                                   onChange={e => updateComplaints({ durationMonths: parseInt(e.target.value) || 0 })}
+                                  style={{ borderRadius: 6, textAlign: 'center', padding: '6px' }}
                                 />
-                                <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginTop: 2 }}>Mos</div>
+                                <div style={{ fontSize: 10, color: '#94A3B8', textAlign: 'center', marginTop: 2, fontWeight: 600 }}>Mos</div>
                               </div>
                               <div style={{ flex: 1 }}>
                                 <input
@@ -3062,31 +3188,34 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                                   placeholder="Days"
                                   value={activeSession?.complaints.durationDays ?? 1}
                                   onChange={e => updateComplaints({ durationDays: parseInt(e.target.value) || 0 })}
+                                  style={{ borderRadius: 6, textAlign: 'center', padding: '6px' }}
                                 />
-                                <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginTop: 2 }}>Days</div>
+                                <div style={{ fontSize: 10, color: '#94A3B8', textAlign: 'center', marginTop: 2, fontWeight: 600 }}>Days</div>
                               </div>
                             </div>
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Severity</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Severity</label>
                             <select
                               className="form-select"
                               value={activeSession?.complaints.severity || 'MODERATE'}
                               onChange={e => updateComplaints({ severity: e.target.value as any })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             >
-                              <option value="MILD">Mild</option>
-                              <option value="MODERATE">Moderate</option>
-                              <option value="SEVERE">Severe</option>
+                              <option value="MILD">🟢 Mild</option>
+                              <option value="MODERATE">🟡 Moderate</option>
+                              <option value="SEVERE">🔴 Severe</option>
                             </select>
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Onset</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Onset</label>
                             <select
                               className="form-select"
                               value={activeSession?.complaints.onset || 'Gradual'}
                               onChange={e => updateComplaints({ onset: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             >
                               <option value="Sudden">Sudden</option>
                               <option value="Gradual">Gradual</option>
@@ -3100,24 +3229,26 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         {/* Aggravating & Relieving Factors */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Aggravating Factors</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Aggravating Factors</label>
                             <input
                               type="text"
                               className="form-input"
-                              placeholder="What makes it worse..."
+                              placeholder="e.g. Heat, sweat, direct sunlight..."
                               value={activeSession?.complaints.aggravatingFactors || ''}
                               onChange={e => updateComplaints({ aggravatingFactors: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Relieving Factors</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Relieving Factors</label>
                             <input
                               type="text"
                               className="form-input"
-                              placeholder="What makes it better..."
+                              placeholder="e.g. Cold compress, rest, topicals..."
                               value={activeSession?.complaints.relievingFactors || ''}
                               onChange={e => updateComplaints({ relievingFactors: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
                         </div>
@@ -3125,55 +3256,58 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     </div>
 
                     {/* Section B: History & Context */}
-                    <div className="card" style={{ border: '1px solid var(--border)' }}>
-                      <div className="card-header" style={{ padding: '10px 16px', background: '#F8FAFC' }}>
-                        <span className="card-title" style={{ fontSize: 13, color: '#036d92', fontWeight: 800 }}>
-                          History & Context
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                        <span style={{ fontSize: 13, color: '#0369A1', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Activity size={15} color="#0284C7" /> Systemic History &amp; Medical Context
                         </span>
                       </div>
-                      <div className="card-body" style={{ padding: 16 }}>
+                      <div style={{ padding: 18 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Past Medical History</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Past Medical History</label>
                             <input
                               type="text"
                               className="form-input"
                               placeholder="e.g. Hypertension, Diabetes, Asthma..."
                               value={activeSession?.history.pastMedical || ''}
                               onChange={e => updateHistory({ pastMedical: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Past Surgical History</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Past Surgical History</label>
                             <input
                               type="text"
                               className="form-input"
                               placeholder="e.g. Appendectomy, Cholecystectomy..."
                               value={activeSession?.history.pastSurgical || ''}
                               onChange={e => updateHistory({ pastSurgical: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Current Medications</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Current Medications</label>
                             <input
                               type="text"
                               className="form-input"
                               placeholder="e.g. Telmisartan 40mg OD, Metformin..."
                               value={activeSession?.history.currentMedications || ''}
                               onChange={e => updateHistory({ currentMedications: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700, color: 'var(--danger)' }}>
-                              Allergies
+                            <label className="form-label" style={{ fontWeight: 700, color: '#DC2626', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <ShieldAlert size={12} color="#DC2626" /> Drug &amp; Environmental Allergies
                             </label>
                             <input
                               type="text"
                               className="form-input"
-                              style={{ borderColor: '#F87171' }}
+                              style={{ borderColor: '#FECACA', background: '#FFF1F2', borderRadius: 6, padding: '7px 10px', fontSize: 12.5, color: '#991B1B' }}
                               placeholder="e.g. Penicillin, Sulfa drugs, None Reported..."
                               value={activeSession?.history.allergies || ''}
                               onChange={e => updateHistory({ allergies: e.target.value })}
@@ -3181,24 +3315,26 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Personal History</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Personal History</label>
                             <input
                               type="text"
                               className="form-input"
                               placeholder="Diet, sleep, smoking, alcohol..."
                               value={activeSession?.history.personalHistory || ''}
                               onChange={e => updateHistory({ personalHistory: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Obstetric/Gyneco History</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Obstetric/Gyneco History</label>
                             <input
                               type="text"
                               className="form-input"
                               placeholder="Gravida/Para, LMP regularity..."
                               value={activeSession?.history.obstetricHistory || ''}
                               onChange={e => updateHistory({ obstetricHistory: e.target.value })}
+                              style={{ borderRadius: 6, padding: '7px 10px', fontSize: 12.5 }}
                             />
                           </div>
                         </div>
@@ -3206,33 +3342,35 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     </div>
 
                     {/* Section C: Notes */}
-                    <div className="card" style={{ border: '1px solid var(--border)' }}>
-                      <div className="card-header" style={{ padding: '10px 16px', background: '#F8FAFC' }}>
-                        <span className="card-title" style={{ fontSize: 13, color: '#036d92', fontWeight: 800 }}>
-                          Notes
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                        <span style={{ fontSize: 13, color: '#0369A1', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <MessageSquare size={15} color="#0284C7" /> Clinical Notes &amp; Observations
                         </span>
                       </div>
-                      <div className="card-body" style={{ padding: 16 }}>
+                      <div style={{ padding: 18 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Nursing Notes</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Nursing Notes</label>
                             <textarea
                               className="form-input"
                               rows={2}
                               placeholder="Triage nursing observations, behavioral notes..."
                               value={activeSession?.notes?.nursingNotes || ''}
                               onChange={e => updateNotes({ nursingNotes: e.target.value })}
+                              style={{ borderRadius: 6, padding: '8px 10px', fontSize: 12.5 }}
                             />
                           </div>
 
                           <div>
-                            <label className="form-label" style={{ fontWeight: 700 }}>Patient Feedback / Expectations</label>
+                            <label className="form-label" style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>Patient Feedback / Expectations</label>
                             <textarea
                               className="form-input"
                               rows={2}
                               placeholder="Patient chief concerns, treatment expectations..."
                               value={activeSession?.notes?.patientFeedback || ''}
                               onChange={e => updateNotes({ patientFeedback: e.target.value })}
+                              style={{ borderRadius: 6, padding: '8px 10px', fontSize: 12.5 }}
                             />
                           </div>
                         </div>
@@ -3242,111 +3380,118 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
 
                   {/* Right Column: Vitals Card */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                    <div className="card" style={{ border: '1px solid var(--border)', background: '#FFFFFF' }}>
-                      <div className="card-header" style={{ padding: '10px 16px', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span className="card-title" style={{ fontSize: 13, color: '#036d92', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Heart size={15} color="var(--danger)" /> Current Triage Vitals
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 13, color: '#0369A1', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Heart size={15} color="#EF4444" /> Current Triage Vitals
                         </span>
-                        <span className="badge badge-primary" style={{ fontSize: 10 }}>Live Triage</span>
+                        <span className="badge badge-primary" style={{ fontSize: 10, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontWeight: 700 }}>
+                          Live Triage
+                        </span>
                       </div>
 
-                      <div className="card-body" style={{ padding: 16 }}>
+                      <div style={{ padding: 18 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                          <div>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>Temp (°F)</label>
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>Temp (°F)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.temperature ?? '98.6'}
                               onChange={e => updateVitals({ temperature: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
 
-                          <div>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>Pulse (BPM)</label>
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>Pulse (BPM)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.pulse ?? '76'}
                               onChange={e => updateVitals({ pulse: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
 
-                          <div>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>Sys (mmHg)</label>
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>Sys (mmHg)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.bpSystolic ?? '120'}
                               onChange={e => updateVitals({ bpSystolic: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
 
-                          <div>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>Dia (mmHg)</label>
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>Dia (mmHg)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.bpDiastolic ?? '80'}
                               onChange={e => updateVitals({ bpDiastolic: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
 
-                          <div>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>Weight (kg)</label>
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>Weight (kg)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.weight ?? '68'}
                               onChange={e => updateVitals({ weight: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
 
-                          <div>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>Height (cm)</label>
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>Height (cm)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.height ?? '168'}
                               onChange={e => updateVitals({ height: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
 
-                          <div style={{ gridColumn: 'span 2' }}>
-                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700 }}>SpO2 (%)</label>
+                          <div style={{ gridColumn: 'span 2', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                            <label className="form-label" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>SpO2 (%)</label>
                             <input
                               type="text"
                               className="form-input"
                               value={activeSession?.vitals.spo2 ?? '99'}
                               onChange={e => updateVitals({ spo2: e.target.value })}
+                              style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', background: '#FFFFFF', borderRadius: 6, padding: '6px 8px' }}
                             />
                           </div>
                         </div>
 
                         {/* Dynamic BMI Gauge */}
                         <div style={{
-                          marginTop: 16, padding: '12px 14px', background: '#F8FAFC',
-                          borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex',
+                          marginTop: 16, padding: '14px 16px', background: '#F0FDF4',
+                          borderRadius: 8, border: '1px solid #BBF7D0', display: 'flex',
                           alignItems: 'center', justifyContent: 'space-between'
                         }}>
                           <div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase' }}>
-                              Calculated BMI
+                            <div style={{ fontSize: 10, color: '#166534', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              Calculated Body Mass Index (BMI)
                             </div>
-                            <div style={{ fontSize: 20, fontWeight: 900, color: '#036d92', marginTop: 2 }}>
+                            <div style={{ fontSize: 22, fontWeight: 900, color: '#15803D', marginTop: 2 }}>
                               {calculatedBMI}
                             </div>
                           </div>
                           <div>
-                            <span className={`badge ${parseFloat(calculatedBMI) >= 25 ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: 11, fontWeight: 700 }}>
+                            <span className={`badge ${parseFloat(calculatedBMI) >= 25 ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px' }}>
                               {parseFloat(calculatedBMI) >= 30 ? 'Obese' : parseFloat(calculatedBMI) >= 25 ? 'Overweight' : parseFloat(calculatedBMI) >= 18.5 ? 'Normal BMI' : 'Underweight'}
                             </span>
                           </div>
                         </div>
                       </div>
                     </div>
-
-
                   </div>
                 </div>
 
@@ -3357,7 +3502,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   justifyContent: 'space-between',
                   marginTop: 24,
                   paddingTop: 16,
-                  borderTop: '1px solid var(--border)',
+                  borderTop: '1px solid #E2E8F0',
                   flexWrap: 'wrap',
                   gap: 12
                 }}>
@@ -3377,7 +3522,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       type="button"
                       onClick={handleSaveClinicalData}
                       className="btn btn-outline"
-                      style={{ borderColor: '#036d92', color: '#036d92', fontWeight: 700 }}
+                      style={{ borderColor: '#CBD5E1', color: '#0F172A', background: '#FFFFFF', fontWeight: 700, borderRadius: 8 }}
                     >
                       <Save size={14} /> Save Clinical Data
                     </button>
@@ -3389,9 +3534,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         setActiveTab('investigations');
                       }}
                       className="btn btn-primary"
-                      style={{ background: '#036d92', borderColor: '#036d92', fontWeight: 700 }}
+                      style={{ background: '#0284C7', borderColor: '#0284C7', fontWeight: 700, borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     >
-                      Save & Next (Tab 2: Lab Orders) →
+                      Save &amp; Next (Tab 2: Lab Orders) →
                     </button>
                   </div>
                 </div>
@@ -3406,7 +3551,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* TAB 2: Investigations & Lab Orders (Master Catalog Consumer) */}
           {/* ============================================================ */}
           {activeTab === 'investigations' && (
-            <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none' }}>
+            <div className="card" style={{ borderRadius: '0 0 14px 14px', borderTop: 'none', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)' }}>
               <div className="card-body">
                 {/* Single Master Source Banner */}
                 <div style={{
@@ -3891,27 +4036,112 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* TAB 3: Prescription & Pharmacy */}
           {/* ============================================================ */}
           {activeTab === 'drugs' && (
-            <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none' }}>
+            <div className="card" style={{ borderRadius: '0 0 14px 14px', borderTop: 'none', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)' }}>
               <div className="card-body">
-                {/* Header: Drug Prescription Title + Layout Switcher + Procedure Prescription Toggle */}
+                {/* Modern Hospital Sub-Tab Bar for Tab 3: Separating Drug & Medication Prescription and Procedure Supplies into 2 distinct tabs */}
                 <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  marginBottom: 16, borderBottom: '1px solid #E2E8F0', paddingBottom: 12,
-                  flexWrap: 'wrap', gap: 10
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 16,
+                  paddingBottom: 12,
+                  borderBottom: '1px solid #E2E8F0',
+                  flexWrap: 'wrap',
+                  gap: 12
                 }}>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#036d92', display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <Pill size={18} /> Drug &amp; Medication Prescription
-                      <span className="badge badge-primary" style={{ fontSize: 11, padding: '2px 7px' }}>
+                  {/* Segmented Clinical Sub-Tabs (2 Distinct Tabs) */}
+                  <div style={{
+                    display: 'inline-flex',
+                    background: '#F1F5F9',
+                    padding: 3,
+                    borderRadius: 9,
+                    border: '1px solid #CBD5E1',
+                    gap: 4
+                  }}>
+                    {/* Sub-Tab 1: Drug & Medication Prescription */}
+                    <button
+                      type="button"
+                      id="rx-subtab-drugs"
+                      onClick={() => setRxActiveSubTab('drugs')}
+                      style={{
+                        border: 'none',
+                        background: rxActiveSubTab === 'drugs' ? '#036d92' : 'transparent',
+                        color: rxActiveSubTab === 'drugs' ? '#FFFFFF' : '#475569',
+                        fontWeight: rxActiveSubTab === 'drugs' ? 800 : 600,
+                        fontSize: 12.5,
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        boxShadow: rxActiveSubTab === 'drugs' ? '0 1px 3px rgba(3, 109, 146, 0.25)' : 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Sub-Tab 1: Drug & Medication Prescription"
+                    >
+                      <Pill size={15} />
+                      <span>1. Drug &amp; Medication Prescription</span>
+                      <span style={{
+                        fontSize: 11,
+                        padding: '1px 6px',
+                        borderRadius: 10,
+                        fontWeight: 800,
+                        background: rxActiveSubTab === 'drugs' ? 'rgba(255,255,255,0.25)' : '#E2E8F0',
+                        color: rxActiveSubTab === 'drugs' ? '#FFFFFF' : '#334155'
+                      }}>
                         {uniquePrescriptions.length} Prescribed
                       </span>
-                    </h4>
+                    </button>
 
+                    {/* Sub-Tab 2: Procedure Prescription & Supplies */}
+                    <button
+                      type="button"
+                      id="rx-subtab-procedures"
+                      onClick={() => {
+                        setRxActiveSubTab('procedures');
+                        setShowProcSideOption(true);
+                      }}
+                      style={{
+                        border: 'none',
+                        background: rxActiveSubTab === 'procedures' ? '#036d92' : 'transparent',
+                        color: rxActiveSubTab === 'procedures' ? '#FFFFFF' : '#475569',
+                        fontWeight: rxActiveSubTab === 'procedures' ? 800 : 600,
+                        fontSize: 12.5,
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        boxShadow: rxActiveSubTab === 'procedures' ? '0 1px 3px rgba(3, 109, 146, 0.25)' : 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Sub-Tab 2: Procedure Prescription & Supplies"
+                    >
+                      <Scissors size={15} />
+                      <span>2. Procedure Supplies (Clinical Instruments)</span>
+                      <span style={{
+                        fontSize: 11,
+                        padding: '1px 6px',
+                        borderRadius: 10,
+                        fontWeight: 800,
+                        background: rxActiveSubTab === 'procedures'
+                          ? 'rgba(255,255,255,0.25)'
+                          : (uniqueProcedurePrescriptions.length > 0 ? '#E0F2FE' : '#FEF3C7'),
+                        color: rxActiveSubTab === 'procedures'
+                          ? '#FFFFFF'
+                          : (uniqueProcedurePrescriptions.length > 0 ? '#0369A1' : '#92400E')
+                      }}>
+                        {uniqueProcedurePrescriptions.length > 0
+                          ? `Optional · ${uniqueProcedurePrescriptions.length} Added`
+                          : 'Optional'}
+                      </span>
+                    </button>
                   </div>
 
-                  {/* Right-Side Controls: Layout Switcher + Procedure Prescription Toggle */}
+                  {/* Right View Modes: Layout Switcher + Combined View */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    {/* Layout Mode Switcher */}
                     <div style={{
                       display: 'inline-flex',
                       background: '#F1F5F9',
@@ -3922,41 +4152,48 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     }}>
                       <button
                         type="button"
-                        onClick={() => setRxLayoutMode('stacked')}
+                        id="rx-view-combined"
+                        onClick={() => {
+                          setRxActiveSubTab('both');
+                          setRxLayoutMode('stacked');
+                          setShowProcSideOption(true);
+                        }}
                         style={{
                           border: 'none',
-                          background: rxLayoutMode === 'stacked' ? '#FFFFFF' : 'transparent',
-                          color: rxLayoutMode === 'stacked' ? '#036d92' : '#64748B',
-                          fontWeight: rxLayoutMode === 'stacked' ? 800 : 600,
+                          background: (rxActiveSubTab === 'both' && rxLayoutMode === 'stacked') ? '#FFFFFF' : 'transparent',
+                          color: (rxActiveSubTab === 'both' && rxLayoutMode === 'stacked') ? '#036d92' : '#64748B',
+                          fontWeight: (rxActiveSubTab === 'both' && rxLayoutMode === 'stacked') ? 800 : 600,
                           fontSize: 11,
                           padding: '4px 9px',
                           borderRadius: 5,
                           cursor: 'pointer',
-                          boxShadow: rxLayoutMode === 'stacked' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                          boxShadow: (rxActiveSubTab === 'both' && rxLayoutMode === 'stacked') ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 4
                         }}
-                        title="Full width stacked layout with spacious columns (Recommended)"
+                        title="View both Drug and Procedure sections stacked together"
                       >
                         <span>▤ Stacked (Full Width)</span>
                       </button>
                       <button
                         type="button"
+                        id="rx-view-split"
                         onClick={() => {
+                          setRxActiveSubTab('both');
                           setRxLayoutMode('split');
                           setShowProcSideOption(true);
                         }}
                         style={{
                           border: 'none',
-                          background: rxLayoutMode === 'split' ? '#FFFFFF' : 'transparent',
-                          color: rxLayoutMode === 'split' ? '#036d92' : '#64748B',
-                          fontWeight: rxLayoutMode === 'split' ? 800 : 600,
+                          background: (rxActiveSubTab === 'both' && rxLayoutMode === 'split') ? '#FFFFFF' : 'transparent',
+                          color: (rxActiveSubTab === 'both' && rxLayoutMode === 'split') ? '#036d92' : '#64748B',
+                          fontWeight: (rxActiveSubTab === 'both' && rxLayoutMode === 'split') ? 800 : 600,
                           fontSize: 11,
                           padding: '4px 9px',
                           borderRadius: 5,
                           cursor: 'pointer',
-                          boxShadow: rxLayoutMode === 'split' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                          boxShadow: (rxActiveSubTab === 'both' && rxLayoutMode === 'split') ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 4
@@ -3967,47 +4204,44 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       </button>
                     </div>
 
-                    {/* Procedure Prescription Option Toggle Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!showProcSideOption) {
+                    {/* Quick Button to Jump / Add Procedure Prescription if currently on Drug Sub-tab */}
+                    {rxActiveSubTab === 'drugs' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRxActiveSubTab('procedures');
                           setShowProcSideOption(true);
-                        }
-                        setTimeout(() => {
-                          document.getElementById('procedure-prescription-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }, 50);
-                      }}
-                      className="btn btn-sm"
-                      style={{
-                        background: showProcSideOption ? '#E0F2FE' : '#FFFFFF',
-                        borderColor: showProcSideOption ? '#0284C7' : '#CBD5E1',
-                        color: showProcSideOption ? '#0369A1' : '#475569',
-                        fontWeight: 700,
-                        fontSize: 12,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      <Scissors size={14} />
-                      <span>Procedure Prescription</span>
-                      <span className="badge" style={{
-                        fontSize: 10,
-                        background: (uniqueProcedurePrescriptions.length > 0) ? '#0284C7' : '#FEF3C7',
-                        color: (uniqueProcedurePrescriptions.length > 0) ? '#FFFFFF' : '#92400E',
-                        fontWeight: 800
-                      }}>
-                        {uniqueProcedurePrescriptions.length > 0
-                          ? `${uniqueProcedurePrescriptions.length} Added`
-                          : 'Optional'}
-                      </span>
-                    </button>
+                        }}
+                        className="btn btn-sm"
+                        style={{
+                          background: '#E0F2FE',
+                          borderColor: '#BAE6FD',
+                          color: '#0369A1',
+                          fontWeight: 700,
+                          fontSize: 11.5,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                        title="Switch to 2. Procedure Prescription & Supplies"
+                      >
+                        <Scissors size={13} />
+                        <span>Procedure Supplies</span>
+                        <span className="badge" style={{
+                          fontSize: 9.5,
+                          background: (uniqueProcedurePrescriptions.length > 0) ? '#0284C7' : '#FEF3C7',
+                          color: (uniqueProcedurePrescriptions.length > 0) ? '#FFFFFF' : '#92400E',
+                          fontWeight: 800
+                        }}>
+                          {uniqueProcedurePrescriptions.length > 0 ? `${uniqueProcedurePrescriptions.length} Added` : 'Optional'}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {/* Dynamic AI Drug Safety & Allergen Cross-Reactivity Alert Banner */}
-                {aiSafetyReport.checked && (
+                {(rxActiveSubTab === 'drugs' || rxActiveSubTab === 'both') && aiSafetyReport.checked && (
                   <div style={{
                     padding: '12px 18px', borderRadius: 8,
                     background: !aiSafetyReport.safe ? '#FEF2F2' : aiSafetyReport.isNotice ? '#FEFCE8' : '#ECFDF5',
@@ -4049,10 +4283,10 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   </div>
                 )}
 
-                {/* Main Prescription Layout: STACKED (Full Width) or SPLIT (Side-by-Side) */}
+                {/* Main Prescription Layout: Controlled by rxActiveSubTab */}
                 <div
-                  className={rxLayoutMode === 'split' ? (showProcSideOption ? 'rx-split-grid' : '') : ''}
-                  style={rxLayoutMode === 'split' ? {
+                  className={rxLayoutMode === 'split' && rxActiveSubTab === 'both' ? (showProcSideOption ? 'rx-split-grid' : '') : ''}
+                  style={rxLayoutMode === 'split' && rxActiveSubTab === 'both' ? {
                     display: 'grid',
                     gridTemplateColumns: showProcSideOption ? undefined : 'minmax(0, 1fr)',
                     gap: 16,
@@ -4066,8 +4300,9 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     width: '100%'
                   }}
                 >
-                  {/* DRUG PRESCRIPTION TABLE CONTAINER */}
-                  <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>
+                  {/* SUB-TAB 1: DRUG PRESCRIPTION TABLE CONTAINER */}
+                  {(rxActiveSubTab === 'drugs' || rxActiveSubTab === 'both') && (
+                    <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>
                     {/* Active Prescriptions Table Section */}
                     <div style={{ marginBottom: 10 }}>
                       {/* Table Header Action Bar */}
@@ -4619,10 +4854,67 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         </table>
                       </div>
                     </div>
-                  </div>
 
-                  {/* PROCEDURE PRESCRIPTION CARD (Spacious & Cleanly Proportioned) */}
-                  {showProcSideOption ? (
+                    {/* Sub-tab 1 Switch Prompt Banner when on Drugs tab */}
+                    {rxActiveSubTab === 'drugs' && (
+                      <div style={{
+                        marginTop: 14,
+                        padding: '12px 18px',
+                        background: '#F0F9FF',
+                        border: '1px solid #BAE6FD',
+                        borderRadius: 8,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 10
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Scissors size={18} color="#0369A1" />
+                          <div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0C4A6E' }}>
+                              Clinical Supplies &amp; Minor Procedure Instruments
+                            </div>
+                            <div style={{ fontSize: 11, color: '#64748B' }}>
+                              Add consumables, sutures, syringes, or surgical tools for this patient.
+                            </div>
+                          </div>
+                          <span className="badge" style={{ fontSize: 10.5, background: '#E0F2FE', color: '#0369A1', fontWeight: 800 }}>
+                            {uniqueProcedurePrescriptions.length} Configured
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRxActiveSubTab('procedures');
+                            setShowProcSideOption(true);
+                          }}
+                          className="btn btn-sm"
+                          style={{
+                            background: '#036d92',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            padding: '6px 14px',
+                            borderRadius: 6,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span>Open 2. Procedure Prescription &amp; Supplies</span>
+                          <span>→</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SUB-TAB 2: PROCEDURE PRESCRIPTION CARD (Spacious & Cleanly Proportioned) */}
+                {(rxActiveSubTab === 'procedures' || rxActiveSubTab === 'both') && (
+                  showProcSideOption ? (
                     <div id="procedure-prescription-section" className="card" style={{
                       border: '1.5px solid #BAE6FD',
                       background: '#F8FAFC',
@@ -4632,7 +4924,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       minWidth: 0,
                       maxWidth: '100%',
                       boxShadow: '0 2px 8px rgba(3, 109, 146, 0.05)',
-                      marginTop: rxLayoutMode === 'split' ? 0 : 4
+                      marginTop: (rxActiveSubTab === 'both' && rxLayoutMode === 'split') ? 0 : 4
                     }}>
                       {/* Procedure Card Header */}
                       <div style={{
@@ -4641,7 +4933,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                       }}>
                         <div>
                           <div style={{ fontSize: 10.5, fontWeight: 800, color: '#0369A1', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>
-                            PROCEDURE PRESCRIPTION
+                            PROCEDURE PRESCRIPTION &amp; CLINICAL SUPPLIES
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Scissors size={16} color="#036d92" />
@@ -4654,6 +4946,29 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {rxActiveSubTab === 'procedures' && (
+                            <button
+                              type="button"
+                              onClick={() => setRxActiveSubTab('drugs')}
+                              className="btn btn-sm"
+                              style={{
+                                background: '#FFFFFF',
+                                border: '1px solid #CBD5E1',
+                                color: '#475569',
+                                fontWeight: 700,
+                                fontSize: 11.5,
+                                padding: '4px 10px',
+                                borderRadius: 5,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                cursor: 'pointer'
+                              }}
+                              title="Switch back to 1. Drug Prescription"
+                            >
+                              <span>← 1. Drug Prescription</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             id="proc-header-add-btn"
@@ -5182,7 +5497,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                         </button>
                       </div>
                     </div>
-                  )}
+                  ))
+                }
                 </div>
 
             {/* Prescriptions Action & Navigation Footer Bar */}
@@ -5285,29 +5601,84 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                   <Save size={14} /> Save Draft
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSaveClinicalData();
-                    setActiveTab('procedures');
-                  }}
-                  className="btn btn-primary"
-                  style={{
-                    background: '#036d92',
-                    borderColor: '#036d92',
-                    fontWeight: 800,
-                    fontSize: 12.5,
-                    height: 36,
-                    padding: '0 18px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    boxShadow: '0 2px 6px rgba(3, 109, 146, 0.25)'
-                  }}
-                >
-                  <span>Save &amp; Next (Tab 4: Procedures)</span>
-                  <ArrowRight size={14} />
-                </button>
+                {rxActiveSubTab === 'drugs' ? (
+                  <div style={{ display: 'inline-flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSaveClinicalData();
+                        setRxActiveSubTab('procedures');
+                        setShowProcSideOption(true);
+                      }}
+                      className="btn btn-outline"
+                      style={{
+                        background: '#F0F9FF',
+                        borderColor: '#BAE6FD',
+                        color: '#0369A1',
+                        fontWeight: 800,
+                        fontSize: 12,
+                        height: 36,
+                        padding: '0 14px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                      title="Proceed to 2. Procedure Prescription & Supplies"
+                    >
+                      <Scissors size={14} />
+                      <span>Next: 2. Procedure Supplies</span>
+                      <ArrowRight size={13} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSaveClinicalData();
+                        setActiveTab('procedures');
+                      }}
+                      className="btn btn-primary"
+                      style={{
+                        background: '#036d92',
+                        borderColor: '#036d92',
+                        fontWeight: 800,
+                        fontSize: 12.5,
+                        height: 36,
+                        padding: '0 18px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        boxShadow: '0 2px 6px rgba(3, 109, 146, 0.25)'
+                      }}
+                    >
+                      <span>Save &amp; Next (Tab 4: Procedures)</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveClinicalData();
+                      setActiveTab('procedures');
+                    }}
+                    className="btn btn-primary"
+                    style={{
+                      background: '#036d92',
+                      borderColor: '#036d92',
+                      fontWeight: 800,
+                      fontSize: 12.5,
+                      height: 36,
+                      padding: '0 18px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: '0 2px 6px rgba(3, 109, 146, 0.25)'
+                    }}
+                  >
+                    <span>Save &amp; Next (Tab 4: Procedures)</span>
+                    <ArrowRight size={14} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -5320,23 +5691,146 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {activeTab === 'procedures' && (
             <div className="card" style={{ borderRadius: '0 0 12px 12px', borderTop: 'none', background: '#F8FAFC', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
               <div className="card-body" style={{ padding: '20px 22px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-                {/* 1 & 2. UNIFIED TREATMENT PROTOCOL & SESSION EXECUTION (SINGLE SOURCE OF TRUTH) */}
-                <TreatmentProtocolManager
-                  caseId={caseId}
-                  mode="doctor"
-                  patientName={`${patient.firstName} ${patient.lastName}`}
-                  onChanged={() => {
-                    const s = getSession(caseId);
-                    if (s) loadSession(caseId);
-                  }}
-                />
+                {/* SUB-TABS NAVIGATION: 1. Level 1 & 2 Treatment Protocol & Session Execution | 2. Medico-Legal Informed Consent Form */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  marginBottom: 20,
+                  paddingBottom: 14,
+                  borderBottom: '2px solid #E2E8F0',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    background: '#F1F5F9',
+                    padding: 4,
+                    borderRadius: 10,
+                    border: '1px solid #CBD5E1',
+                    gap: 6
+                  }}>
+                    {/* Sub-Tab 1: Treatment Protocol & Session Execution */}
+                    <button
+                      type="button"
+                      id="subtab-proc-protocol"
+                      onClick={() => setProcedureSubTab('protocol')}
+                      style={{
+                        border: 'none',
+                        background: procedureSubTab === 'protocol' ? '#036d92' : 'transparent',
+                        color: procedureSubTab === 'protocol' ? '#FFFFFF' : '#475569',
+                        fontWeight: procedureSubTab === 'protocol' ? 800 : 700,
+                        fontSize: 12.5,
+                        padding: '8px 18px',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        boxShadow: procedureSubTab === 'protocol' ? '0 2px 8px rgba(3, 109, 146, 0.3)' : 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Level 1: Treatment Protocol Configuration & Level 2: Session Execution"
+                    >
+                      <Layers size={16} />
+                      <span>Level 1 &amp; 2: Treatment Protocol &amp; Session Execution</span>
+                      <span style={{
+                        fontSize: 10.5,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        fontWeight: 900,
+                        background: procedureSubTab === 'protocol' ? 'rgba(255, 255, 255, 0.25)' : '#E2E8F0',
+                        color: procedureSubTab === 'protocol' ? '#FFFFFF' : '#334155'
+                      }}>
+                        4 Sessions Configured
+                      </span>
+                    </button>
 
-                {/* 3.5 PROCEDURAL INFORMED CONSENT MODULE (Auto-Selected, Multi-Lingual, Patient Auto-Populated, 12 Templates, Xerox & Update Procedure) */}
-                <ProcedureConsentForm
-                  patient={consentPatientData}
-                  onUpdateProcedure={handleConsentUpdateProcedure}
-                  onPrintRequested={() => setShowAllPrintModal(true)}
-                />
+                    {/* Sub-Tab 2: Medico-Legal Informed Consent Form */}
+                    <button
+                      type="button"
+                      id="subtab-proc-consent"
+                      onClick={() => setProcedureSubTab('consent')}
+                      style={{
+                        border: 'none',
+                        background: procedureSubTab === 'consent' ? '#036d92' : 'transparent',
+                        color: procedureSubTab === 'consent' ? '#FFFFFF' : '#475569',
+                        fontWeight: procedureSubTab === 'consent' ? 800 : 700,
+                        fontSize: 12.5,
+                        padding: '8px 18px',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        boxShadow: procedureSubTab === 'consent' ? '0 2px 8px rgba(3, 109, 146, 0.3)' : 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="📄 Medico-Legal Informed Consent Form (સંમતિ પત્રક) - Auto-Linked to Procedure"
+                    >
+                      <FileText size={16} />
+                      <span>📄 Medico-Legal Informed Consent Form (સંમતિ પત્રક)</span>
+                      <span style={{
+                        fontSize: 10.5,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        fontWeight: 900,
+                        background: procedureSubTab === 'consent' ? '#10B981' : '#DCFCE7',
+                        color: procedureSubTab === 'consent' ? '#FFFFFF' : '#15803D'
+                      }}>
+                        AUTO-LINKED
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Active Context Helper Pill */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      padding: '5px 12px',
+                      borderRadius: 20,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: '#334155'
+                    }}>
+                      <span style={{ color: '#64748B' }}>Active Procedure:</span>
+                      <strong style={{ color: '#036d92' }}>HAIR REMOVAL - DIODE</strong>
+                      <span style={{ color: '#CBD5E1' }}>•</span>
+                      <span style={{ color: '#64748B' }}>Target:</span>
+                      <strong style={{ color: '#036d92' }}>FACE</strong>
+                      <span style={{ color: '#CBD5E1' }}>•</span>
+                      <span style={{ color: '#64748B' }}>Doctor:</span>
+                      <strong style={{ color: '#036d92' }}>Dr. Valaki</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-Tab 1 Content: Level 1 & 2 Treatment Protocol & Session Execution */}
+                {procedureSubTab === 'protocol' && (
+                  <TreatmentProtocolManager
+                    caseId={caseId}
+                    mode="doctor"
+                    patientName={`${patient.firstName} ${patient.lastName}`}
+                    onChanged={() => {
+                      const s = getSession(caseId);
+                      if (s) loadSession(caseId);
+                    }}
+                  />
+                )}
+
+                {/* Sub-Tab 2 Content: Procedural Informed Consent Module */}
+                {procedureSubTab === 'consent' && (
+                  <ProcedureConsentForm
+                    patient={consentPatientData}
+                    defaultCollapsed={true}
+                    onUpdateProcedure={handleConsentUpdateProcedure}
+                    onPrintRequested={() => setShowAllPrintModal(true)}
+                  />
+                )}
 
                 {/* 4. FOOTER ACTION & NAVIGATION BAR */}
                 <div style={{
@@ -5427,9 +5921,14 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     <button
                       type="button"
                       onClick={() => {
-                        const el = document.getElementById('procedure-consent-module');
-                        if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        window.dispatchEvent(new CustomEvent('medflow-print-consent'));
+                        if (procedureSubTab !== 'consent') {
+                          setProcedureSubTab('consent');
+                        }
+                        setTimeout(() => {
+                          const el = document.getElementById('procedure-consent-module');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          window.dispatchEvent(new CustomEvent('medflow-print-consent'));
+                        }, 120);
                       }}
                       className="btn btn-sm"
                       style={{
@@ -5455,9 +5954,14 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     <button
                       type="button"
                       onClick={() => {
-                        const el = document.getElementById('procedure-consent-module');
-                        if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        window.dispatchEvent(new CustomEvent('medflow-print-xerox'));
+                        if (procedureSubTab !== 'consent') {
+                          setProcedureSubTab('consent');
+                        }
+                        setTimeout(() => {
+                          const el = document.getElementById('procedure-consent-module');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          window.dispatchEvent(new CustomEvent('medflow-print-xerox'));
+                        }, 120);
                       }}
                       className="btn btn-sm"
                       style={{
@@ -5554,7 +6058,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* TAB 6: Diagnosis & Clinical Follow-Up (Complete 14 Items) */}
           {/* ============================================================ */}
           {activeTab === 'diagnosis' && (
-            <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none', background: '#F8FAFC' }}>
+            <div className="card" style={{ borderRadius: '0 0 14px 14px', borderTop: 'none', border: '1px solid #E2E8F0', background: '#F8FAFC', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)' }}>
               <div className="card-body" style={{ padding: '20px 24px' }}>
 
                 {/* Top Control Bar: Patient Category (13) + Rx Font Size (14) + Review Link (12) */}
@@ -6955,7 +7459,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
           {/* TAB 7: Final Report & Digital Sign-Off */}
           {/* ============================================================ */}
           {activeTab === 'finalReport' && (
-            <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none' }}>
+            <div className="card" style={{ borderRadius: '0 0 14px 14px', borderTop: 'none', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)' }}>
               <div className="card-body">
                 <div style={{ textAlign: 'center', marginBottom: 20 }}>
                   <h3 style={{ fontSize: 20, fontWeight: 900, color: '#036d92' }}>

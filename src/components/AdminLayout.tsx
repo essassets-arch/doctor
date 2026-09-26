@@ -110,7 +110,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { label: 'Procedure Master', href: '/admin/procedures', icon: Activity },
         { label: 'Central Drug Formulary', href: '/admin/drugs', icon: Package, badge: lowStockCount > 0 ? `${lowStockCount} Low` : undefined, badgeColor: '#f59e0b' },
         { label: 'Diagnostic Lab Masters', href: '/admin/lab', icon: Sparkles },
-        { label: 'Legal Consent Templates', href: '/admin/consent-forms', icon: FileText },
+        { label: 'Consent Forms (12 Templates)', href: '/admin/consent-forms', icon: FileText, badge: '12 Forms', badgeColor: '#059669' },
       ]
     },
     {

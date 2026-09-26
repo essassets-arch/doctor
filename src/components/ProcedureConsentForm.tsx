@@ -920,13 +920,17 @@ export default function ProcedureConsentForm({
   const [isCollapsed, setIsCollapsed] = useState<boolean>(defaultCollapsed);
 
   useEffect(() => {
+    if (defaultCollapsed) {
+      setIsCollapsed(true);
+      return;
+    }
     try {
       const saved = localStorage.getItem('medflow_consent_collapsed');
       if (saved !== null) {
         setIsCollapsed(saved === 'true');
       }
     } catch {}
-  }, []);
+  }, [defaultCollapsed]);
 
   const toggleCollapse = () => {
     setIsCollapsed(prev => {
@@ -1403,7 +1407,7 @@ CLINICAL ARCHIVE RECORD STATUS:
             </span>
             <span style={{ color: '#94A3B8' }}>•</span>
             <span style={{ fontSize: 11.5, color: '#475569' }}>
-              Patient: <strong>{patient.name}</strong> ({patient.gender}, {patient.age}y)
+              Patient: <strong>{patient.name}</strong> ({patient.gender === 'M' || String(patient.gender).startsWith('M') ? 'M' : patient.gender === 'F' || String(patient.gender).startsWith('F') ? 'F' : patient.gender}, {String(patient.age).replace(/\s*yrs?/i, '')}y)
             </span>
             <span style={{ color: '#94A3B8' }}>•</span>
             <span style={{ fontSize: 11.5, color: '#475569' }}>
@@ -1488,7 +1492,8 @@ CLINICAL ARCHIVE RECORD STATUS:
               color: '#036d92',
               background: '#FFFFFF',
               cursor: 'pointer',
-              minWidth: 320
+              minWidth: 'min(100%, 280px)',
+              maxWidth: '100%'
             }}
           >
             {TWELVE_CONSENT_TEMPLATES.map(t => (
@@ -1565,7 +1570,7 @@ CLINICAL ARCHIVE RECORD STATUS:
       <div
         id="consent-printable-document"
         className="printable-document"
-        style={{ padding: '24px 28px', background: '#FFFFFF', position: 'relative' }}
+        style={{ padding: 'clamp(14px, 2.5vw, 24px) clamp(12px, 3vw, 28px)', background: '#FFFFFF', position: 'relative' }}
       >
         {/* Xerox / Duplicate Watermark Stamp */}
         {isXeroxMode && (
@@ -1655,7 +1660,7 @@ CLINICAL ARCHIVE RECORD STATUS:
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))',
               gap: '10px 16px',
               fontSize: 12
             }}
@@ -1670,7 +1675,7 @@ CLINICAL ARCHIVE RECORD STATUS:
             <div>
               <span style={{ color: '#64748B', fontWeight: 700, fontSize: 11 }}>M/F (લિંગ) &amp; Age (ઉમર):</span>
               <div style={{ fontWeight: 900, color: '#0F172A' }}>
-                {patient.gender === 'M' ? 'M (Male / પુરૂષ)' : patient.gender === 'F' ? 'F (Female / સ્ત્રી)' : patient.gender} • {patient.age} Yrs
+                {patient.gender === 'M' ? 'M (Male / પુરૂષ)' : patient.gender === 'F' ? 'F (Female / સ્ત્રી)' : patient.gender} • {String(patient.age).replace(/\s*yrs/i, '')} Yrs
               </div>
             </div>
 
@@ -1766,7 +1771,7 @@ CLINICAL ARCHIVE RECORD STATUS:
         </div>
 
         {/* 7. Clinical Disclosures: Risks & Post-Care Instructions */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 16, marginBottom: 24 }}>
           {/* Left: Anticipated Side Effects & Risks */}
           <div
             style={{
@@ -1844,7 +1849,7 @@ CLINICAL ARCHIVE RECORD STATUS:
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
             gap: 24,
             paddingTop: 16,
             borderTop: '2px solid #E2E8F0'
@@ -1868,7 +1873,7 @@ CLINICAL ARCHIVE RECORD STATUS:
               Attending Physician
             </div>
             <div style={{ fontSize: 10.5, color: '#64748B' }}>
-              {patient.doctorName || 'Dr. Raj Valaki, MBBS, MD (Dermatology)'} (Reg: G-34891)
+              {patient.doctorName || 'Dr. Raj Valaki, MBBS, MD (Dermatology)'} (Reg: {patient.doctorName?.includes('Arvind') ? 'G-38910' : 'G-34891'})
             </div>
           </div>
 
@@ -2044,7 +2049,7 @@ CLINICAL ARCHIVE RECORD STATUS:
               background: '#FFFFFF',
               borderRadius: 12,
               maxWidth: 560,
-              width: '100%',
+              width: '95vw',
               boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)',
               overflow: 'hidden'
             }}
@@ -2115,7 +2120,7 @@ CLINICAL ARCHIVE RECORD STATUS:
                 </div>
 
                 {/* Target Body Part & Date */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 800, fontSize: 12, color: '#334155', marginBottom: 5 }}>
                       Target Body Part (શરીરનો ભાગ) *

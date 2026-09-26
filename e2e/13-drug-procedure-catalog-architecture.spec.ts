@@ -147,6 +147,12 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
     await expect(page.getByText(/Procedure Supplies \(Clinical Instruments\)/i)).toBeVisible();
     await expect(page.getByText(/Optional · 3 Added/i)).toBeVisible();
 
+    // Switch to Sub-Tab 2: Procedure Supplies
+    const procSubTab = page.locator('#rx-subtab-procedures');
+    if (await procSubTab.isVisible()) {
+      await procSubTab.click();
+    }
+
     // Verify + Add and Hide Section buttons
     const procAddBtn = page.locator('#proc-header-add-btn');
     await expect(procAddBtn).toBeVisible();
@@ -205,6 +211,11 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
     const rxTab = page.locator('button.tab-item').filter({ hasText: /Rx Pharmacy/i }).first();
     await rxTab.click();
 
+    const procSubTab = page.locator('#rx-subtab-procedures');
+    if (await procSubTab.isVisible()) {
+      await procSubTab.click();
+    }
+
     // Open procedure selector modal
     const procAddBtn = page.locator('#proc-header-add-btn');
     await procAddBtn.click();
@@ -222,6 +233,10 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
 
     const rxTabReload = page.locator('button.tab-item').filter({ hasText: /Rx Pharmacy/i }).first();
     await rxTabReload.click();
+    const procSubTabReload = page.locator('#rx-subtab-procedures');
+    if (await procSubTabReload.isVisible()) {
+      await procSubTabReload.click();
+    }
     await expect(page.locator('#procedure-prescription-section table tbody tr').first()).toBeVisible();
   });
 
@@ -231,6 +246,11 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
 
     const rxTab = page.locator('button.tab-item').filter({ hasText: /Rx Pharmacy/i }).first();
     await rxTab.click();
+
+    const procSubTab = page.locator('#rx-subtab-procedures');
+    if (await procSubTab.isVisible()) {
+      await procSubTab.click();
+    }
 
     // Open procedure catalog selector modal
     const procAddBtn = page.locator('#proc-header-add-btn');
@@ -258,6 +278,11 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
 
     const rxTab = page.locator('button.tab-item').filter({ hasText: /Rx Pharmacy/i }).first();
     await rxTab.click();
+
+    const procSubTab = page.locator('#rx-subtab-procedures');
+    if (await procSubTab.isVisible()) {
+      await procSubTab.click();
+    }
 
     // Type custom item name into the inline tool
     const customItemInput = page.locator('#proc-input-name');
@@ -298,6 +323,11 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
 
     const rxTab = page.locator('button.tab-item').filter({ hasText: /Rx Pharmacy/i }).first();
     await rxTab.click();
+
+    const procSubTab = page.locator('#rx-subtab-procedures');
+    if (await procSubTab.isVisible()) {
+      await procSubTab.click();
+    }
 
     // In Procedure Supplies table, toggle the first item's print status to "✕ Do Not Print"
     const firstRow = page.locator('#procedure-prescription-section table tbody tr').first();
@@ -340,6 +370,11 @@ test.describe('Drug & Procedure Architecture - Single Source of Truth (/admin/dr
 
     const rxTab = page.locator('button.tab-item').filter({ hasText: /Rx Pharmacy/i }).first();
     await rxTab.click();
+
+    const procSubTab = page.locator('#rx-subtab-procedures');
+    if (await procSubTab.isVisible()) {
+      await procSubTab.click();
+    }
 
     // Find Chemical Peel row in Doctor Consultation procedure table
     const chemPeelRow = page.locator('#procedure-prescription-section table tbody tr').filter({ has: page.locator('input[value*="Chemical Peel"]') }).first();

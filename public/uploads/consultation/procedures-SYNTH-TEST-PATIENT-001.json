@@ -1,5 +1,100 @@
 [
   {
+    "id": "proc-1790416952649",
+    "patientId": "pat-1789991704297",
+    "name": "Laser Subcision Test 2617",
+    "category": "Aesthetic / Regenerative",
+    "createdAt": "26/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "sessions": [
+      {
+        "id": "sess-proc-1790416952649-1",
+        "procedureId": "proc-1790416952649",
+        "sessionNumber": 1,
+        "date": "26/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Clinical protocol initiated on 26/09/2026.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": []
+      }
+    ]
+  },
+  {
+    "id": "proc-1790415021625",
+    "patientId": "pat-1789991704297",
+    "name": "Laser Subcision Test 1576",
+    "category": "Aesthetic / Regenerative",
+    "createdAt": "26/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "sessions": [
+      {
+        "id": "sess-proc-1790415021625-1",
+        "procedureId": "proc-1790415021625",
+        "sessionNumber": 1,
+        "date": "26/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Clinical protocol initiated on 26/09/2026.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "status": "Pending"
+      }
+    ]
+  },
+  {
+    "id": "proc-1790414554657",
+    "patientId": "pat-1789991704297",
+    "name": "Laser Subcision Test 4624",
+    "category": "Aesthetic / Regenerative",
+    "createdAt": "26/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "sessions": [
+      {
+        "id": "sess-proc-1790414554657-1",
+        "procedureId": "proc-1790414554657",
+        "sessionNumber": 1,
+        "date": "26/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Clinical protocol initiated on 26/09/2026.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "status": "Pending"
+      }
+    ]
+  },
+  {
+    "id": "proc-1790414113552",
+    "patientId": "pat-1789991704297",
+    "name": "Laser Subcision Test 3506",
+    "category": "Aesthetic / Regenerative",
+    "createdAt": "26/09/2026",
+    "therapist": "Dr Valaki",
+    "bodyPart": "FACE",
+    "sessions": [
+      {
+        "id": "sess-proc-1790414113552-1",
+        "procedureId": "proc-1790414113552",
+        "sessionNumber": 1,
+        "date": "26/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Clinical protocol initiated on 26/09/2026.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "status": "Pending"
+      }
+    ]
+  },
+  {
     "id": "proc-1790412721667",
     "patientId": "pat-1789991704297",
     "name": "Laser Subcision Test 1621",
@@ -18,7 +113,8 @@
         "doctorObservation": "Clinical protocol initiated on 26/09/2026.",
         "beforeImages": [],
         "afterImages": [],
-        "subSections": []
+        "subSections": [],
+        "status": "Pending"
       }
     ]
   },

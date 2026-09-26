@@ -128,6 +128,66 @@
         "afterImages": [],
         "subSections": [],
         "sections": []
+      },
+      {
+        "id": "sess-proc-synth-sync-1-9-mui6cc1p",
+        "procedureId": "proc-synth-sync-1",
+        "sessionNumber": 9,
+        "date": "10/05/2027",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Pending",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      },
+      {
+        "id": "sess-proc-synth-sync-1-10-mui6ls82",
+        "procedureId": "proc-synth-sync-1",
+        "sessionNumber": 10,
+        "date": "30/05/2027",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Pending",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      },
+      {
+        "id": "sess-proc-synth-sync-1-11-mui6vsxt",
+        "procedureId": "proc-synth-sync-1",
+        "sessionNumber": 11,
+        "date": "19/06/2027",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Pending",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
+      },
+      {
+        "id": "sess-proc-synth-sync-1-12-mui816vw",
+        "procedureId": "proc-synth-sync-1",
+        "sessionNumber": 12,
+        "date": "09/07/2027",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Pending",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
       }
     ]
   }

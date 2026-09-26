@@ -3,253 +3,342 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   FileText, Plus, Search, Filter, CheckCircle2,
-  Printer, Save, Languages, Eye, Edit2, X
+  Printer, Save, Languages, Eye, Edit2, X,
+  ShieldCheck, AlertCircle, ArrowUpRight, Copy,
+  Check, Sparkles, User, RefreshCw, LayoutGrid
 } from 'lucide-react';
-import { useAdminStore, useUIStore } from '@/store';
+import { useAdminStore, useUIStore, usePatientStore } from '@/store';
+import ProcedureConsentForm, {
+  ConsentPatientInfo,
+  TWELVE_CONSENT_TEMPLATES,
+  ConsentTemplateItem
+} from '@/components/ProcedureConsentForm';
 
 export default function AdminConsentFormsPage() {
-  const { consentTemplates, updateConsentTemplate } = useAdminStore();
   const { addNotification } = useUIStore();
+  const { patients } = usePatientStore();
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(consentTemplates[0]?.id || 'cons-1');
-  const [activeLang, setActiveLang] = useState<'English' | 'Hindi' | 'Gujarati'>('English');
+  const [customProcedure, setCustomProcedure] = useState<string>('HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH)');
+  const [customBodyPart, setCustomBodyPart] = useState<string>('FACE');
 
-  const selectedTemplate = useMemo(() => {
-    return consentTemplates.find(t => t.id === selectedTemplateId) || consentTemplates[0];
-  }, [consentTemplates, selectedTemplateId]);
+  // Bound clinical patient data for Mahesh Kumar (Case #C003-001-190926)
+  const activePatientInfo: ConsentPatientInfo = useMemo(() => {
+    return {
+      name: 'Mahesh Kumar',
+      gender: 'M',
+      age: 45,
+      place: 'Surat',
+      ipdNo: 'IPD-2026-089',
+      mrdNo: 'MRD-2026-0001',
+      caseNo: 'C003-001-190926',
+      procedureName: customProcedure,
+      bodyPart: customBodyPart,
+      date: '2026-03-25',
+      doctorName: 'Dr. Raj Valaki, MBBS, MD (Dermatology)',
+      clinicName: 'MEDFLOW MULTISPECIALITY CLINIC & LASER AESTHETICS CENTRE',
+      language: 'Gujarati'
+    };
+  }, [customProcedure, customBodyPart]);
 
-  const [editorContent, setEditorContent] = useState(selectedTemplate?.content || '');
+  // Tab View in Admin: Live Interactive Form vs Catalog Table / Editor
+  const [activeAdminTab, setActiveAdminTab] = useState<'interactive' | 'catalog'>('interactive');
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [selectedCatalogLesson, setSelectedCatalogLesson] = useState<number>(1);
 
-  // Update editor content on template selection
-  const handleSelectTemplate = (id: string) => {
-    setSelectedTemplateId(id);
-    const t = consentTemplates.find(x => x.id === id);
-    if (t) setEditorContent(t.content);
-  };
+  const filteredLessons = useMemo(() => {
+    if (!catalogSearch.trim()) return TWELVE_CONSENT_TEMPLATES;
+    const q = catalogSearch.toLowerCase();
+    return TWELVE_CONSENT_TEMPLATES.filter(
+      t =>
+        t.title.toLowerCase().includes(q) ||
+        t.procedureName.toLowerCase().includes(q) ||
+        t.gujaratiTitle.toLowerCase().includes(q) ||
+        t.keywords.some(k => k.toLowerCase().includes(q))
+    );
+  }, [catalogSearch]);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedTemplate) return;
-
-    updateConsentTemplate(selectedTemplate.id, editorContent);
-    addNotification({
-      type: 'success',
-      message: `Legal template "${selectedTemplate.title}" saved & published.`
-    });
-  };
-
-  // Live Token Substitution Preview for Mahesh Kumar
-  const previewContent = useMemo(() => {
-    let text = editorContent;
-    text = text.replace(/\[Patient Name\]/g, 'Mahesh Kumar');
-    text = text.replace(/\[MRD Number\]/g, 'MRD-2026-0001');
-    text = text.replace(/\[Doctor Name\]/g, 'Dr. Raj Valaki');
-    text = text.replace(/\[Clinic Name\]/g, 'MedFlow Multispeciality Clinic');
-    text = text.replace(/\[Procedure Name\]/g, 'Skin Lesion Excision & Biopsy');
-    text = text.replace(/\[Date\]/g, '19/09/2026');
-    return text;
-  }, [editorContent]);
+  const activeLessonDetail = useMemo(() => {
+    return (
+      TWELVE_CONSENT_TEMPLATES.find(t => t.templateNo === selectedCatalogLesson) ||
+      TWELVE_CONSENT_TEMPLATES[0]
+    );
+  }, [selectedCatalogLesson]);
 
   return (
-    <div style={{ width: '100%', padding: '24px 20px' }}>
+    <div style={{ width: '100%', padding: '24px 20px', maxWidth: 1400, margin: '0 auto' }}>
       
       {/* Header Banner */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#d97706', background: '#FFFBEB', padding: '2px 8px', borderRadius: 4, border: '1px solid #FDE68A' }}>
-              Legal Compliance
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: 4, border: '1px solid #A7F3D0' }}>
+              NABH Legal Compliance
             </span>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>• Informed Procedural Consent & Token Injection</span>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>• Master Source: /admin/consent-forms</span>
           </div>
-          <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <FileText size={26} color="#d97706" /> Legal Informed Consent Form Templates
+          <h1 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <FileText size={26} color="#059669" /> Medico-Legal Informed Consent Forms (સંમતિ પત્રક)
           </h1>
           <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.9rem' }}>
-            Multilingual informed surgical and procedural consent documents with dynamic patient token substitution.
+            Standard Consent Catalog (12 Lessons / Templates) • Multilingual (Gujarati, Hindi, English) • Xerox Duplicate Option • Auto-linked to Procedures.
           </p>
         </div>
 
-        <button
-          onClick={() => window.print()}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '9px 16px',
-            borderRadius: 8,
-            background: '#ffffff',
-            border: '1px solid #cbd5e1',
-            color: '#334155',
-            fontWeight: 600,
-            fontSize: '0.88rem',
-            cursor: 'pointer'
-          }}
-        >
-          <Printer size={16} /> Print Template Sheet
-        </button>
-      </div>
-
-      {/* Main 2-Column Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 24 }}>
-        
-        {/* Left: Template Roster */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
-          <h3 style={{ margin: '0 0 14px', fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-            Clinical Consent Templates
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {consentTemplates.map(t => {
-              const isSelected = selectedTemplate?.id === t.id;
-
-              return (
-                <div
-                  key={t.id}
-                  onClick={() => handleSelectTemplate(t.id)}
-                  style={{
-                    padding: 14,
-                    borderRadius: 8,
-                    border: `1.5px solid ${isSelected ? '#d97706' : '#E2E8F0'}`,
-                    background: isSelected ? '#FFFBEB' : '#F8FAFC',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: isSelected ? '#92400E' : '#0F172A' }}>
-                        {t.title}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: 3 }}>
-                        Category: <strong>{t.category}</strong> • Language: <strong>{t.language}</strong>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '0.7rem', background: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
-                      ACTIVE
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+        {/* Action Controls & Patient Context Switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 8, padding: 3 }}>
+            <button
+              onClick={() => setActiveAdminTab('interactive')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: activeAdminTab === 'interactive' ? '#059669' : 'transparent',
+                color: activeAdminTab === 'interactive' ? '#FFFFFF' : '#475569',
+                fontWeight: activeAdminTab === 'interactive' ? 800 : 600,
+                fontSize: 12.5,
+                cursor: 'pointer'
+              }}
+            >
+              📄 Live Interactive Form
+            </button>
+            <button
+              onClick={() => setActiveAdminTab('catalog')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: activeAdminTab === 'catalog' ? '#059669' : 'transparent',
+                color: activeAdminTab === 'catalog' ? '#FFFFFF' : '#475569',
+                fontWeight: activeAdminTab === 'catalog' ? 800 : 600,
+                fontSize: 12.5,
+                cursor: 'pointer'
+              }}
+            >
+              📚 12 Lessons Catalog &amp; Editor
+            </button>
           </div>
 
-          {/* Supported Tokens Legend */}
-          <div style={{ marginTop: 20, background: '#F8FAFC', borderRadius: 8, padding: 14, border: '1px solid #E2E8F0' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569', display: 'block', marginBottom: 6 }}>
-              Available Dynamic Injection Tokens:
-            </span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: '0.75rem', fontFamily: 'monospace' }}>
-              <code style={{ background: '#EEF2FF', color: '#4338ca', padding: '2px 6px', borderRadius: 4 }}>[Patient Name]</code>
-              <code style={{ background: '#EEF2FF', color: '#4338ca', padding: '2px 6px', borderRadius: 4 }}>[MRD Number]</code>
-              <code style={{ background: '#EEF2FF', color: '#4338ca', padding: '2px 6px', borderRadius: 4 }}>[Doctor Name]</code>
-              <code style={{ background: '#EEF2FF', color: '#4338ca', padding: '2px 6px', borderRadius: 4 }}>[Procedure Name]</code>
-              <code style={{ background: '#EEF2FF', color: '#4338ca', padding: '2px 6px', borderRadius: 4 }}>[Clinic Name]</code>
-              <code style={{ background: '#EEF2FF', color: '#4338ca', padding: '2px 6px', borderRadius: 4 }}>[Date]</code>
+          <button
+            onClick={() => window.print()}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 14px',
+              borderRadius: 8,
+              background: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              color: '#334155',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              cursor: 'pointer'
+            }}
+          >
+            <Printer size={15} /> Print Sheet
+          </button>
+        </div>
+      </div>
+
+      {/* Active Clinical Binding Details Bar (Procedure consent selector) */}
+      <div style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: 10,
+        padding: '12px 18px',
+        marginBottom: 20,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 900, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FileText size={16} color="#059669" /> Select Consent Form Template (12 Master Lessons):
+          </span>
+          <span style={{ fontSize: 12, color: '#64748B' }}>
+            Choose which consent form to preview, edit, or print below. Synchronizes with doctor consultation and patient EHR files.
+          </span>
+        </div>
+
+        <div style={{ fontSize: 12, color: '#64748B' }}>
+          Patient File: <strong style={{ color: '#0F172A' }}>{activePatientInfo.name}</strong> • Case: <strong style={{ color: '#059669' }}>{activePatientInfo.caseNo}</strong> • MRD: <strong style={{ color: '#0F172A' }}>{activePatientInfo.mrdNo}</strong>
+        </div>
+      </div>
+
+      {/* VIEW 1: LIVE INTERACTIVE PROCEDURE CONSENT FORM (The Exact 12-Template Master Component) */}
+      {activeAdminTab === 'interactive' && (
+        <div>
+          <ProcedureConsentForm
+            patient={activePatientInfo}
+            onUpdateProcedure={(updated) => {
+              setCustomProcedure(updated.procedureName);
+              setCustomBodyPart(updated.bodyPart);
+              addNotification({
+                type: 'success',
+                message: `Admin procedure updated to "${updated.procedureName}" (${updated.bodyPart})`
+              });
+            }}
+          />
+        </div>
+      )}
+
+      {/* VIEW 2: 12 LESSONS CATALOG & LEGAL TEXT REPOSITORY */}
+      {activeAdminTab === 'catalog' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)', gap: 24 }}>
+          {/* Left: 12 Lessons Roster */}
+          <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
+                Standard Consent Catalog (12 Lessons)
+              </h3>
+              <span className="badge badge-success">12 Templates</span>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search templates or keywords (e.g. Diode, Peel, Botox)..."
+                value={catalogSearch}
+                onChange={e => setCatalogSearch(e.target.value)}
+                style={{ fontSize: 12.5 }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '68vh', overflowY: 'auto' }}>
+              {filteredLessons.map(lesson => {
+                const isSelected = selectedCatalogLesson === lesson.templateNo;
+                return (
+                  <div
+                    key={lesson.id}
+                    onClick={() => {
+                      setSelectedCatalogLesson(lesson.templateNo);
+                      setCustomProcedure(lesson.procedureName);
+                    }}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 8,
+                      border: `1.5px solid ${isSelected ? '#059669' : '#E2E8F0'}`,
+                      background: isSelected ? '#ECFDF5' : '#F8FAFC',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            background: isSelected ? '#059669' : '#0369A1',
+                            color: '#FFFFFF',
+                            fontSize: 10.5,
+                            fontWeight: 900,
+                            padding: '1px 6px',
+                            borderRadius: 4
+                          }}>
+                            Lesson {lesson.templateNo}
+                          </span>
+                          <span style={{ fontWeight: 800, fontSize: 13, color: isSelected ? '#065F46' : '#0F172A' }}>
+                            {lesson.title}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
+                          Procedure: <strong style={{ color: '#0369A1' }}>{lesson.procedureName}</strong>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#059669', marginTop: 2, fontWeight: 600 }}>
+                          {lesson.gujaratiTitle}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 10.5, color: isSelected ? '#059669' : '#94A3B8', fontWeight: 700 }}>
+                        {isSelected ? 'ACTIVE' : 'SELECT'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right: Selected Lesson Comprehensive Legal Dossier */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="card">
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span className="card-title" style={{ fontSize: 16 }}>
+                    Lesson {activeLessonDetail.templateNo} of 12 • {activeLessonDetail.title}
+                  </span>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Linked Procedure: <strong>{activeLessonDetail.procedureName}</strong>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomProcedure(activeLessonDetail.procedureName);
+                    setActiveAdminTab('interactive');
+                    addNotification({
+                      type: 'info',
+                      message: `Loaded Lesson ${activeLessonDetail.templateNo} in live interactive viewer.`
+                    });
+                  }}
+                  className="btn btn-primary btn-sm"
+                  style={{ background: '#059669', borderColor: '#059669', fontSize: 12 }}
+                >
+                  <Eye size={13} /> View Live Form
+                </button>
+              </div>
+
+              <div className="card-body">
+                {/* Declarations in 3 Languages */}
+                <div style={{ marginBottom: 18 }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: 8 }}>
+                    1. Informed Consent Declaration (ત્રણેય ભાષામાં ઘોષણાપત્ર)
+                  </h4>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12.5 }}>
+                      <strong style={{ color: '#059669' }}>🇬🇺 ગુજરાતી:</strong> {activeLessonDetail.consentText.gujarati}
+                    </div>
+                    <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12.5 }}>
+                      <strong style={{ color: '#0369A1' }}>🇮🇳 हिंदी:</strong> {activeLessonDetail.consentText.hindi}
+                    </div>
+                    <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12.5 }}>
+                      <strong style={{ color: '#4338CA' }}>🇬🇧 English:</strong> {activeLessonDetail.consentText.english}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Risks and Disclosures */}
+                <div style={{ marginBottom: 18 }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: 8 }}>
+                    2. Risks &amp; Complications Disclosed (સંભવિત આડઅસર અને જોખમો)
+                  </h4>
+                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12.5, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {activeLessonDetail.risksAndComplications.gujarati.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Post-Care Instructions */}
+                <div>
+                  <h4 style={{ fontSize: 13, fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: 8 }}>
+                    3. Post-Care Instructions (પ્રક્રિયા પછીની કાળજી)
+                  </h4>
+                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12.5, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {activeLessonDetail.postCareInstructions.gujarati.map((p, i) => (
+                      <li key={i}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Right: Template Editor & Live Preview */}
-        {selectedTemplate && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            
-            {/* Editor Area */}
-            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 22 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
-                  Template Editor: {selectedTemplate.title}
-                </h3>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Language: {selectedTemplate.language}</span>
-              </div>
-
-              <form onSubmit={handleSave}>
-                <textarea
-                  rows={6}
-                  value={editorContent}
-                  onChange={(e) => setEditorContent(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.9rem',
-                    lineHeight: 1.6,
-                    outline: 'none',
-                    fontFamily: 'inherit'
-                  }}
-                />
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                  <button
-                    type="submit"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '9px 18px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: '#d97706',
-                      color: '#ffffff',
-                      fontWeight: 700,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Save size={15} /> Save & Publish Template
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Live Patient Substitution Preview */}
-            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 22 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Eye size={16} color="#059669" />
-                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase' }}>
-                  Live Patient Signature Document Preview (Simulated for Mahesh Kumar)
-                </span>
-              </div>
-
-              <div style={{
-                background: '#FDFDFD',
-                border: '1.5px dashed #CBD5E1',
-                borderRadius: 8,
-                padding: 24,
-                fontFamily: 'Georgia, serif',
-                lineHeight: 1.8,
-                fontSize: '0.95rem',
-                color: '#1E293B'
-              }}>
-                <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', marginBottom: 14, textTransform: 'uppercase' }}>
-                  {selectedTemplate.title}
-                </div>
-
-                <p>{previewContent}</p>
-
-                {/* Simulated Signature Block */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 36, paddingTop: 16, borderTop: '1px solid #E2E8F0', fontSize: '0.85rem' }}>
-                  <div>
-                    <div style={{ height: 35, borderBottom: '1px solid #94a3b8', width: 180, marginBottom: 4 }}></div>
-                    <div>Patient / Guardian Signature</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Date: 19/09/2026</div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ height: 35, borderBottom: '1px solid #94a3b8', width: 180, marginBottom: 4, marginLeft: 'auto' }}></div>
-                    <div>Attending Physician Signature</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Dr. Raj Valaki (Reg: G-44821)</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-      </div>
-
+      )}
     </div>
   );
 }

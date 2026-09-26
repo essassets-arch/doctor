@@ -12,6 +12,7 @@ import {
   useQueueStore, useBillingStore, usePatientStore,
   useInventoryStore, usePharmacyStore, useAdminStore, useUIStore
 } from '@/store';
+import ProcedureConsentForm, { ConsentPatientInfo } from '@/components/ProcedureConsentForm';
 
 export default function AdminDashboardPage() {
   const { queue } = useQueueStore();
@@ -23,6 +24,23 @@ export default function AdminDashboardPage() {
   const { addNotification } = useUIStore();
 
   const [dateRange, setDateRange] = useState<'TODAY' | 'WEEK' | 'MONTH'>('TODAY');
+
+  // Active Consent Form State for Dashboard (Bound to Mahesh Kumar C003-001-190926 • Face Diode Laser)
+  const [dashboardConsentPatient, setDashboardConsentPatient] = useState<ConsentPatientInfo>({
+    name: 'Mahesh Kumar',
+    gender: 'M (Male / પુરૂષ)',
+    age: '45 Yrs',
+    place: 'Surat',
+    ipdNo: 'IPD-2026-089',
+    mrdNo: 'MRD-2026-0001',
+    caseNo: 'C003-001-190926',
+    procedureName: 'HAIR REMOVAL - DIODE (TRIPLE WAVELENGTH)',
+    bodyPart: 'FACE',
+    date: '2026-03-25',
+    doctorName: 'Dr. Raj Valaki, MBBS, MD (Dermatology)',
+    clinicName: 'MEDFLOW MULTISPECIALITY CLINIC & LASER AESTHETICS CENTRE',
+    language: 'Gujarati'
+  });
 
   // Key Metrics Calculations
   const revenueToday = useMemo(() => {
@@ -315,6 +333,96 @@ export default function AdminDashboardPage() {
           </div>
         </Link>
 
+      </div>
+
+      {/* ============================================================ */}
+      {/* MEDICO-LEGAL INFORMED CONSENT MASTER HUB (12 TEMPLATES & LIVE ENGINE) */}
+      {/* ============================================================ */}
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: 12,
+        border: '1px solid #E2E8F0',
+        padding: '20px 22px',
+        marginBottom: 28,
+        boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
+      }}>
+        {/* Section Header with Quick Actions */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 14,
+          marginBottom: 16,
+          paddingBottom: 14,
+          borderBottom: '1px solid #F1F5F9'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{
+                background: '#ECFDF5',
+                color: '#059669',
+                border: '1px solid #A7F3D0',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: 4,
+                textTransform: 'uppercase'
+              }}>
+                Clinical Governance &amp; NABH Compliance
+              </span>
+              <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                • Master Source: <code style={{ color: '#036d92', fontWeight: 700 }}>/admin/consent-forms</code>
+              </span>
+            </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={22} color="#059669" />
+              📄 Medico-Legal Informed Consent Forms (12 Templates / Master Catalog)
+            </h2>
+            <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#64748B' }}>
+              Auto-linked procedural consent generator with multi-lingual legal declarations, Xerox duplicate mode, and real-time EHR synchronization across Doctor &amp; Reception desks.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Link
+              href="/admin/consent-forms"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                background: '#059669',
+                color: '#FFFFFF',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                textDecoration: 'none',
+                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)'
+              }}
+            >
+              Open Master Consent Hub (12 Templates) ➔
+            </Link>
+          </div>
+        </div>
+
+        {/* Live Interactive Procedure Consent Form Component */}
+        <ProcedureConsentForm
+          patient={dashboardConsentPatient}
+          onUpdateProcedure={(updated) => {
+            setDashboardConsentPatient(prev => ({
+              ...prev,
+              procedureName: updated.procedureName,
+              bodyPart: updated.bodyPart,
+              date: updated.date || prev.date
+            }));
+            addNotification({
+              type: 'success',
+              message: `Active procedure updated to "${updated.procedureName}" (${updated.bodyPart}) in Consent Form.`
+            });
+          }}
+          defaultCollapsed={false}
+        />
       </div>
 
       {/* Main 2-Column Analytics Workspace */}
