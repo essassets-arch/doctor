@@ -117,4 +117,143 @@ test.describe('Module A: Receptionist & Front Desk Workflow', () => {
     await expect(page.getByRole('button', { name: /Back to Appointments/i })).toBeVisible();
   });
 
+  test('12. Reception Dashboard All tab displays total queue and filters correctly', async ({ page }) => {
+    await page.goto('/reception/dashboard');
+    await page.waitForSelector('text=OPD Dashboard');
+
+    // All chip should be present and active by default
+    const allChip = page.locator('button.chip').filter({ hasText: /^All \(/ });
+    await expect(allChip).toBeVisible();
+    await expect(allChip).toHaveClass(/active/);
+
+    // Waiting chip should be visible
+    const waitingChip = page.locator('button.chip').filter({ hasText: /^Waiting \(/ });
+    await expect(waitingChip).toBeVisible();
+
+    // Click Waiting chip -> All chip should deactivate, Waiting should be active
+    await waitingChip.click();
+    await expect(waitingChip).toHaveClass(/active/);
+    await expect(allChip).not.toHaveClass(/active/);
+
+    // Click All chip -> All should be active again, Waiting should deactivate
+    await allChip.click();
+    await expect(allChip).toHaveClass(/active/);
+    await expect(waitingChip).not.toHaveClass(/active/);
+  });
+
+  test('13. Reception Billing full list renders with status tabs and modal details', async ({ page }) => {
+    await page.goto('/reception/billing');
+    await page.waitForSelector('text=OPD Billing & Encounter Settlement');
+
+    // Verify main table is visible
+    await expect(page.getByText('Billing Records & Collections Ledger')).toBeVisible();
+
+    // Verify filter buttons: All, Pending, Settled, Complete
+    const allTab = page.locator('button.chip').filter({ hasText: /^All \(/ });
+    const pendingTab = page.locator('button.chip').filter({ hasText: /^Pending \(/ });
+    const settledTab = page.locator('button.chip').filter({ hasText: /^Settled \(/ });
+    const completeTab = page.locator('button.chip').filter({ hasText: /^Complete \(/ });
+
+    await expect(allTab).toBeVisible();
+    await expect(pendingTab).toBeVisible();
+    await expect(settledTab).toBeVisible();
+    await expect(completeTab).toBeVisible();
+
+    // Click Pending tab
+    await pendingTab.click();
+    await expect(pendingTab).toHaveClass(/active/);
+
+    // Click Open Details on the first row
+    const openDetailsBtn = page.locator('button').filter({ hasText: /Open Details →/i }).first();
+    await expect(openDetailsBtn).toBeVisible();
+    await openDetailsBtn.click();
+
+    // Modal should appear with patient name, clinical sections, and itemized service charges
+    await expect(page.getByText(/Rahul Sharma · MRD-2026-0006/i)).toBeVisible();
+    await expect(page.getByText(/Attending Consultant & Clinical Assessment/i)).toBeVisible();
+    await expect(page.getByText(/Laboratory Diagnostics & Ordered Investigations/i)).toBeVisible();
+    await expect(page.getByText(/Clinical Procedures & Consumables/i)).toBeVisible();
+    await expect(page.getByText(/Prescriptions & Pharmacy Dispensing/i)).toBeVisible();
+    await expect(page.getByText(/Itemized Service Charges/i)).toBeVisible();
+    await expect(page.getByText(/Payment ledger/i)).toBeVisible();
+
+    // Test tab filtering inside the Details modal
+    const labsTab = page.locator('.modal-overlay button.chip').filter({ hasText: /Lab Diagnostics/i });
+    await expect(labsTab).toBeVisible();
+    await labsTab.click();
+    await expect(page.getByText(/Laboratory Diagnostics & Ordered Investigations/i)).toBeVisible();
+    await expect(page.getByText(/Attending Consultant & Clinical Assessment/i)).not.toBeVisible();
+
+    const proceduresTab = page.locator('.modal-overlay button.chip').filter({ hasText: /Procedures & Consumables/i });
+    await expect(proceduresTab).toBeVisible();
+    await proceduresTab.click();
+    await expect(page.getByText(/Clinical Procedures & Consumables/i)).toBeVisible();
+    await expect(page.getByText(/Laboratory Diagnostics & Ordered Investigations/i)).not.toBeVisible();
+
+    const rxTab = page.locator('.modal-overlay button.chip').filter({ hasText: /Prescriptions & Pharmacy/i });
+    await expect(rxTab).toBeVisible();
+    await rxTab.click();
+    await expect(page.getByText(/Prescriptions & Pharmacy Dispensing/i)).toBeVisible();
+    await expect(page.getByText(/Clinical Procedures & Consumables/i)).not.toBeVisible();
+
+    // Return to All tab
+    const allInfoTab = page.locator('.modal-overlay button.chip').filter({ hasText: /All Information/i });
+    await expect(allInfoTab).toBeVisible();
+    await allInfoTab.click();
+    await expect(page.getByText(/Attending Consultant & Clinical Assessment/i)).toBeVisible();
+    await expect(page.getByText(/Itemized Service Charges/i)).toBeVisible();
+
+    // Close the modal
+    const closeBtn = page.locator('.modal-overlay button').filter({ hasText: /Close/i }).first();
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+
+    // Modal should disappear
+    await expect(page.getByText(/Itemized Service Charges/i)).not.toBeVisible();
+  });
+
+  test('14. Reception Billing direct Settle Bill button opens QR modal and completes payment', async ({ page }) => {
+    await page.goto('/reception/billing');
+    await page.waitForSelector('text=OPD Billing & Encounter Settlement');
+
+    // Find and click the direct Settle Bill button
+    const directSettleBtn = page.locator('button').filter({ hasText: /Settle Bill/i }).first();
+    await expect(directSettleBtn).toBeVisible();
+    await directSettleBtn.click();
+
+    // Verify Settle Modal appears with QR code and payment methods
+    await expect(page.getByText('Instant Bill Settlement & Cashier Desk')).toBeVisible();
+    await expect(page.getByText(/Scan UPI QR Code to Pay/i)).toBeVisible();
+    await expect(page.getByText('medflow@upi')).toBeVisible();
+    await expect(page.getByText('UPI / QR')).toBeVisible();
+    await expect(page.getByText('Cash', { exact: true })).toBeVisible();
+    await expect(page.getByText('Card / POS')).toBeVisible();
+    await expect(page.getByText('Bank / NEFT')).toBeVisible();
+
+    // Click Cash tab to test mode change
+    await page.getByText('Cash', { exact: true }).click();
+    await expect(page.getByText('Cash Tendered by Patient (₹):')).toBeVisible();
+
+    // Switch back to UPI
+    await page.getByText('UPI / QR', { exact: true }).click();
+    await expect(page.getByText(/Scan UPI QR Code to Pay/i)).toBeVisible();
+
+    // Complete payment
+    const confirmPaymentBtn = page.locator('button').filter({ hasText: /Confirm & Complete Payment/i });
+    await expect(confirmPaymentBtn).toBeVisible();
+    await confirmPaymentBtn.click();
+
+    // Verify success confirmation screen
+    await expect(page.getByText('Payment Settled Successfully!')).toBeVisible();
+    await expect(page.getByText(/Print Tax Invoice/i)).toBeVisible();
+
+    // Close modal
+    const closeReturnBtn = page.locator('button').filter({ hasText: /Close & Return to List/i });
+    await expect(closeReturnBtn).toBeVisible();
+    await closeReturnBtn.click();
+
+    // Modal closes
+    await expect(page.getByText('Payment Settled Successfully!')).not.toBeVisible();
+  });
+
 });

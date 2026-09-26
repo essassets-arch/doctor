@@ -1508,19 +1508,25 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     });
   };
 
-  // Helper: Send Review Link with Duplicate Prevention
+  // Helper: Send Review Link with Simulation Notice and Separate SMS/WhatsApp Status
   const handleSendReviewLink = () => {
     if (activeSession?.diagnosis?.reviewLinkSent) {
       addNotification({
         type: 'info',
-        message: `Review link is already prepared for ${patient.firstName} (${patient.mobile || '+91 98765 43210'}). Duplicate dispatch prevented.`
+        message: `Review link is already prepared in simulation mode for ${patient.firstName} (${patient.mobile || '+91 98765 43210'}). Ref: ${activeSession.diagnosis.reviewLinkRef || 'RVW-SIM-QUEUED'}. Duplicate dispatch prevented.`
       });
       return;
     }
-    updateDiagnosis({ reviewLinkSent: true, sendReviewLink: true });
+    const dispatchRef = `RVW-SIM-${Date.now().toString().slice(-6)}`;
+    updateDiagnosis({
+      reviewLinkSent: true,
+      sendReviewLink: true,
+      reviewLinkRef: dispatchRef,
+      reviewLinkDispatchedAt: new Date().toISOString()
+    });
     addNotification({
-      type: 'success',
-      message: `Review link prepared for ${patient.firstName} (${patient.mobile || '+91 98765 43210'})!`
+      type: 'warning',
+      message: `Simulated — no live message sent (Live SMS/WhatsApp gateway not connected). Separate payloads prepared: [WhatsApp: Pending Gateway Dispatch] • [SMS DLT: Pending Gateway Dispatch]. Ref: ${dispatchRef}.`
     });
   };
 
@@ -5593,7 +5599,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                     <div style={{ display: 'inline-flex', background: '#F1F5F9', padding: 3, borderRadius: 8, border: '1px solid #CBD5E1' }}>
                       {(['A-', 'A', 'A+'] as const).map(size => {
                         const isSel = (activeSession?.diagnosis.prescriptionFontSize || 'A') === size;
-                        const label = size === 'A-' ? 'A− (10.5px)' : size === 'A' ? 'A (12px)' : 'A+ (13.5px)';
+                        const label = size === 'A-' ? 'A− (10.8px)' : size === 'A' ? 'A (12px)' : 'A+ (13.8px)';
                         return (
                           <button
                             key={size}
@@ -5602,7 +5608,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                               updateDiagnosis({ prescriptionFontSize: size });
                               addNotification({
                                 type: 'info',
-                                message: `Prescription font scale set to ${size} (${size === 'A-' ? 'Compact 88% — 10.5px body / 9.5px table' : size === 'A' ? 'Standard 100% — 12px body / 11px table' : 'Enlarged 112% — 13.5px body / 12.5px table'})`
+                                message: `Prescription font scale set to ${size} (${size === 'A-' ? 'Compact 90% — 10.8px body / 9.9px table' : size === 'A' ? 'Standard 100% — 12px body / 11px table' : 'Enlarged 115% — 13.8px body / 12.65px table'})`
                               });
                             }}
                             className="btn btn-sm"
@@ -5619,7 +5625,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                               cursor: 'pointer',
                               transition: 'all 0.15s ease'
                             }}
-                            title={`Prescription print scale: ${size === 'A-' ? 'A− Compact (10.5px body / 9.5px table)' : size === 'A' ? 'A Standard (12px body / 11px table)' : 'A+ Enlarged (13.5px body / 12.5px table)'}`}
+                            title={`Prescription print scale: ${size === 'A-' ? 'A− Compact 90% (10.5px body / 9.5px table)' : size === 'A' ? 'A Standard 100% (12px body / 11px table)' : 'A+ Enlarged 115% (13.5px body / 12.5px table)'}`}
                           >
                             {label}
                           </button>
@@ -5658,17 +5664,17 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
                           borderRadius: 6,
                           cursor: activeSession?.diagnosis.reviewLinkSent ? 'default' : 'pointer'
                         }}
-                        title={activeSession?.diagnosis.reviewLinkSent ? "Review link already prepared in simulation mode. Duplicate dispatch prevented." : "Simulate queuing patient review link (Explicit Send)"}
+                        title={activeSession?.diagnosis.reviewLinkSent ? "Simulated mode: Review payload generated locally. Live external SMS/WhatsApp gateway connection is required for actual delivery." : "Simulate generating patient review link payloads"}
                       >
                         {activeSession?.diagnosis.reviewLinkSent ? (
                           <>
                             <CheckCircle2 size={13} color="#059669" />
-                            <span>Link Prepared ✓</span>
+                            <span>Simulated (No live msg sent) ✓</span>
                           </>
                         ) : (
                           <>
                             <Send size={12} />
-                            <span>Send Review Link</span>
+                            <span>Queue Review Link (Simulated)</span>
                           </>
                         )}
                       </button>
@@ -9319,8 +9325,8 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
             <div className="modal-body">
               {(() => {
                 const rxFontSize = activeSession?.diagnosis?.prescriptionFontSize || 'A';
-                const rxBaseFontSize = rxFontSize === 'A-' ? 10.5 : rxFontSize === 'A+' ? 13.5 : 12;
-                const rxTableFontSize = rxFontSize === 'A-' ? 9.5 : rxFontSize === 'A+' ? 12.5 : 11;
+                const rxBaseFontSize = rxFontSize === 'A-' ? 10.8 : rxFontSize === 'A+' ? 13.8 : 12;
+                const rxTableFontSize = rxFontSize === 'A-' ? 9.9 : rxFontSize === 'A+' ? 12.65 : 11;
                 return (
                   <div style={{
                     background: '#FFFFFF', padding: 24, border: '1px solid #E2E8F0',

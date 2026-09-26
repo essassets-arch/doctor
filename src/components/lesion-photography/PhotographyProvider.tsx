@@ -138,7 +138,7 @@ function createController(store: PhotographyStore) {
         });
         if (dimensions.width * dimensions.height > 40_000_000) throw new Error('Image resolution exceeds 40 megapixels. Resize it before uploading.');
         if (!active || generation !== current) { URL.revokeObjectURL(src); return; }
-        const id = crypto.randomUUID();
+        const id = Date.now().toString() + Math.random().toString(36).substring(2);
         store.getState().addImages([{ id, file, src, name: file.name, type: file.type, size: file.size, ...dimensions,
           source, uploadedAt: new Date().toISOString(), uploadStatus: 'pending', uploadProgress: 0 }]);
         void upload(id);

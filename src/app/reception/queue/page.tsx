@@ -6,7 +6,7 @@ import {
   Users, Stethoscope, PhoneCall, Play, CheckCircle2,
   AlertCircle, XCircle, RotateCcw, Tv, Search, Filter,
   Clock, ShieldAlert, CreditCard, Heart, ArrowUpRight,
-  Sparkles, BellRing, Volume2, UserCheck, X, Wallet
+  Sparkles, BellRing, Volume2, UserCheck, X, Wallet, Lock
 } from 'lucide-react';
 import {
   useQueueStore, usePatientStore, useUIStore,
@@ -350,26 +350,32 @@ export default function OPDQueuePage() {
 
                       {/* Triage */}
                       <td>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button
-                            type="button"
-                            onClick={() => updateVitals(item.id, !item.vitalsRecorded)}
-                            title="Toggle Vitals Recorded"
-                            className={`badge ${item.vitalsRecorded ? 'badge-success' : 'badge-warning'}`}
-                            style={{ cursor: 'pointer', fontSize: 10 }}
-                          >
-                            <Heart size={10} /> {item.vitalsRecorded ? 'Vitals ✓' : 'Vitals ?'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateComplaints(item.id, !item.complaintsRecorded)}
-                            title="Toggle Complaint Recorded"
-                            className={`badge ${item.complaintsRecorded ? 'badge-success' : 'badge-muted'}`}
-                            style={{ cursor: 'pointer', fontSize: 10 }}
-                          >
-                            {item.complaintsRecorded ? 'Rx ✓' : 'Rx ?'}
-                          </button>
-                        </div>
+                        {isInSession ? (
+                          <span className="badge badge-warning" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 3 }} title="Patient with Doctor. Clinical file locked.">
+                            <Lock size={10} /> Locked 🔒
+                          </span>
+                        ) : (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button
+                              type="button"
+                              onClick={() => updateVitals(item.id, !item.vitalsRecorded)}
+                              title="Toggle Vitals Recorded"
+                              className={`badge ${item.vitalsRecorded ? 'badge-success' : 'badge-warning'}`}
+                              style={{ cursor: 'pointer', fontSize: 10 }}
+                            >
+                              <Heart size={10} /> {item.vitalsRecorded ? 'Vitals ✓' : 'Vitals ?'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateComplaints(item.id, !item.complaintsRecorded)}
+                              title="Toggle Complaint Recorded"
+                              className={`badge ${item.complaintsRecorded ? 'badge-success' : 'badge-muted'}`}
+                              style={{ cursor: 'pointer', fontSize: 10 }}
+                            >
+                              {item.complaintsRecorded ? 'Rx ✓' : 'Rx ?'}
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       {/* Billing */}
@@ -459,13 +465,18 @@ export default function OPDQueuePage() {
                           )}
 
                           {item.status === 'IN_SESSION' && (
-                            <button
-                              onClick={() => handleCompleteConsultation(item)}
-                              className="btn btn-success btn-sm"
-                              title="Mark Consultation Complete"
-                            >
-                              <CheckCircle2 size={13} /> Done
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#D97706', background: '#FEF3C7', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                                <Lock size={12} /> Locked 🔒
+                              </span>
+                              <button
+                                onClick={() => handleCompleteConsultation(item)}
+                                className="btn btn-success btn-sm"
+                                title="Mark Consultation Complete"
+                              >
+                                <CheckCircle2 size={13} /> Done
+                              </button>
+                            </div>
                           )}
 
                           {item.status === 'BILLING_PENDING' && (

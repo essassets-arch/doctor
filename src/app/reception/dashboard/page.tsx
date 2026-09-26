@@ -30,7 +30,7 @@ export default function DashboardPage() {
   const [dateFilter, setDateFilter] = useState('2026-09-19');
   const [purposeFilter, setPurposeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [activeChips, setActiveChips] = useState<string[]>(['WAITING', 'IN_SESSION', 'CALLING', 'BILLING_PENDING', 'COMPLETED']);
+  const [activeChips, setActiveChips] = useState<string[]>(['ALL']);
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; entry?: QueueEntry }>({ open: false });
   const [cancelModal, setCancelModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [cancelReason, setCancelReason] = useState('');
@@ -55,7 +55,20 @@ export default function DashboardPage() {
     const matchSearch = !search || [q.patientName, q.caseNumber, q.tokenDisplay].some(v => v.toLowerCase().includes(search.toLowerCase()));
     const matchStatus = statusFilter === 'All' || q.status === statusFilter.toUpperCase().replace(' ', '_');
     const matchPurpose = purposeFilter === 'All' || q.visitType === purposeFilter;
-    const matchChip = activeChips.includes(q.status);
+
+    let matchChip = true;
+    if (!activeChips.includes('ALL') && activeChips.length > 0) {
+      const statusChips = activeChips.filter(c => c !== 'FOC' && c !== 'NEW');
+      const hasFoc = activeChips.includes('FOC');
+      const hasNew = activeChips.includes('NEW');
+
+      const matchStatusChip = statusChips.length === 0 || statusChips.includes(q.status);
+      const matchFoc = !hasFoc || Boolean(q.isFoc);
+      const matchNew = !hasNew || Boolean(q.isNew);
+
+      matchChip = matchStatusChip && matchFoc && matchNew;
+    }
+
     return matchSearch && matchStatus && matchPurpose && matchChip;
   });
 
@@ -67,14 +80,27 @@ export default function DashboardPage() {
   };
 
   const toggleChip = (chip: string) => {
-    setActiveChips(prev => prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]);
+    if (chip === 'ALL') {
+      setActiveChips(['ALL']);
+      return;
+    }
+    setActiveChips(prev => {
+      if (prev.includes('ALL')) {
+        return [chip];
+      }
+      const next = prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip];
+      if (next.length === 0) {
+        return ['ALL'];
+      }
+      return next;
+    });
   };
 
   const resetFilters = () => {
     setSearch('');
     setPurposeFilter('All');
     setStatusFilter('All');
-    setActiveChips(['WAITING', 'IN_SESSION', 'CALLING', 'BILLING_PENDING', 'COMPLETED']);
+    setActiveChips(['ALL']);
     setDateFilter('2026-09-19');
   };
 
@@ -218,6 +244,12 @@ export default function DashboardPage() {
 
         {/* Chip Filters */}
         <div style={{ display: 'flex', gap: 6, padding: '10px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+          <button
+            className={`chip ${activeChips.includes('ALL') ? 'active' : ''}`}
+            onClick={() => toggleChip('ALL')}
+          >
+            All ({queue.length})
+          </button>
           {Object.entries(STATUS_LABELS).map(([key, label]) => (
             <button key={key} className={`chip ${activeChips.includes(key) ? 'active' : ''}`} onClick={() => toggleChip(key)}>
               {label} ({queue.filter(q => q.status === key).length})

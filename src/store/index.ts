@@ -286,6 +286,7 @@ export interface QueueEntry {
     recordedAt?: string;
     recordedBy?: string;
   };
+  consultationFee?: number;
 }
 
 export interface Appointment {
@@ -1744,6 +1745,8 @@ export interface ConsultationSession {
     };
     sendReviewLink?: boolean;
     reviewLinkSent?: boolean;
+    reviewLinkRef?: string;
+    reviewLinkDispatchedAt?: string;
     patientCategory?: string;
     prescriptionFontSize?: 'A-' | 'A' | 'A+';
   };
@@ -3713,7 +3716,57 @@ export const INITIAL_STOCK_MOVEMENTS: StockMovement[] = [
   { id: 'sm-5', drugId: 'd-4', drugName: 'Bilastine 20mg (Bilaxten)', movementType: 'RETURN', quantity: 5, batchNumber: 'BAT-2580', reference: 'Adverse rash reaction (CASE-98650)', date: '2026-09-16 03:40 PM', performedBy: 'Suresh Shah' },
 ];
 
-export const INITIAL_PRESCRIPTIONS: PrescriptionFulfillment[] = [];
+export const INITIAL_PRESCRIPTIONS: PrescriptionFulfillment[] = [
+  {
+    id: 'rx-c003-1',
+    caseId: 'C003-001-190926',
+    patientId: 'pat-1',
+    patientName: 'Mahesh Kumar',
+    mrdNumber: 'MRD-2026-0001',
+    age: 45,
+    gender: 'M',
+    mobile: '9825100001',
+    doctorName: 'Dr. Raj Valaki',
+    consultationDate: '19/09/2026',
+    allergies: ['Penicillin (Severe urticaria/anaphylactoid)', 'Sulfa drugs (Mild rash)'],
+    status: 'PHARMACY_PENDING',
+    items: [
+      {
+        id: 'rxi-1',
+        drugId: 'd-1',
+        drugName: 'Amoxicillin 500mg',
+        formulation: 'Capsule',
+        dosage: '1 Cap TDS',
+        frequency: '1-1-1',
+        durationDays: 5,
+        prescribedQty: 15,
+        dispensedQty: 15,
+        unitPrice: 12,
+        instructions: 'Take with food, full 5-day course',
+        isDispensed: false
+      },
+      {
+        id: 'rxi-2',
+        drugId: 'd-2',
+        drugName: 'Paracetamol 650mg (Dolo)',
+        formulation: 'Tablet',
+        dosage: '1 Tab SOS',
+        frequency: '1-0-1',
+        durationDays: 3,
+        prescribedQty: 6,
+        dispensedQty: 6,
+        unitPrice: 3.5,
+        instructions: 'After meals for discomfort',
+        isDispensed: false
+      }
+    ],
+    billing: {
+      subtotal: 201,
+      tax: 10.05,
+      totalPayable: 211.05
+    }
+  }
+];
 
 interface PharmacyState {
   prescriptions: PrescriptionFulfillment[];
@@ -4212,6 +4265,8 @@ export interface ClinicSettings {
     topMarginMm: number;
     bottomMarginMm: number;
   };
+  consultationFee?: number;
+  followUpFee?: number;
 }
 
 export interface HolidaySchedule {
@@ -5040,7 +5095,9 @@ export const INITIAL_CLINIC_SETTINGS: ClinicSettings = {
     showSignatureBlock: true,
     topMarginMm: 35,
     bottomMarginMm: 25
-  }
+  },
+  consultationFee: 500,
+  followUpFee: 300
 };
 
 export const INITIAL_HOLIDAYS: HolidaySchedule[] = [

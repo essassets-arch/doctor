@@ -79,7 +79,7 @@ export function createLesionPhotographyStore(consultationId: string) {
       },
       addMarker: (x, y) => {
         const s = get(); if (!s.selectedImageId || !s.annotationMode) return;
-        const id = crypto.randomUUID(); const now = new Date().toISOString();
+        const id = Date.now().toString() + Math.random().toString(36).substring(2); const now = new Date().toISOString();
         change({ markers: [...s.markers, { id, imageId: s.selectedImageId, type: s.selectedMarkerType, x: clamp(x), y: clamp(y), createdAt: now, updatedAt: now }], selectedMarkerId: id });
       },
       updateMarker: (id, patch) => change({ markers: get().markers.map(m => m.id === id ? { ...m, ...patch,

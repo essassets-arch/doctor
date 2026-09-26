@@ -76,6 +76,33 @@
         "afterImages": [],
         "subSections": [],
         "sections": []
+      },
+      {
+        "id": "sess-proc-1790323549445-6-1790412720836",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 6,
+        "date": "26/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "Session 6 initiated.",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": []
+      },
+      {
+        "id": "sess-proc-1790323549445-7-mui5ia78",
+        "procedureId": "proc-1790323549445",
+        "sessionNumber": 7,
+        "date": "26/09/2026",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Done",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
       }
     ]
   },

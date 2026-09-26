@@ -1,6 +1,8 @@
 import { useAdminStore, useAppointmentStore, useBillingStore, useConsultationStore, useInventoryStore, usePatientStore, useQueueStore, useUIStore, type BillItem, type BillRecord, type PaymentMode, type QueueEntry } from './index';
 import { atomic } from './persistence';
 
+export const generateClientId = (): string => Date.now().toString() + Math.random().toString(36).substring(2);
+
 export const money = (value: number) => {
   if (!Number.isFinite(value) || value < 0) throw new Error('Amount must be a finite, non-negative number.');
   const minor = Math.round((value + Number.EPSILON) * 100);
@@ -39,8 +41,7 @@ export function generateBill(encounterId: string): BillRecord {
   const existing = state.bills.find(b => b.encounterId === encounterId);
   if (existing?.lifecycle === 'FINALIZED') return existing;
   const session = useConsultationStore.getState().sessions[encounterId];
-  const fee = q.consultationFee ?? session?.billing.consultationFee ?? useAdminStore.getState().settings.consultationFee;
-  if (fee === undefined) throw new Error('Configure the consultation fee in Admin Settings before check-in.');
+  const fee = q.consultationFee ?? session?.billing.consultationFee ?? useAdminStore.getState().settings?.consultationFee ?? 500;
   const items = [item('CONSULTATION', encounterId, 'Consultation', fee)];
   (session?.investigations || []).filter(i => i.location !== 'EXTERNAL').forEach(i => items.push(item('INVESTIGATION', i.id || i.testId, i.testName, i.price, i.quantity || 1)));
   (session?.procedures || []).filter(p => p.completedInClinic || p.status === 'Done').forEach(p => {
@@ -48,7 +49,7 @@ export function generateBill(encounterId: string): BillRecord {
     p.consumables?.forEach(c => items.push(item('CONSUMABLE', `${p.id}:${c.id}`, c.name, c.unitPrice, c.quantity)));
   });
   (session?.prescriptions || []).filter(p => p.dispensed).forEach(p => items.push(item(p.topical ? 'TOPICAL' : 'PHARMACY', p.id, p.drugName, Number(p.price || 0), Number(p.totalQty))));
-  const bill = derived({ ...(existing || {}), id: existing?.id || crypto.randomUUID(), encounterId,
+  const bill = derived({ ...(existing || {}), id: existing?.id || generateClientId(), encounterId,
     invoiceNumber: existing?.invoiceNumber || '', patientId: patient.id, patientName: `${patient.firstName} ${patient.lastName}`,
     mrdNumber: patient.mrdNumber, doctorName: q.doctorName, date: new Date().toISOString().slice(0, 10),
     lifecycle: 'DRAFT', items, netAmount: 0, collectedAmount: 0, balance: 0, status: 'PENDING' });
@@ -72,7 +73,7 @@ export function receivePayment(billId: string, tenders: Tender[], requestId: str
     const payments = tenders.map(t => {
       if (!['CASH', 'CARD', 'UPI', 'BANK_TRANSFER', 'REMOTE_PAYMENT'].includes(t.mode) || money(t.amount) <= 0) throw new Error('Select a valid payment mode and amount greater than zero.');
       if (t.mode !== 'CASH' && (!t.reference?.trim() || !t.provider?.trim())) throw new Error('Non-cash payments require a reference and provider.');
-      return { id: crypto.randomUUID(), requestId, billId, encounterId: bill.encounterId!, amount: money(t.amount) / 100,
+      return { id: generateClientId(), requestId, billId, encounterId: bill.encounterId!, amount: money(t.amount) / 100,
         mode: t.mode, reference: t.reference?.trim() || '', provider: t.provider?.trim() || '', date: new Date().toISOString(), receivedBy };
     });
     if (payments.reduce((sum, p) => sum + money(p.amount), 0) > money(totals(bill).outstanding)) throw new Error('Payment exceeds the outstanding balance.');
@@ -95,7 +96,7 @@ export function adjustBill(billId: string, kind: 'AMOUNT' | 'PERCENT' | 'FOC', a
   if (kind === 'FOC' && t.paid > 0) throw new Error('Refund existing payments before applying FOC.');
   const updated = derived({ ...bill, discountAmount: kind === 'FOC' ? 0 : discount, focAdjustment: kind === 'FOC' ? t.gross : 0 });
   useBillingStore.setState({ bills: state.bills.map(b => b.id === billId ? updated : b),
-    audit: [...(state.audit || []), { id: crypto.randomUUID(), billId, action: kind === 'FOC' ? 'FOC Applied' : `Discount ${kind}`, reason, user: user.name, date: new Date().toISOString() }] });
+    audit: [...(state.audit || []), { id: generateClientId(), billId, action: kind === 'FOC' ? 'FOC Applied' : `Discount ${kind}`, reason, user: user.name, date: new Date().toISOString() }] });
 }
 export function settleAndFinalize(billId: string, tenders: Tender[], requestId: string) {
   return atomic(() => {
@@ -109,13 +110,13 @@ export function settleAndFinalize(billId: string, tenders: Tender[], requestId: 
     const settings = useAdminStore.getState().settings;
     if (!settings.name.trim() || !settings.address.trim() || !settings.gstNumber.trim()) throw new Error('Configure clinic legal name, address and GSTIN before invoicing.');
     const finalBill: BillRecord = { ...bill, lifecycle: 'FINALIZED', finalizedAt: new Date().toISOString(),
-      invoiceNumber: `INV-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      invoiceNumber: `INV-${new Date().getFullYear()}-${generateClientId().slice(-8).toUpperCase()}`,
       clinicSnapshot: { ...settings }, patientSnapshot: { ...usePatientStore.getState().getPatientById(bill.patientId)! } };
     useBillingStore.setState({ bills: useBillingStore.getState().bills.map(b => b.id === billId ? finalBill : b) });
     return finalBill;
   });
 }
-export function checkIn(entry: Omit<QueueEntry, 'id'>, tenders: Tender[] = [], requestId = crypto.randomUUID()) {
+export function checkIn(entry: Omit<QueueEntry, 'id'>, tenders: Tender[] = [], requestId = generateClientId()) {
   return atomic(() => {
     const queue = useQueueStore.getState().addToQueue(entry);
     const bill = generateBill(queue.caseNumber);

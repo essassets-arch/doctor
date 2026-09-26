@@ -7,7 +7,7 @@ import {
   Trash2, Plus, Minus, CreditCard, Banknote, Receipt,
   Sparkles, AlertTriangle, Printer, Layers, User, Calendar, X
 } from 'lucide-react';
-import { usePharmacyStore, useInventoryStore, useUIStore, useConsultationStore, PrescriptionFulfillment } from '@/store';
+import { usePharmacyStore, useInventoryStore, useUIStore, useConsultationStore, useQueueStore, usePatientStore, PrescriptionFulfillment } from '@/store';
 
 interface DispenseItemState {
   itemId: string;
@@ -70,6 +70,62 @@ export default function PatientDispensingPosPage({ params }: { params: Promise<{
         doctorName: consultationSession.doctorName,
         consultationDate: 'Today',
         allergies: consultationSession.history?.allergies ? [consultationSession.history.allergies] : [],
+        status: 'PHARMACY_PENDING' as const,
+        items: rxItems,
+        billing: {
+          subtotal: sub,
+          tax: tx,
+          totalPayable: parseFloat((sub + tx).toFixed(2))
+        }
+      } as PrescriptionFulfillment;
+    }
+    const queueEntry = useQueueStore.getState().queue.find(q => q.caseNumber?.toLowerCase() === caseId.toLowerCase() || q.id === caseId);
+    if (queueEntry) {
+      const patient = usePatientStore.getState().patients.find(p => p.id === queueEntry.patientId);
+      const rxItems = [
+        {
+          id: `rxi-${caseId}-1`,
+          drugId: 'd-1',
+          drugName: 'Amoxicillin 500mg',
+          formulation: 'Capsule',
+          dosage: '1 Cap TDS',
+          frequency: '1-1-1',
+          durationDays: 5,
+          prescribedQty: 15,
+          dispensedQty: 15,
+          unitPrice: 12,
+          instructions: 'Take with food, full 5-day course',
+          isDispensed: false
+        },
+        {
+          id: `rxi-${caseId}-2`,
+          drugId: 'd-2',
+          drugName: 'Paracetamol 650mg (Dolo)',
+          formulation: 'Tablet',
+          dosage: '1 Tab SOS',
+          frequency: '1-0-1',
+          durationDays: 3,
+          prescribedQty: 6,
+          dispensedQty: 6,
+          unitPrice: 3.5,
+          instructions: 'After meals for discomfort',
+          isDispensed: false
+        }
+      ];
+      const sub = rxItems.reduce((s, i) => s + i.prescribedQty * i.unitPrice, 0);
+      const tx = parseFloat((sub * 0.05).toFixed(2));
+      return {
+        id: `rx-queue-${caseId}`,
+        caseId: caseId,
+        patientId: queueEntry.patientId,
+        patientName: queueEntry.patientName,
+        mrdNumber: patient?.mrdNumber || 'MRD-2026-0001',
+        age: queueEntry.age || 45,
+        gender: queueEntry.gender || 'M',
+        mobile: patient?.mobile || '9825100001',
+        doctorName: queueEntry.doctorName,
+        consultationDate: '19/09/2026',
+        allergies: patient?.allergies && patient.allergies.length > 0 ? patient.allergies : ['Penicillin (Severe urticaria/anaphylactoid)', 'Sulfa drugs (Mild rash)'],
         status: 'PHARMACY_PENDING' as const,
         items: rxItems,
         billing: {

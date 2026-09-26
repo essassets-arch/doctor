@@ -13,7 +13,7 @@ import {
   usePatientStore, useQueueStore, useBillingStore, useUIStore, useAdminStore, useAppointmentStore, PATIENTS,
   type Patient, type Doctor, type VisitType, type BillingStatus, type QueueEntry, type PaymentMode
 } from '@/store';
-import { checkIn, type Tender } from '@/store/workflow';
+import { checkIn, generateClientId, type Tender } from '@/store/workflow';
 import { atomic } from '@/store/persistence';
 import PaymentModal from '@/components/PaymentModal';
 
@@ -30,7 +30,7 @@ function CheckInContent() {
   const { settings } = useAdminStore();
   const { appointments } = useAppointmentStore();
 
-  const requestRef = useRef(crypto.randomUUID());
+  const requestRef = useRef(generateClientId());
   const lockRef = useRef(false);
 
   // Selected Patient State with reliable initial patient fallback

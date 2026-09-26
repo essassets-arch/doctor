@@ -113,6 +113,21 @@
         "afterImages": [],
         "subSections": [],
         "sections": []
+      },
+      {
+        "id": "sess-proc-synth-sync-1-8-mui5ihz1",
+        "procedureId": "proc-synth-sync-1",
+        "sessionNumber": 8,
+        "date": "20/04/2027",
+        "therapist": "Dr Valaki",
+        "bodyPart": "FACE",
+        "doctorObservation": "",
+        "efficacy": "",
+        "status": "Pending",
+        "beforeImages": [],
+        "afterImages": [],
+        "subSections": [],
+        "sections": []
       }
     ]
   }
