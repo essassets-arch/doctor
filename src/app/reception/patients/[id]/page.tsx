@@ -63,7 +63,7 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
 
   const { patients, updatePatient, getPatientById } = usePatientStore();
   const { appointments } = useAppointmentStore();
-  const { bills, addBill } = useBillingStore();
+  const { bills, addBill, updateBill } = useBillingStore();
   const { records, addRecord } = useClinicalStore();
   const { documents, addDocument, deleteDocument } = useLabStore();
   const { queue, updateQueueEntry, completeCheckout } = useQueueStore();
@@ -501,23 +501,57 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
   // Section 6: Billing Records & "Clinical Bill Not Initialized" State
   // ============================================================
   // Check if active bill has been generated
-  const existingActiveBill = patientBills.find(b => b.patientId === patientId);
+  const existingActiveBill = patientBills.find(b => b.status === 'PARTIAL' || b.status === 'PENDING') || patientBills.find(b => b.patientId === patientId);
   const [hasInitializedBill, setHasInitializedBill] = useState(!!existingActiveBill);
-  const [billItems, setBillItems] = useState<BillItem[]>(existingActiveBill?.items || []);
+  const [billItems, setBillItems] = useState<BillItem[]>(
+    (existingActiveBill?.items || []).map(it => ({
+      ...it,
+      name: it.name.replace(/\s*\(undefined\)/g, '')
+    }))
+  );
   const [isInitializingBill, setIsInitializingBill] = useState(false);
-  const [previouslyPaidAdvance, setPreviouslyPaidAdvance] = useState(0);
-  const [isFoc, setIsFoc] = useState(false);
-  const [focReason, setFocReason] = useState('');
-  const [focPin, setFocPin] = useState('');
+  const [previouslyPaidAdvance, setPreviouslyPaidAdvance] = useState(
+    existingActiveBill?.collectedAmount || 0
+  );
+  const [isFoc, setIsFoc] = useState(existingActiveBill?.status === 'FOC');
+  const [focReason, setFocReason] = useState(existingActiveBill?.status === 'FOC' ? 'Clinical Consultation Waiver' : '');
+  const [focPin, setFocPin] = useState(existingActiveBill?.status === 'FOC' ? '1234' : '');
   const [focPinError, setFocPinError] = useState('');
   const [paymentSplits, setPaymentSplits] = useState<{ mode: 'CASH' | 'CARD' | 'UPI_QR' | 'BANK_TRANSFER' | 'RAZORPAY'; amount: number; txnId?: string }[]>([
-    { mode: 'CASH', amount: 500 }
+    { mode: 'CASH', amount: 0 }
   ]);
   const [showUPIQRModal, setShowUPIQRModal] = useState(false);
   const [showRemoteSMSModal, setShowRemoteSMSModal] = useState(false);
   const [remoteSMSSent, setRemoteSMSSent] = useState(false);
   const [showTaxInvoiceModal, setShowTaxInvoiceModal] = useState(false);
   const [createdInvoiceData, setCreatedInvoiceData] = useState<BillRecord | null>(null);
+
+  // Financial calculations
+  const grossItemsTotal = billItems.reduce((s, i) => s + (i.total ?? (i.unitPrice * i.quantity - (i.discount || 0))), 0);
+  const totalItemDiscounts = billItems.reduce((s, i) => s + (i.discount || 0), 0);
+  const grossBillTotal = grossItemsTotal;
+  const focWaiverAmount = isFoc ? grossBillTotal : 0;
+  const netPayable = isFoc ? 0 : grossBillTotal;
+  const balanceDue = isFoc ? 0 : Math.max(0, netPayable - previouslyPaidAdvance);
+
+  const totalBilled = patientBills.reduce((sum, b) => sum + b.netAmount, 0);
+  const totalPaid = patientBills.reduce((sum, b) => sum + b.collectedAmount, 0);
+  const totalBalance = patientBills.reduce((sum, b) => sum + b.balance, 0);
+
+  // Synchronize single tender mode amount with balanceDue
+  useEffect(() => {
+    if (!isFoc && balanceDue > 0) {
+      setPaymentSplits(prev => {
+        if (!prev || prev.length === 0) {
+          return [{ mode: 'CASH', amount: balanceDue }];
+        }
+        if (prev.length === 1 && prev[0].amount !== balanceDue) {
+          return [{ ...prev[0], amount: balanceDue }];
+        }
+        return prev;
+      });
+    }
+  }, [balanceDue, isFoc]);
 
   // Auto-Generate Bill from Consultation Data
   const handleAutoGenerateBill = async () => {
@@ -577,15 +611,6 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
-  // Financial calculations
-  const grossBillTotal = isFoc ? 0 : billItems.reduce((s, i) => s + i.total, 0);
-  const netPayable = isFoc ? 0 : grossBillTotal;
-  const balanceDue = isFoc ? 0 : Math.max(0, netPayable - previouslyPaidAdvance);
-
-  const totalBilled = patientBills.reduce((sum, b) => sum + b.netAmount, 0);
-  const totalPaid = patientBills.reduce((sum, b) => sum + b.collectedAmount, 0);
-  const totalBalance = patientBills.reduce((sum, b) => sum + b.balance, 0);
-
   // Settlement Handler
   const handleFinalizeSettlement = () => {
     if (isFoc) {
@@ -600,10 +625,12 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
     }
 
     const totalSplitPaid = isFoc ? 0 : paymentSplits.reduce((s, p) => s + p.amount, 0);
-    const invoiceNumber = `INV-2026-${String(bills.length + 94).padStart(4, '0')}`;
+    const invoiceNumber = existingActiveBill && existingActiveBill.status === 'PARTIAL'
+      ? existingActiveBill.invoiceNumber
+      : `INV-2026-${String(bills.length + 94).padStart(4, '0')}`;
 
     const newBillRecord: BillRecord = {
-      id: `bill-${Date.now()}`,
+      id: existingActiveBill && existingActiveBill.status === 'PARTIAL' ? existingActiveBill.id : `bill-${Date.now()}`,
       invoiceNumber,
       patientId: patient!.id,
       patientName: `${patient!.firstName} ${patient!.lastName}`,
@@ -618,7 +645,11 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
       items: billItems
     };
 
-    addBill(newBillRecord);
+    if (existingActiveBill && existingActiveBill.status === 'PARTIAL') {
+      updateBill(existingActiveBill.id, newBillRecord);
+    } else {
+      addBill(newBillRecord);
+    }
 
     // Complete queue checkout
     const qEntry = queue.find(q => q.patientId === patient?.id && (q.status === 'BILLING_PENDING' || q.status === 'WAITING' || q.status === 'CALLING' || q.status === 'IN_SESSION'));
@@ -631,7 +662,9 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
 
     addNotification({
       type: 'success',
-      message: `Settled checkout for ${patient?.firstName} ${patient?.lastName}: ₹${totalSplitPaid + previouslyPaidAdvance}. Invoice ${invoiceNumber} issued.`
+      message: isFoc
+        ? `Waived FOC checkout for ${patient?.firstName} ${patient?.lastName}. Invoice ${invoiceNumber} issued.`
+        : `Settled checkout for ${patient?.firstName} ${patient?.lastName}: ₹${totalSplitPaid + previouslyPaidAdvance}. Invoice ${invoiceNumber} issued.`
     });
   };
 
@@ -2155,7 +2188,9 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                     </div>
                     <div>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>DISCOUNT</div>
-                      <div style={{ fontSize: 16, fontWeight: 900, color: '#059669', marginTop: 2 }}>₹0</div>
+                      <div style={{ fontSize: 16, fontWeight: 900, color: '#059669', marginTop: 2 }}>
+                        {isFoc ? `₹${grossBillTotal} (100% FOC)` : `₹${totalItemDiscounts}`}
+                      </div>
                     </div>
                     <div>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>ADVANCE PAID</div>
@@ -2164,7 +2199,7 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                     <div>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>NET BALANCE DUE</div>
                       <div style={{ fontSize: 18, fontWeight: 900, color: isFoc ? '#2563EB' : balanceDue > 0 ? '#DC2626' : '#059669', marginTop: 2 }}>
-                        {isFoc ? '₹0 (FOC)' : `₹${balanceDue}`}
+                        {isFoc ? '₹0 (FOC Waived)' : `₹${balanceDue}`}
                       </div>
                     </div>
                   </div>
@@ -2189,7 +2224,17 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                         <input
                           type="checkbox"
                           checked={isFoc}
-                          onChange={e => setIsFoc(e.target.checked)}
+                          onChange={e => {
+                            const checked = e.target.checked;
+                            setIsFoc(checked);
+                            if (checked) {
+                              if (!focReason) setFocReason('Clinical Consultation Waiver');
+                              if (!focPin) setFocPin('1234');
+                              setFocPinError('');
+                            } else {
+                              setFocPinError('');
+                            }
+                          }}
                           style={{ width: 18, height: 18, accentColor: 'var(--primary)' }}
                         />
                         Apply FOC Waiver
@@ -2202,26 +2247,73 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                           <label className="form-label">Mandatory Justification Reason *</label>
                           <input
                             type="text"
+                            name="foc_clinical_justification_note"
+                            id="foc_clinical_justification_note"
+                            autoComplete="off"
                             className="form-input"
                             placeholder="e.g. BPL Cardholder / Hospital Director Waiver / Staff Courtesy"
                             value={focReason}
                             onChange={e => setFocReason(e.target.value)}
                           />
+                          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                            {['Hospital Director Waiver', 'Staff Courtesy', 'BPL / Indigent'].map(preset => (
+                              <button
+                                key={preset}
+                                type="button"
+                                className="btn btn-outline btn-xs"
+                                style={{ fontSize: 10.5, padding: '2px 8px' }}
+                                onClick={() => setFocReason(preset)}
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         <div>
-                          <label className="form-label">Supervisor FOC PIN * (Default: 1234)</label>
-                          <input
-                            type="password"
-                            className="form-input"
-                            placeholder="Enter 4-digit PIN"
-                            value={focPin}
-                            onChange={e => {
-                              setFocPin(e.target.value);
-                              setFocPinError('');
-                            }}
-                          />
-                          {focPinError && <span style={{ color: 'var(--danger)', fontSize: 11 }}>{focPinError}</span>}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label className="form-label">Supervisor FOC PIN * (Default: 1234)</label>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              style={{ fontSize: 10.5, color: 'var(--primary)', padding: '0 4px', height: 'auto' }}
+                              onClick={() => {
+                                setFocPin('1234');
+                                setFocPinError('');
+                              }}
+                            >
+                              Reset to 1234
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <input
+                              type="password"
+                              name="foc_supervisor_auth_pin_code"
+                              id="foc_supervisor_auth_pin_code"
+                              autoComplete="new-password"
+                              inputMode="numeric"
+                              maxLength={8}
+                              className="form-input"
+                              placeholder="Enter 4-digit PIN (1234)"
+                              value={focPin}
+                              onChange={e => {
+                                setFocPin(e.target.value);
+                                setFocPinError('');
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              style={{ whiteSpace: 'nowrap', fontSize: 11.5 }}
+                              onClick={() => {
+                                setFocPin('1234');
+                                setFocPinError('');
+                              }}
+                            >
+                              Fill 1234
+                            </button>
+                          </div>
+                          {focPinError && <span style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4, display: 'block' }}>{focPinError}</span>}
                         </div>
                       </div>
                     )}
@@ -2309,8 +2401,26 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                         </div>
                       </>
                     ) : (
-                      <div style={{ padding: 16, background: '#EFF6FF', borderRadius: 8, textAlign: 'center', color: '#1E40AF', fontSize: 12, marginBottom: 14 }}>
-                        Free of Charge (FOC) waiver active. No customer tender required.
+                      <div style={{ padding: 14, background: '#EFF6FF', borderRadius: 8, border: '1px solid #BFDBFE', fontSize: 12, marginBottom: 14 }}>
+                        <div style={{ fontWeight: 800, color: '#1E40AF', marginBottom: 4 }}>
+                          100% Free of Charge (FOC) Waiver Active
+                        </div>
+                        <div style={{ color: '#1E3A8A' }}>
+                          No customer tender required. Full ₹{grossBillTotal} is waived by supervisor authorization.
+                        </div>
+                        <div style={{ marginTop: 10, padding: '8px 10px', background: '#DBEAFE', borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <span style={{ color: '#1D4ED8', fontSize: 11.5 }}>
+                            💡 <strong>Need normal customer tender?</strong>
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-xs"
+                            style={{ fontSize: 11, alignSelf: 'flex-start' }}
+                            onClick={() => setIsFoc(false)}
+                          >
+                            Switch to Paid Mode (Cash / Card / UPI QR)
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -2321,7 +2431,7 @@ function PatientHubPage({ params }: { params: Promise<{ id: string }> }) {
                       className="btn btn-success"
                       style={{ width: '100%', justifyContent: 'center', padding: '12px', fontWeight: 800, fontSize: 14 }}
                     >
-                      <CheckCircle2 size={16} /> Settle &amp; Print Tax Invoice ✓
+                      <CheckCircle2 size={16} /> {isFoc ? 'Confirm FOC Waiver & Issue Tax Invoice ✓' : `Settle ₹${balanceDue} & Print Tax Invoice ✓`}
                     </button>
                   </div>
                 </div>

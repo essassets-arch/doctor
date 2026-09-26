@@ -2595,7 +2595,7 @@ function DoctorConsultationContent({ caseId }: { caseId: string }) {
     }));
     const procItems = (activeSession?.procedures || []).map(p => ({
       id: `proc-${p.id}`,
-      name: `Proc: ${p.procedureName} (${p.sessionsCount})`,
+      name: p.sessionsCount ? `Proc: ${p.procedureName} (${p.sessionsCount})` : `Proc: ${p.procedureName}`,
       unitPrice: p.price,
       quantity: 1,
       discount: 0,
