@@ -4132,16 +4132,33 @@ export interface ConsentTemplate {
   lastUpdated: string;
 }
 
+export type ExpenseCategory =
+  | 'Rent & Lease'
+  | 'Bio-Medical Waste'
+  | 'IT & Utilities'
+  | 'Medical Consumables'
+  | 'Pharmaceuticals & Stock'
+  | 'Diagnostic Reagents'
+  | 'Maintenance & Facility'
+  | 'Staff Welfare & Training'
+  | 'Housekeeping & Sanitation'
+  | 'Marketing & Outreach'
+  | 'Administrative & Sundry';
+
 export interface ClinicExpense {
   id: string;
   title: string;
-  category: 'Rent & Lease' | 'Bio-Medical Waste' | 'IT & Utilities' | 'Medical Consumables' | 'Maintenance & Facility' | 'Marketing';
+  category: ExpenseCategory;
   amount: number;
   date: string;
-  paymentMethod: 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE';
+  paymentMethod: 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE' | 'CARD';
   receiptNumber: string;
   approvedBy: string;
   notes?: string;
+  vendor?: string;
+  gstNumber?: string;
+  taxAmount?: number;
+  status?: 'PAID' | 'PENDING' | 'VOID';
 }
 
 export interface SecuritySession {
@@ -4770,11 +4787,216 @@ export const INITIAL_CONSENT_TEMPLATES: ConsentTemplate[] = [
 ];
 
 export const INITIAL_EXPENSES: ClinicExpense[] = [
-  { id: 'exp-1', title: 'Clinical Facility Rent (September 2026)', category: 'Rent & Lease', amount: 65000, date: '2026-09-01', paymentMethod: 'BANK_TRANSFER', receiptNumber: 'REC-RENT-2609', approvedBy: 'Superadmin (Medical Director)', notes: 'Premises Plot 42 Ellis Bridge' },
-  { id: 'exp-2', title: 'Bio-Medical Waste Incineration Contract', category: 'Bio-Medical Waste', amount: 4500, date: '2026-09-05', paymentMethod: 'BANK_TRANSFER', receiptNumber: 'REC-BMW-4102', approvedBy: 'Amit Dave', notes: 'Envirocare Bio Waste Solutions' },
-  { id: 'exp-3', title: 'High-Speed Fiber Lease & HIPAA Cloud Backup', category: 'IT & Utilities', amount: 3200, date: '2026-09-08', paymentMethod: 'UPI', receiptNumber: 'TXN-UPI-98210', approvedBy: 'Amit Dave', notes: 'Airtel Enterprise Fiber 300Mbps' },
-  { id: 'exp-4', title: 'Diagnostic Tubes, Needles & PPE Consumables', category: 'Medical Consumables', amount: 14800, date: '2026-09-12', paymentMethod: 'BANK_TRANSFER', receiptNumber: 'INV-SURG-8819', approvedBy: 'Superadmin (Medical Director)', notes: 'BD Vacutainer Supplies' },
-  { id: 'exp-5', title: 'Torrent Power Electricity Utility Bill', category: 'IT & Utilities', amount: 12400, date: '2026-09-15', paymentMethod: 'UPI', receiptNumber: 'TORRENT-77182', approvedBy: 'Amit Dave', notes: 'Monthly OPD Cabin & AC Meter' }
+  {
+    id: 'exp-1',
+    title: 'Clinical Facility Premises Rent (September 2026)',
+    category: 'Rent & Lease',
+    amount: 65000,
+    date: '2026-09-01',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'REC-RENT-2609',
+    approvedBy: 'Superadmin (Medical Director)',
+    vendor: 'Ellis Bridge Commercial Estates LLP',
+    gstNumber: '24AABCE1294K1Z0',
+    taxAmount: 11700,
+    status: 'PAID',
+    notes: 'Premises Plot 42 Ellis Bridge Medical Enclave'
+  },
+  {
+    id: 'exp-2',
+    title: 'Bio-Medical Waste Incineration & Barcode Bag Clearance',
+    category: 'Bio-Medical Waste',
+    amount: 4500,
+    date: '2026-09-05',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'REC-BMW-4102',
+    approvedBy: 'Amit Dave',
+    vendor: 'Envirocare Bio Waste Solutions',
+    gstNumber: '24AACCE8812D1Z9',
+    taxAmount: 810,
+    status: 'PAID',
+    notes: 'Monthly PCB compliant incineration & manifest'
+  },
+  {
+    id: 'exp-3',
+    title: 'High-Speed Fiber Lease & HIPAA Cloud Backup Storage',
+    category: 'IT & Utilities',
+    amount: 3200,
+    date: '2026-09-08',
+    paymentMethod: 'UPI',
+    receiptNumber: 'TXN-UPI-98210',
+    approvedBy: 'Amit Dave',
+    vendor: 'Airtel Enterprise Fiber & AWS Cloud',
+    gstNumber: '24AAACA0102P1Z4',
+    taxAmount: 576,
+    status: 'PAID',
+    notes: 'Airtel Dedicated 300Mbps + AWS HIPAA Vault'
+  },
+  {
+    id: 'exp-4',
+    title: 'Diagnostic Tubes, Needles, PPE & Phlebotomy Supplies',
+    category: 'Medical Consumables',
+    amount: 14800,
+    date: '2026-09-12',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'INV-SURG-8819',
+    approvedBy: 'Superadmin (Medical Director)',
+    vendor: 'Becton Dickinson India Pvt Ltd',
+    gstNumber: '24AABCB3910M1Z2',
+    taxAmount: 1776,
+    status: 'PAID',
+    notes: 'BD Vacutainer tubes, EDTA, butterfly needles'
+  },
+  {
+    id: 'exp-5',
+    title: 'Torrent Power Electricity Utility Bill (OPD & HVAC)',
+    category: 'IT & Utilities',
+    amount: 12400,
+    date: '2026-09-15',
+    paymentMethod: 'UPI',
+    receiptNumber: 'TORRENT-77182',
+    approvedBy: 'Amit Dave',
+    vendor: 'Torrent Power Limited',
+    gstNumber: '24AAACT2941H1Z6',
+    taxAmount: 2232,
+    status: 'PAID',
+    notes: 'Meter #TP-4491-01 Commercial Medical Tariff'
+  },
+  {
+    id: 'exp-6',
+    title: 'Emergency Pharmacy & Crash Cart Drug Stock Refill',
+    category: 'Pharmaceuticals & Stock',
+    amount: 22500,
+    date: '2026-09-16',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'INV-ZYD-49102',
+    approvedBy: 'Dr. Raj Valaki',
+    vendor: 'Zydus Lifesciences Wholesale Depot',
+    gstNumber: '24AAACZ4918L1Z1',
+    taxAmount: 2700,
+    status: 'PAID',
+    notes: 'Adrenaline, Atropine, IV Saline, Paracetamol IV'
+  },
+  {
+    id: 'exp-7',
+    title: 'Fully Automated Biochemistry Reagent Packs & Controls',
+    category: 'Diagnostic Reagents',
+    amount: 18600,
+    date: '2026-09-18',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'INV-ROCHE-782',
+    approvedBy: 'Superadmin (Medical Director)',
+    vendor: 'Roche Diagnostics India',
+    gstNumber: '24AAACR1049J1Z7',
+    taxAmount: 2232,
+    status: 'PAID',
+    notes: 'Cobas c311 Lipid, LFT & KFT cartridges'
+  },
+  {
+    id: 'exp-8',
+    title: 'Sonosite Ultrasound Scanner Annual AMC & Calibration',
+    category: 'Maintenance & Facility',
+    amount: 16000,
+    date: '2026-09-19',
+    paymentMethod: 'CHEQUE',
+    receiptNumber: 'CHQ-778901',
+    approvedBy: 'Superadmin (Medical Director)',
+    vendor: 'FUJIFILM Sonosite Service Desk',
+    gstNumber: '24AAACF9021K1Z3',
+    taxAmount: 2880,
+    status: 'PAID',
+    notes: 'Annual comprehensive preventive maintenance'
+  },
+  {
+    id: 'exp-9',
+    title: 'OT Linen Laundry & Microbicidal Sanitization Service',
+    category: 'Housekeeping & Sanitation',
+    amount: 6800,
+    date: '2026-09-20',
+    paymentMethod: 'CASH',
+    receiptNumber: 'VCH-CSH-1049',
+    approvedBy: 'Amit Dave',
+    vendor: 'PureClean Hospital Laundry Solutions',
+    gstNumber: '24AABCP4412B1Z8',
+    taxAmount: 816,
+    status: 'PAID',
+    notes: 'Daily OT scrubs, bedsheets & sterile drapes'
+  },
+  {
+    id: 'exp-10',
+    title: 'BLS & ACLS Resuscitation Nursing Workshop Fee',
+    category: 'Staff Welfare & Training',
+    amount: 8500,
+    date: '2026-09-21',
+    paymentMethod: 'UPI',
+    receiptNumber: 'TXN-UPI-55219',
+    approvedBy: 'Dr. Anita Soni',
+    vendor: 'Indian Resuscitation Council Federation',
+    gstNumber: '24AAATI9012N1Z5',
+    taxAmount: 0,
+    status: 'PAID',
+    notes: 'Certification for 6 staff nurses and triage techs'
+  },
+  {
+    id: 'exp-11',
+    title: 'Community Cardiac Screening Standee & Awareness Camp',
+    category: 'Marketing & Outreach',
+    amount: 5400,
+    date: '2026-09-22',
+    paymentMethod: 'CARD',
+    receiptNumber: 'POS-CARD-9912',
+    approvedBy: 'Amit Dave',
+    vendor: 'Apex Digital Media & Print Graphics',
+    gstNumber: '24AABCA8921P1Z4',
+    taxAmount: 648,
+    status: 'PAID',
+    notes: 'World Heart Day preventive check-up standees'
+  },
+  {
+    id: 'exp-12',
+    title: 'Prescription Stationery, Thermal Paper & OPD Folders',
+    category: 'Administrative & Sundry',
+    amount: 3850,
+    date: '2026-09-23',
+    paymentMethod: 'CASH',
+    receiptNumber: 'PETTY-CSH-302',
+    approvedBy: 'Pooja Patel',
+    vendor: 'Metro Medical Stationers',
+    gstNumber: '24AABCM3391K1Z2',
+    taxAmount: 462,
+    status: 'PAID',
+    notes: 'Prescription pads with NABL logo & receipt rolls'
+  },
+  {
+    id: 'exp-13',
+    title: 'Autoclave & Sterilizer Pressure Chamber Overhaul',
+    category: 'Maintenance & Facility',
+    amount: 9200,
+    date: '2026-09-24',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'INV-MTEK-4019',
+    approvedBy: 'Superadmin (Medical Director)',
+    vendor: 'Meditek Biomedical Engineers',
+    gstNumber: '24AABCM9102E1Z5',
+    taxAmount: 1656,
+    status: 'PENDING',
+    notes: 'Safety gasket replacement & vacuum leak test'
+  },
+  {
+    id: 'exp-14',
+    title: 'Sterile Surgical Gloves & Sutures Replenishment',
+    category: 'Medical Consumables',
+    amount: 11300,
+    date: '2026-09-25',
+    paymentMethod: 'BANK_TRANSFER',
+    receiptNumber: 'INV-ETH-2910',
+    approvedBy: 'Dr. Raj Valaki',
+    vendor: 'Ethicon Johnson & Johnson',
+    gstNumber: '24AAACE8821C1Z0',
+    taxAmount: 1356,
+    status: 'PENDING',
+    notes: 'Vicryl 3-0, Prolene 4-0 sutures & powdered-free gloves'
+  }
 ];
 
 export const INITIAL_SECURITY_SESSIONS: SecuritySession[] = [
@@ -4866,6 +5088,10 @@ interface AdminState {
 
   // Expenses
   addExpense: (expense: Omit<ClinicExpense, 'id'>) => void;
+  updateExpense: (id: string, partial: Partial<ClinicExpense>) => void;
+  deleteExpense: (id: string) => void;
+  toggleExpenseStatus: (id: string) => void;
+  seedExpenses: (force?: boolean) => void;
 
   // Consent & Notifications
   updateConsentTemplate: (id: string, content: string) => void;
@@ -5056,9 +5282,49 @@ export const useAdminStore = create<AdminState>()(
       addExpense: (expense) => {
         const newExpense: ClinicExpense = {
           ...expense,
-          id: `exp-${Date.now()}`
+          id: `exp-${Date.now()}`,
+          status: expense.status || 'PAID'
         };
         set(s => ({ expenses: [newExpense, ...s.expenses] }));
+        notifyTabSync('doctor-admin');
+      },
+
+      updateExpense: (id, partial) => {
+        set(s => ({
+          expenses: s.expenses.map(e => e.id === id ? { ...e, ...partial } : e)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      deleteExpense: (id) => {
+        set(s => ({
+          expenses: s.expenses.filter(e => e.id !== id)
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      toggleExpenseStatus: (id) => {
+        set(s => ({
+          expenses: s.expenses.map(e => {
+            if (e.id !== id) return e;
+            const nextStatus = e.status === 'PENDING' ? 'PAID' : 'PENDING';
+            return { ...e, status: nextStatus };
+          })
+        }));
+        notifyTabSync('doctor-admin');
+      },
+
+      seedExpenses: (force = false) => {
+        set(s => {
+          if (force || !s.expenses || s.expenses.length < INITIAL_EXPENSES.length) {
+            // Merge or replace
+            const existingIds = new Set((s.expenses || []).map(e => e.id));
+            const missing = INITIAL_EXPENSES.filter(ie => !existingIds.has(ie.id));
+            if (force) return { expenses: INITIAL_EXPENSES };
+            return { expenses: [...(s.expenses || []), ...missing] };
+          }
+          return s;
+        });
         notifyTabSync('doctor-admin');
       },
 

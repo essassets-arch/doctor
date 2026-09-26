@@ -14,7 +14,7 @@ import {
   LifeBuoy, Search, PanelLeftClose, PanelLeftOpen,
   CreditCard, Receipt, Eye, Menu
 } from 'lucide-react';
-import { useAdminStore, useInventoryStore, useChatStore } from '@/store';
+import { useAdminStore, useInventoryStore, useChatStore, useQueueStore } from '@/store';
 
 interface NavSection {
   title: string;
@@ -33,6 +33,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { isPanicLockdown, sessions, securityEvents } = useAdminStore();
   const { inventory } = useInventoryStore();
   const { messages, sendMessage } = useChatStore();
+  const { queue } = useQueueStore();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -46,6 +47,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const threatCount = securityEvents.filter(e => e.severity === 'CRITICAL' || e.severity === 'HIGH').length;
   // Low stock inventory items
   const lowStockCount = inventory.filter(i => i.stock <= i.reorderLevel).length;
+  // Active queue entries
+  const activeQueueCount = queue.filter(q => ['WAITING', 'CALLING', 'IN_SESSION'].includes(q.status)).length;
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -87,6 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       title: 'CLINICAL OPERATIONS',
       items: [
+        { label: 'OPD Live Queue Control', href: '/admin/queue', icon: Users, badge: activeQueueCount > 0 ? `${activeQueueCount} Active` : undefined, badgeColor: '#4338ca' },
         { label: 'Patient Master Registry', href: '/admin/patients', icon: User },
         { label: 'Appointments & Holidays', href: '/admin/appointments', icon: Calendar },
         { label: 'Automated Communications', href: '/admin/notifications', icon: Bell },
@@ -123,7 +127,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { label: 'Support & Diagnostics', href: '/admin/support', icon: LifeBuoy },
       ]
     }
-  ], [threatCount, lowStockCount]);
+  ], [threatCount, lowStockCount, activeQueueCount]);
 
   // Filtered navigation when searching in the sidebar
   const filteredSections = useMemo(() => {

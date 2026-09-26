@@ -16,12 +16,92 @@ export default function RescheduleAppointmentPage({ params }: { params: Promise<
   const appointmentId = resolvedParams.id;
 
   const router = useRouter();
-  const { appointments, updateAppointment, getAvailableSlots } = useAppointmentStore();
-  const { doctors } = useQueueStore();
+  const { appointments, updateAppointment, addAppointment, getAvailableSlots } = useAppointmentStore();
+  const { queue, doctors, updateQueueEntry } = useQueueStore();
   const { leaves } = useDoctorLeaveStore();
   const { addNotification } = useUIStore();
 
-  const appointment = appointments.find(a => a.id === appointmentId);
+  // Helper to parse time strings like '12:00 PM', '11:30 AM', or '12:00' into 'HH:mm' for slot matching
+  const parseQueueTime = (timeStr?: string): string => {
+    if (!timeStr) return '11:00';
+    const clean = timeStr.replace(/^(APP-)/i, '').trim();
+    const match = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const mins = match[2];
+      const meridiem = match[3]?.toUpperCase();
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+      return `${String(hours).padStart(2, '0')}:${mins}`;
+    }
+    return clean;
+  };
+
+  // Polymorphic appointment resolver supporting direct appointment ID (apt-X), queue ID (q-X), case number, or patient ID
+  const appointment = useMemo(() => {
+    if (!appointmentId) return undefined;
+    const normalizedId = appointmentId.trim().toLowerCase();
+
+    // 1. Direct match by appointment ID (e.g. 'apt-1', 'apt-3')
+    const directApt = appointments.find(a => a.id.toLowerCase() === normalizedId);
+    if (directApt) return directApt;
+
+    // 2. Match by queue ID (e.g. 'q-8'), case number, or token display
+    const qEntry = queue.find(
+      q => q.id.toLowerCase() === normalizedId ||
+           q.caseNumber?.toLowerCase() === normalizedId ||
+           q.tokenDisplay?.toLowerCase() === normalizedId
+    );
+    if (qEntry) {
+      // Find matching appointment in store by patientId
+      const aptForPatient = appointments.find(a => a.patientId === qEntry.patientId && a.status !== 'CANCELLED');
+      if (aptForPatient) {
+        return {
+          ...aptForPatient,
+          doctorId: qEntry.doctorId || aptForPatient.doctorId,
+          doctorName: qEntry.doctorName || aptForPatient.doctorName,
+          visitType: qEntry.visitType || aptForPatient.visitType,
+          time: qEntry.appointmentTime ? parseQueueTime(qEntry.appointmentTime) : aptForPatient.time,
+        };
+      }
+      // Create virtual appointment object from Queue Entry
+      return {
+        id: qEntry.id,
+        patientId: qEntry.patientId,
+        patientName: qEntry.patientName,
+        doctorId: qEntry.doctorId || 'doc-1',
+        doctorName: qEntry.doctorName || 'Dr. Raj Valaki',
+        date: '2026-09-19',
+        time: parseQueueTime(qEntry.appointmentTime),
+        visitType: qEntry.visitType || 'Consultation',
+        status: 'SCHEDULED' as Appointment['status'],
+        remarks: `Queue Case: ${qEntry.caseNumber || qEntry.tokenDisplay}`
+      };
+    }
+
+    // 3. Fallback: match by patientId directly in appointments
+    const patientApt = appointments.find(a => a.patientId.toLowerCase() === normalizedId);
+    if (patientApt) return patientApt;
+
+    // 4. Fallback: match by patientId in queue
+    const patientQ = queue.find(q => q.patientId.toLowerCase() === normalizedId);
+    if (patientQ) {
+      return {
+        id: patientQ.id,
+        patientId: patientQ.patientId,
+        patientName: patientQ.patientName,
+        doctorId: patientQ.doctorId || 'doc-1',
+        doctorName: patientQ.doctorName || 'Dr. Raj Valaki',
+        date: '2026-09-19',
+        time: parseQueueTime(patientQ.appointmentTime),
+        visitType: patientQ.visitType || 'Consultation',
+        status: 'SCHEDULED' as Appointment['status'],
+        remarks: `Queue Case: ${patientQ.caseNumber || patientQ.tokenDisplay}`
+      };
+    }
+
+    return undefined;
+  }, [appointments, queue, appointmentId]);
 
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(appointment?.doctorId || 'doc-1');
   const [newDate, setNewDate] = useState<string>('2026-09-20');
@@ -32,7 +112,9 @@ export default function RescheduleAppointmentPage({ params }: { params: Promise<
 
   useEffect(() => {
     if (appointment) {
-      setSelectedDoctorId(appointment.doctorId);
+      if (appointment.doctorId) {
+        setSelectedDoctorId(appointment.doctorId);
+      }
     }
   }, [appointment]);
 
@@ -82,39 +164,91 @@ export default function RescheduleAppointmentPage({ params }: { params: Promise<
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
           <AlertCircle size={40} color="var(--danger)" style={{ margin: '0 auto 14px' }} />
           <h2>Appointment Record Not Found</h2>
-          <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>The requested appointment ID may have been deleted or does not exist.</p>
-          <Link href="/reception/appointments" style={{ marginTop: 16, display: 'inline-block' }}>
-            <button className="btn btn-primary">Back to Appointments</button>
-          </Link>
+          <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>
+            No appointment or queue booking was found matching reference <code>{appointmentId}</code>.
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
+            <Link href="/reception/appointments">
+              <button className="btn btn-primary">Back to Appointments</button>
+            </Link>
+            <Link href="/reception/dashboard">
+              <button className="btn btn-outline">Reception Dashboard</button>
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   const handleConfirm = () => {
+    if (!appointment) return;
+
     if (doctorLeaveOnDate) {
       alert(`Cannot reschedule: Dr. ${selectedDoctor.name} is on approved leave (${doctorLeaveOnDate.reason}) on ${newDate}.`);
       return;
     }
 
-    updateAppointment(appointment.id, {
-      doctorId: selectedDoctor.id,
-      doctorName: selectedDoctor.name,
-      date: newDate,
-      time: newSlot,
-      status: 'RESCHEDULED',
-      remarks: `Rescheduled: ${rescheduleReason}${additionalNotes ? ' — ' + additionalNotes : ''}`
-    });
+    const remarksText = `Rescheduled: ${rescheduleReason}${additionalNotes ? ' — ' + additionalNotes : ''}`;
+
+    // 1. Sync or add to useAppointmentStore
+    const existingInStore = appointments.find(
+      a => a.id === appointment.id || (appointment.patientId && a.patientId === appointment.patientId)
+    );
+
+    if (existingInStore) {
+      updateAppointment(existingInStore.id, {
+        doctorId: selectedDoctor.id,
+        doctorName: selectedDoctor.name,
+        date: newDate,
+        time: newSlot,
+        status: 'RESCHEDULED',
+        remarks: remarksText
+      });
+    } else {
+      addAppointment({
+        patientId: appointment.patientId,
+        patientName: appointment.patientName,
+        doctorId: selectedDoctor.id,
+        doctorName: selectedDoctor.name,
+        date: newDate,
+        time: newSlot,
+        visitType: appointment.visitType,
+        status: 'RESCHEDULED',
+        remarks: remarksText
+      });
+    }
+
+    // 2. Also synchronize queue if there is a matching queue entry
+    const matchingQueue = queue.find(
+      q => q.id.toLowerCase() === (appointmentId || '').toLowerCase() ||
+           q.id.toLowerCase() === appointment.id.toLowerCase() ||
+           (appointment.patientId && q.patientId.toLowerCase() === appointment.patientId.toLowerCase())
+    );
+
+    if (matchingQueue) {
+      const [hStr, mStr] = newSlot.split(':');
+      const h = parseInt(hStr, 10);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      const formattedTime = `${String(h12).padStart(2, '0')}:${mStr || '00'} ${ampm}`;
+
+      updateQueueEntry(matchingQueue.id, {
+        doctorId: selectedDoctor.id,
+        doctorName: selectedDoctor.name,
+        appointmentTime: formattedTime,
+        status: 'WAITING'
+      });
+    }
 
     addNotification({
       type: 'warning',
-      message: `Rescheduled appointment for ${appointment.patientName} to ${newDate} at ${newSlot}`
+      message: `Rescheduled appointment for ${appointment.patientName} to ${newDate} at ${newSlot} with ${selectedDoctor.name}`
     });
 
     setSuccessMsg(`Appointment successfully shifted to ${newDate} at ${newSlot}!`);
     setTimeout(() => {
       router.push('/reception/appointments');
-    }, 2000);
+    }, 1500);
   };
 
   return (
@@ -172,6 +306,12 @@ export default function RescheduleAppointmentPage({ params }: { params: Promise<
                   {appointment.date} at {appointment.time}
                 </div>
               </div>
+
+              {appointment.remarks && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', background: 'rgba(0,0,0,0.02)', padding: '8px 10px', borderRadius: 6, border: '1px dashed var(--border)' }}>
+                  <strong>Source Reference:</strong> {appointment.remarks}
+                </div>
+              )}
             </div>
           </div>
 

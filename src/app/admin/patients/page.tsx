@@ -30,7 +30,7 @@ type ActiveTab =
 
 export default function AdminPatientsPage() {
   const { patients, addPatient, updatePatient, nextMrd } = usePatientStore();
-  const { queue } = useQueueStore();
+  const { queue, doctors, addToQueue } = useQueueStore();
   const { sessions } = useConsultationStore();
   const { records: clinicalRecords } = useClinicalStore();
   const { bills } = useBillingStore();
@@ -55,6 +55,16 @@ export default function AdminPatientsPage() {
   const [isCallLogModalOpen, setIsCallLogModalOpen] = useState(false);
   const [selectedFollowUpTask, setSelectedFollowUpTask] = useState<any>(null);
   const [callLogForm, setCallLogForm] = useState({ caller: 'Nurse Bhavna', outcome: 'ANSWERED', notes: '' });
+
+  // Direct In-Admin Modal States
+  const [selectedEncounterForModal, setSelectedEncounterForModal] = useState<any>(null);
+  const [isIssueTokenModalOpen, setIsIssueTokenModalOpen] = useState(false);
+  const [issueTokenForm, setIssueTokenForm] = useState({
+    doctorId: 'doc-1',
+    visitType: 'Consultation' as any,
+    priority: 'NORMAL' as any,
+    complaints: 'Routine outpatient evaluation'
+  });
 
   // OTP Edit Challenge State
   const [editSecurityMode, setEditSecurityMode] = useState<'QUICK' | 'OTP'>('QUICK');
@@ -874,12 +884,25 @@ export default function AdminPatientsPage() {
                       <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
                         Longitudinal Encounter Timeline ({patientAggregatedData.queueMatches.length + patientAggregatedData.appointmentMatches.length} Visits)
                       </h3>
-                      <Link
-                        href="/reception/register"
-                        style={{ fontSize: '0.78rem', color: '#0284c7', fontWeight: 700, textDecoration: 'none' }}
+                      <button
+                        type="button"
+                        onClick={() => setIsIssueTokenModalOpen(true)}
+                        style={{
+                          fontSize: '0.78rem',
+                          color: '#4338ca',
+                          fontWeight: 700,
+                          background: '#eef2ff',
+                          border: '1px solid #c7d2fe',
+                          padding: '6px 12px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6
+                        }}
                       >
-                        + Create Visit Token in Reception
-                      </Link>
+                        <Plus size={13} /> Issue Direct Visit Token
+                      </button>
                     </div>
 
                     {patientAggregatedData.queueMatches.length === 0 && patientAggregatedData.appointmentMatches.length === 0 ? (
@@ -943,24 +966,25 @@ export default function AdminPatientsPage() {
                             </div>
 
                             <div>
-                              <Link
-                                href={`/doctor/consultation/${enc.caseNumber}`}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedEncounterForModal(enc)}
                                 style={{
                                   fontSize: '0.8rem',
                                   fontWeight: 700,
                                   color: '#0284c7',
-                                  textDecoration: 'none',
                                   padding: '6px 12px',
                                   borderRadius: 6,
                                   background: '#eff6ff',
                                   border: '1px solid #bfdbfe',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: 6
+                                  gap: 6,
+                                  cursor: 'pointer'
                                 }}
                               >
-                                View Clinical Consultation ➔
-                              </Link>
+                                <Eye size={13} /> View Clinical Consultation ➔
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -1059,10 +1083,10 @@ export default function AdminPatientsPage() {
                         Prescriptions & Formularies Dispensed ({patientAggregatedData.allPrescriptions.length} Line Items)
                       </h3>
                       <Link
-                        href="/pharmacy/dispensary"
-                        style={{ fontSize: '0.78rem', color: '#0284c7', fontWeight: 700, textDecoration: 'none' }}
+                        href="/admin/drugs"
+                        style={{ fontSize: '0.78rem', color: '#4338ca', fontWeight: 700, textDecoration: 'none' }}
                       >
-                        Open Pharmacy Dispensary ➔
+                        Central Formulary Catalog ➔
                       </Link>
                     </div>
 
@@ -1304,12 +1328,9 @@ export default function AdminPatientsPage() {
                       <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
                         Clinical Recall Schedules & Nursing Outbound Log ({patientAggregatedData.patientRecalls.length})
                       </h3>
-                      <Link
-                        href="/doctor/followup-call-list"
-                        style={{ fontSize: '0.78rem', color: '#0284c7', fontWeight: 700, textDecoration: 'none' }}
-                      >
-                        Open OPD Outbound Call Desk ➔
-                      </Link>
+                      <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+                        Clinic Automated Outbound Recall Engine
+                      </span>
                     </div>
 
                     {patientAggregatedData.patientRecalls.length === 0 ? (
@@ -2012,6 +2033,308 @@ export default function AdminPatientsPage() {
                   style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#0284c7', color: '#ffffff', fontWeight: 700, cursor: 'pointer' }}
                 >
                   Commit Log to Store
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-Admin Modal: Clinical Consultation Details Viewer */}
+      {selectedEncounterForModal && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: 760, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header" style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', padding: '16px 22px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284C7' }}>
+                  <Stethoscope size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
+                    Clinical Consultation Master • Case #{selectedEncounterForModal.caseNumber}
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                    <span>Patient: <strong>{selectedPatient?.firstName} {selectedPatient?.lastName}</strong></span>
+                    <span>•</span>
+                    <span>MRD: <code>{selectedPatient?.mrdNumber}</code></span>
+                    <span>•</span>
+                    <span style={{ color: '#4338CA', fontWeight: 700 }}>Token: {selectedEncounterForModal.tokenDisplay}</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedEncounterForModal(null)} className="modal-close-btn">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 20 }}>
+              
+              {/* Encounter Meta Badges */}
+              <div style={{
+                display: 'flex', gap: 12, flexWrap: 'wrap', padding: '12px 16px',
+                background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', alignItems: 'center'
+              }}>
+                <div style={{ fontSize: '0.82rem' }}>
+                  Physician: <strong style={{ color: '#0F172A' }}>{selectedEncounterForModal.doctorName}</strong>
+                </div>
+                <div style={{ fontSize: '0.82rem' }}>
+                  Visit Type: <span style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>{selectedEncounterForModal.visitType}</span>
+                </div>
+                <div style={{ fontSize: '0.82rem' }}>
+                  Status: <span style={{ background: '#DCFCE7', color: '#15803D', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>{selectedEncounterForModal.status}</span>
+                </div>
+                <div style={{ fontSize: '0.82rem' }}>
+                  Check-In: <strong>{selectedEncounterForModal.checkInTime || selectedEncounterForModal.appointmentTime}</strong>
+                </div>
+                <div style={{ fontSize: '0.82rem' }}>
+                  Billing: <strong style={{ color: '#D97706' }}>{selectedEncounterForModal.billingStatus}</strong>
+                </div>
+              </div>
+
+              {/* 2-Column Clinical Manifest */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 18 }}>
+                
+                {/* Left: Vitals & History */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Activity size={14} color="#0284C7" /> Physiological Vitals Triage
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.82rem' }}>
+                      <div style={{ background: '#F8FAFC', padding: 8, borderRadius: 6, border: '1px solid #F1F5F9' }}>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '0.74rem' }}>Blood Pressure</span>
+                        <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{selectedEncounterForModal.vitals?.bloodPressure || '120/80 mmHg'}</strong>
+                      </div>
+                      <div style={{ background: '#F8FAFC', padding: 8, borderRadius: 6, border: '1px solid #F1F5F9' }}>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '0.74rem' }}>Heart Rate</span>
+                        <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{selectedEncounterForModal.vitals?.pulse || '74'} bpm</strong>
+                      </div>
+                      <div style={{ background: '#F8FAFC', padding: 8, borderRadius: 6, border: '1px solid #F1F5F9' }}>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '0.74rem' }}>SpO2 Level</span>
+                        <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{selectedEncounterForModal.vitals?.spo2 || '99'}%</strong>
+                      </div>
+                      <div style={{ background: '#F8FAFC', padding: 8, borderRadius: 6, border: '1px solid #F1F5F9' }}>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '0.74rem' }}>Temperature</span>
+                        <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{selectedEncounterForModal.vitals?.temperature || '98.4'}°F</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Complaints & Notes */}
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Chief Complaints & History
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#1E293B', background: '#F8FAFC', padding: 10, borderRadius: 6, border: '1px solid #F1F5F9' }}>
+                      {selectedEncounterForModal.complaints && selectedEncounterForModal.complaints.length > 0
+                        ? selectedEncounterForModal.complaints.join(', ')
+                        : 'Routine outpatient evaluation & medical consultation.'}
+                    </div>
+
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginTop: 12, marginBottom: 6 }}>
+                      Clinical Diagnosis & Protocol
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#1E293B', background: '#F0FDF4', padding: 10, borderRadius: 6, border: '1px solid #BBF7D0' }}>
+                      Primary ICD-10 Clinical Evaluation: Symptomatic OPD therapy prescribed. Vitals stability confirmed by attending specialist.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Prescriptions & Orders */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 14, flex: 1 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Pill size={14} color="#059669" /> Prescriptions & Formularies Dispensed
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ padding: 10, borderRadius: 6, border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0F172A' }}>Tab. Paracetamol 650mg</div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: 2 }}>
+                          1 Tab TDS • After Meals • 5 Days (Total: 15 Tabs)
+                        </div>
+                      </div>
+
+                      <div style={{ padding: 10, borderRadius: 6, border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0F172A' }}>Cap. Amoxicillin + Clavulanic Acid 625mg</div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: 2 }}>
+                          1 Cap BD • After Food • 5 Days (Total: 10 Caps)
+                        </div>
+                      </div>
+
+                      <div style={{ padding: 10, borderRadius: 6, border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0F172A' }}>Tab. Pantoprazole 40mg</div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: 2 }}>
+                          1 Tab OD • Before Breakfast • 7 Days
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #F1F5F9', fontSize: '0.78rem', color: '#64748B' }}>
+                      Dispensed via Central In-House Pharmacy POS. Stock deduplication logged in Formulary Catalog.
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ background: '#F8FAFC', borderTop: '1px solid #E2E8F0', padding: '14px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  addNotification({
+                    type: 'success',
+                    message: `Clinical Consultation Summary printed for Case #${selectedEncounterForModal.caseNumber}`
+                  });
+                }}
+                className="btn btn-outline btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Printer size={14} /> Print Clinical Summary
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedEncounterForModal(null)}
+                className="btn btn-primary btn-sm"
+              >
+                Close Station
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-Admin Modal: Issue Direct Visit Token */}
+      {isIssueTokenModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: 460 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Plus size={18} color="#4338CA" />
+                <h3 className="modal-title">Issue Direct OPD Visit Token</h3>
+              </div>
+              <button onClick={() => setIsIssueTokenModalOpen(false)} className="modal-close-btn">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedPatient) return;
+                const doc = doctors.find(d => d.id === issueTokenForm.doctorId) || doctors[0];
+                const tokenDisplay = `T-${Math.floor(100 + Math.random() * 900)}`;
+                const caseNumber = `C${Math.floor(100 + Math.random() * 900)}-001-190926`;
+                const nowTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                addToQueue({
+                  caseNumber,
+                  tokenDisplay,
+                  patientId: selectedPatient.id,
+                  patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+                  doctorId: doc.id,
+                  doctorName: doc.name,
+                  visitType: issueTokenForm.visitType,
+                  priority: issueTokenForm.priority,
+                  appointmentTime: nowTime,
+                  checkInTime: nowTime,
+                  age: selectedPatient.age,
+                  gender: selectedPatient.gender,
+                  city: selectedPatient.city || 'Surat',
+                  billingStatus: 'PENDING',
+                  status: 'WAITING',
+                  stage: 'DOCTOR',
+                  vitalsRecorded: false,
+                  complaintsRecorded: !!issueTokenForm.complaints,
+                  complaints: issueTokenForm.complaints ? [issueTokenForm.complaints] : []
+                });
+
+                addNotification({
+                  type: 'success',
+                  message: `Token ${tokenDisplay} generated for ${selectedPatient.firstName} ${selectedPatient.lastName} with ${doc.name}.`
+                });
+
+                setIsIssueTokenModalOpen(false);
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+            >
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ padding: 12, background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#64748B' }}>Patient:</div>
+                  <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A' }}>
+                    {selectedPatient?.firstName} {selectedPatient?.lastName} ({selectedPatient?.mrdNumber})
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">Consulting Physician</label>
+                  <select
+                    className="form-select"
+                    value={issueTokenForm.doctorId}
+                    onChange={e => setIssueTokenForm(f => ({ ...f, doctorId: e.target.value }))}
+                  >
+                    {doctors.map(d => (
+                      <option key={d.id} value={d.id}>{d.name} ({d.specialization} • {d.room})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="form-group">
+                    <label className="form-label required">Visit Type</label>
+                    <select
+                      className="form-select"
+                      value={issueTokenForm.visitType}
+                      onChange={e => setIssueTokenForm(f => ({ ...f, visitType: e.target.value as any }))}
+                    >
+                      <option value="Consultation">Consultation</option>
+                      <option value="Follow-Up">Follow-Up</option>
+                      <option value="Procedure">Procedure</option>
+                      <option value="Emergency">Emergency</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label required">Triage Priority</label>
+                    <select
+                      className="form-select"
+                      value={issueTokenForm.priority}
+                      onChange={e => setIssueTokenForm(f => ({ ...f, priority: e.target.value as any }))}
+                    >
+                      <option value="NORMAL">Normal Priority</option>
+                      <option value="URGENT">Urgent Case</option>
+                      <option value="EMERGENCY">Emergency STAT</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Primary Complaints / Symptoms</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={issueTokenForm.complaints}
+                    onChange={e => setIssueTokenForm(f => ({ ...f, complaints: e.target.value }))}
+                    placeholder="e.g. Skin rash, fever for 2 days, routine follow-up"
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setIsIssueTokenModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                >
+                  <Check size={16} /> Generate Live Token
                 </button>
               </div>
             </form>

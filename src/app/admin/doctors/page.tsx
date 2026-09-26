@@ -284,6 +284,35 @@ export default function AdminDoctorsPage() {
         </div>
       </div>
 
+      {/* Action Toast Alert Banner */}
+      {actionToast && (
+        <div style={{
+          background: actionToast.type === 'success' ? '#ecfdf5' : '#eff6ff',
+          color: actionToast.type === 'success' ? '#065f46' : '#1e40af',
+          border: `1px solid ${actionToast.type === 'success' ? '#a7f3d0' : '#bfdbfe'}`,
+          padding: '10px 14px',
+          borderRadius: 8,
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '0.84rem',
+          fontWeight: 700,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={18} color={actionToast.type === 'success' ? '#059669' : '#3b82f6'} />
+            <span>{actionToast.message}</span>
+          </div>
+          <button
+            onClick={() => setActionToast(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       {/* ============================================================ */}
       {/* 2. GOVERNANCE METRIC CARDS (5 KPIS)                          */}
       {/* ============================================================ */}
@@ -556,7 +585,7 @@ export default function AdminDoctorsPage() {
                   {/* Status Toggle Badge */}
                   <button
                     data-testid={`toggle-status-btn-${doc.id}`}
-                    onClick={() => toggleDoctorStatus(doc.id)}
+                    onClick={() => handleToggleStatus(doc)}
                     title="Click to toggle Active / On Leave status"
                     style={{
                       padding: '3px 8px', borderRadius: 6, fontSize: '0.68rem', fontWeight: 800,

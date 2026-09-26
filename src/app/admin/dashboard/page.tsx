@@ -184,7 +184,11 @@ export default function AdminDashboardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
         
         {/* Revenue Today */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
+        <Link
+          href="/admin/billing"
+          style={{ textDecoration: 'none', display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, transition: 'all 0.15s' }}
+          className="hover:border-indigo-400 hover:shadow-sm"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Today&apos;s Revenue</div>
@@ -197,12 +201,16 @@ export default function AdminDashboardPage() {
             </div>
           </div>
           <div style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, fontWeight: 600 }}>
-            <TrendingUp size={14} /> +14.2% vs same day last week
+            <TrendingUp size={14} /> View Master Billing & Audit ➔
           </div>
-        </div>
+        </Link>
 
         {/* Patients Intake */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
+        <Link
+          href="/admin/patients"
+          style={{ textDecoration: 'none', display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, transition: 'all 0.15s' }}
+          className="hover:border-indigo-400 hover:shadow-sm"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Today&apos;s Patients</div>
@@ -214,13 +222,17 @@ export default function AdminDashboardPage() {
               <Users size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 10 }}>
-            Cumulative registered outpatient EHRs
+          <div style={{ fontSize: '0.78rem', color: '#0284c7', display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, fontWeight: 600 }}>
+            Open Patient Master Registry ➔
           </div>
-        </div>
+        </Link>
 
         {/* Active Queue */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
+        <Link
+          href="/admin/queue"
+          style={{ textDecoration: 'none', display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, transition: 'all 0.15s' }}
+          className="hover:border-indigo-400 hover:shadow-sm"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Active In-Clinic Queue</div>
@@ -232,13 +244,17 @@ export default function AdminDashboardPage() {
               <Activity size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 10 }}>
-            Waiting in lobby or in physician cabins
+          <div style={{ fontSize: '0.78rem', color: '#4338ca', display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, fontWeight: 600 }}>
+            Open Live Queue Command ➔
           </div>
-        </div>
+        </Link>
 
         {/* Completed Consultations */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
+        <Link
+          href="/admin/reports"
+          style={{ textDecoration: 'none', display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, transition: 'all 0.15s' }}
+          className="hover:border-indigo-400 hover:shadow-sm"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Completed Sessions</div>
@@ -250,13 +266,17 @@ export default function AdminDashboardPage() {
               <CheckCircle2 size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 10 }}>
-            Doctor encounters completed today
+          <div style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, fontWeight: 600 }}>
+            View Clinical Analytics & BI ➔
           </div>
-        </div>
+        </Link>
 
         {/* Pending Bills */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
+        <Link
+          href="/admin/billing"
+          style={{ textDecoration: 'none', display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, transition: 'all 0.15s' }}
+          className="hover:border-indigo-400 hover:shadow-sm"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Pending Checkout Bills</div>
@@ -268,13 +288,17 @@ export default function AdminDashboardPage() {
               <Wallet size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#b45309', marginTop: 10, fontWeight: 600 }}>
-            Awaiting front desk cashiering
+          <div style={{ fontSize: '0.78rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, fontWeight: 600 }}>
+            Audit & Cashier Pending Bills ➔
           </div>
-        </div>
+        </Link>
 
         {/* Stock Alerts */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
+        <Link
+          href="/admin/drugs"
+          style={{ textDecoration: 'none', display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18, transition: 'all 0.15s' }}
+          className="hover:border-indigo-400 hover:shadow-sm"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Low Stock Deficits</div>
@@ -286,10 +310,10 @@ export default function AdminDashboardPage() {
               <Package size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#991b1b', marginTop: 10, fontWeight: 600 }}>
-            {outOfStockItems.length} zero stock, {lowStockItems.length - outOfStockItems.length} near reorder
+          <div style={{ fontSize: '0.78rem', color: '#991b1b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, fontWeight: 600 }}>
+            Manage Central Formulary ➔
           </div>
-        </div>
+        </Link>
 
       </div>
 

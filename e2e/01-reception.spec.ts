@@ -82,4 +82,39 @@ test.describe('Module A: Receptionist & Front Desk Workflow', () => {
     await expect(page.getByText(/OPD BOARD ACTIVE/i)).toBeVisible();
   });
 
+  test('09. Reschedule Appointment resolves queue entry ID (q-8 for Deepak Trivedi)', async ({ page }) => {
+    // Navigate to reschedule page with queue ID q-8
+    await page.goto('/reception/appointments/reschedule/q-8');
+
+    // Should NOT show "Appointment Record Not Found"
+    await expect(page.getByText(/Appointment Record Not Found/i)).not.toBeVisible();
+
+    // Verify page title and Deepak Trivedi's booking details
+    await expect(page.getByText(/Reschedule Patient Appointment/i)).toBeVisible();
+    await expect(page.getByText(/Deepak Trivedi/i)).toBeVisible();
+    await expect(page.getByText(/Dr\. Suresh Kumar/i).first()).toBeVisible();
+    await expect(page.getByText(/Procedure/i).first()).toBeVisible();
+
+    // Select slot and submit reschedule
+    const confirmBtn = page.getByRole('button', { name: /Confirm & Notify Patient/i });
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // Verify success banner and notification
+    await expect(page.getByText(/successfully shifted/i)).toBeVisible();
+  });
+
+  test('10. Reschedule Appointment resolves direct appointment ID (apt-4 for Rekha Patel)', async ({ page }) => {
+    await page.goto('/reception/appointments/reschedule/apt-4');
+    await expect(page.getByText(/Appointment Record Not Found/i)).not.toBeVisible();
+    await expect(page.getByText(/Rekha Patel/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Confirm & Notify Patient/i })).toBeVisible();
+  });
+
+  test('11. Reschedule Appointment displays friendly not found screen for invalid ID', async ({ page }) => {
+    await page.goto('/reception/appointments/reschedule/non-existent-999');
+    await expect(page.getByText(/Appointment Record Not Found/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Back to Appointments/i })).toBeVisible();
+  });
+
 });

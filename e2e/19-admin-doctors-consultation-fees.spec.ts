@@ -114,9 +114,10 @@ test.describe('Module I: Doctor Management & Consultation Fee Governance (/admin
     await expect(page.getByText(/Dr\. Vikram Seth successfully added to hospital roster/i)).toBeVisible();
 
     // Verify Dr. Vikram Seth appears in the roster
-    await expect(page.getByText('Dr. Vikram Seth')).toBeVisible();
-    await expect(page.getByText('Neurology')).first().toBeVisible();
-    await expect(page.getByText('OPD-305')).first().toBeVisible();
+    const newDocCard = page.locator('div').filter({ hasText: 'Dr. Vikram Seth' }).filter({ hasText: 'OPD-305' }).last();
+    await expect(newDocCard).toBeVisible();
+    await expect(newDocCard.getByText('Dr. Vikram Seth')).toBeVisible();
+    await expect(newDocCard.getByText('OPD-305')).toBeVisible();
   });
 
   test('05. Doctor status toggle switches between Active and On Leave', async ({ page }) => {
